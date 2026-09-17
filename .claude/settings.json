@@ -1,0 +1,40 @@
+{
+  "env": {
+    "PYTHONUTF8": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(pytest:*)",
+      "Bash(pip:*)",
+      "Bash(uv:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "PowerShell(python:*)",
+      "PowerShell(pytest:*)",
+      "PowerShell(pip:*)",
+      "PowerShell(uv:*)",
+      "PowerShell(git status:*)",
+      "PowerShell(git diff:*)",
+      "PowerShell(git log:*)",
+      "PowerShell(git add:*)",
+      "PowerShell(git commit:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_ssot.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

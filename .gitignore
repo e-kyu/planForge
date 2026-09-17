@@ -1,0 +1,24 @@
+# 런타임 워크스페이스/산출물 — DB 메타와 워크스페이스에만 존재, 커밋하지 않음
+workspaces/
+output/
+
+# legacy 원본 사본 (참조용 — 커밋하지 않음, SSOT는 docs/legacy/)
+makeReportAgent2/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+
+# 환경/비밀
+.env
+.env.*
+
+# OS
+Thumbs.db
+.DS_Store
