@@ -65,7 +65,8 @@ def cmd_numcheck(args) -> int:
     for f in findings:
         print(f)
     reds = sum(1 for f in findings if f.severity == "red")
-    print(f"\n발견 {len(findings)}건 (🔴 {reds}건) — 파생물 재생성 필요")
+    print(f"\n발견 {len(findings)}건 (🔴 {reds}건)"
+          + (" — 파생물 재생성 필요" if reds else " — 경고만 있음, 진행 가능"))
     return 1 if reds else 0
 
 

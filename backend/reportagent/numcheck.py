@@ -10,7 +10,8 @@ plan ↔ 파생물(slides.json/report.json)에서:
 근거/출처 문자열(source 키)은 수치 풀에서 제외한다 — 그 안의 날짜류 표기는 콘텐츠
 수치가 아니며, 근거 유실은 별도 규칙(source-missing)으로 잡기 때문. 캡션(note)은
 콘텐츠(요청 사항 등)가 될 수 있어 수치 풀에 포함하되, 날짜류 표기는 정규화로 제거한다.
-문장체 재구성(개조식→서술형)은 문서 전체 단위 대조로 허용한다 (report.json).
+문장체 재구성(개조식→서술형)은 문서 전체 단위 대조로 허용한다 (report.json) —
+수치 재진술로 개수가 초과되면 yellow(경고), plan에 없던 수치(창작)와 유실은 red.
 """
 from __future__ import annotations
 
@@ -147,15 +148,21 @@ def _doc_tokens(doc: dict) -> Counter:
     return c
 
 
-def _diff(plan: Counter, derived: Counter, where: str, out: list[Finding]) -> None:
+def _diff(plan: Counter, derived: Counter, where: str, out: list[Finding],
+          strict_extra: bool = True) -> None:
     missing = plan - derived   # plan에 있는데 파생물에 없음 (유실)
-    extra = derived - plan     # 파생물에 새로 생김 (창작)
+    extra = derived - plan     # 파생물 초과분
     for tok, n in sorted(missing.items()):
         out.append(Finding("numeric-missing", "red", where,
                            f"수치 '{tok}'가 plan에는 있으나 파생물에서 사라졌습니다 ({n}회)"))
     for tok, n in sorted(extra.items()):
-        out.append(Finding("numeric-extra", "red", where,
-                           f"수치 '{tok}'가 plan에 없는데 파생물에 추가되었습니다 ({n}회)"))
+        if strict_extra or plan[tok] == 0:
+            out.append(Finding("numeric-extra", "red", where,
+                               f"수치 '{tok}'가 plan에 없는데 파생물에 추가되었습니다 ({n}회)"))
+        else:
+            # 문서체 재구성에서의 자연스러운 재진술 — 창작은 아니므로 경고
+            out.append(Finding("numeric-extra", "yellow", where,
+                               f"수치 '{tok}'가 plan보다 {n}회 더 많이 언급되었습니다 (재진술)"))
 
 
 # ---------------------------------------------------------------- slides.json 대조
@@ -210,7 +217,10 @@ def check_report(plan_slides: list[Slide], key_messages: list[str], report_doc: 
     if isinstance(report_doc, str):
         report_doc = json.loads(report_doc)
     out: list[Finding] = []
-    _diff(_plan_tokens(plan_slides, key_messages), _doc_tokens(report_doc), "문서 전체", out)
+    # 문서체 재구성(개조식→서술형)을 허용하는 대조 — 수치 반복 재진술은 yellow,
+    # plan에 없는 수치(창작)와 유실만 red. slides.json의 1:1 대조는 strict_extra 유지.
+    _diff(_plan_tokens(plan_slides, key_messages), _doc_tokens(report_doc), "문서 전체",
+          out, strict_extra=False)
 
     r_text = " ".join(_iter_strings(report_doc))
     for ps in plan_slides:

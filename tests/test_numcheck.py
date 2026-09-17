@@ -2,7 +2,7 @@
 """numcheck(수치 무결성 대조) 단위 테스트 — 원칙 3 상시 실행용."""
 import pytest
 
-from reportagent.numcheck import check_report, check_slides, numeric_tokens
+from reportagent.numcheck import check_report, check_slides, has_red, numeric_tokens
 from reportagent.plan.model import ChartSpec, Series, Slide, TableSpec
 
 
@@ -150,6 +150,28 @@ def test_report_fabrication_is_red():
     assert any(f.code == "numeric-extra" and "1억" not in f.message and "1" in f.message
                for f in findings)
     assert any(f.code == "numeric-missing" for f in findings)  # plan 수치 유실도 탐지
+
+
+def test_report_repetition_is_yellow_not_red():
+    """문서체 재구성의 자연스러운 수치 재진술은 yellow — 창작만 red."""
+    plan_slides = make_plan_slides()
+    report = {
+        "meta": {"title": "제안"},
+        "sections": [
+            {"type": "section", "no": "1", "title": "비교",
+             "blocks": [{"kind": "prose", "heading": "해설",
+                         "paragraphs": [
+                             "현재 보고 작성에 주 10시간이 소요된다.",
+                             "자동화 후에는 10시간이 2시간으로 줄어든다."]}],  # '10' 재진술 (초과 1회)
+             "source": "근거/출처: interview-log [2026-09-09] 효과 수치 정책"},
+        ],
+    }
+    findings = check_report(plan_slides, KEY_MESSAGES, report)
+    rep = [f for f in findings if f.code == "numeric-extra" and f.severity == "yellow"]
+    assert any("10" in f.message and "재진술" in f.message for f in rep)
+    # '10'의 초과분이 red(창작)로 오분류되지 않는지 — 창작 판정은 test_report_fabrication_is_red
+    assert not any(f.code == "numeric-extra" and f.severity == "red" and "10" in f.message
+                   for f in findings)
 
 
 def test_numeric_tokens_normalizes_commas_and_dates():
