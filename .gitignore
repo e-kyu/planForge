@@ -22,3 +22,5 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+# 스모크/테스트 산출물 (fixture 디렉토리 오염 방지)
+_smoke_out/
