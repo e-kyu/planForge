@@ -18,6 +18,8 @@ dist/
 # 환경/비밀
 .env
 .env.*
+# LLM 실제 설정 (config.example.json만 커밋 — 프로바이더 키/모델은 로컬)
+backend/reportagent/config.json
 
 # OS
 Thumbs.db

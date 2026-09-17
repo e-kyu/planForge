@@ -7,8 +7,9 @@ plan ↔ 파생물(slides.json/report.json)에서:
 - 근거/출처 문자열이 파생물에 그대로 있는지 (괄호 주석 `(해당 문서 ...)` 제외)
 - slides.json: 슬라이드 수·유형·제목 정합 (plan 필터 결과 ↔ 파생물 1:1)
 
-수치 풀에서는 근거/출처·캡션(source/note 키)을 제외한다 — 그 안의 날짜류 표기는
-콘텐츠 수치가 아니며, 근거 유실은 별도 규칙(source-missing)으로 잡기 때문.
+근거/출처 문자열(source 키)은 수치 풀에서 제외한다 — 그 안의 날짜류 표기는 콘텐츠
+수치가 아니며, 근거 유실은 별도 규칙(source-missing)으로 잡기 때문. 캡션(note)은
+콘텐츠(요청 사항 등)가 될 수 있어 수치 풀에 포함하되, 날짜류 표기는 정규화로 제거한다.
 문장체 재구성(개조식→서술형)은 문서 전체 단위 대조로 허용한다 (report.json).
 """
 from __future__ import annotations
@@ -23,8 +24,10 @@ from .plan.model import Slide
 from .plan.parser import parse_toc_items
 
 _NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+_DATE_RE = re.compile(r"\d{4}\s?[.\-/]\s?\d{1,2}\s?[.\-/]\s?\d{1,2}")  # 2026-09-09 / 2026. 9. 2.
+
 UNCONFIRMED = "(미확정"  # "(미확정)"·"(미확정 - 사유)" 변형을 모두 잡는다
-_SKIP_KEYS = {"source", "note"}          # 근거/출처·캡션 — 수치 풀 제외 (별도 규칙으로 대조)
+_SKIP_KEYS = {"source"}                  # 근거/출처 문자열 — 수치 풀 제외 (별도 규칙으로 대조)
 _RENUMBER_KEYS = {"no", "label"}         # 재채번 구조 번호 (섹션 no·목차 라벨 01..NN)
 
 
@@ -42,7 +45,8 @@ class Finding:
 # ---------------------------------------------------------------- 토큰 추출
 
 def numeric_tokens(text: str) -> Counter:
-    """텍스트에서 수치 토큰을 추출한다. 콤마 자릿수 구분("1,000")은 정규화해 비교한다."""
+    """텍스트에서 수치 토큰을 추출한다. 콤마 자릿수("1,000")·날짜 표기(2026-09-09)는 정규화해 비교한다."""
+    text = _DATE_RE.sub(" ", text)
     return Counter(t.replace(",", "") for t in _NUM_RE.findall(text))
 
 

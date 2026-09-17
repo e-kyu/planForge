@@ -152,6 +152,7 @@ def test_report_fabrication_is_red():
     assert any(f.code == "numeric-missing" for f in findings)  # plan 수치 유실도 탐지
 
 
-def test_numeric_tokens_normalizes_commas():
+def test_numeric_tokens_normalizes_commas_and_dates():
     assert numeric_tokens("1,000 POD, 일 500GB") == {"1000": 1, "500": 1}
-    assert numeric_tokens("2026. 9. 2.") == {"2026": 1, "9": 1, "2": 1}
+    assert numeric_tokens("2026. 9. 2.") == {}            # 날짜 표기는 정규화로 제외
+    assert numeric_tokens("2026-09-09 효과 수치") == {}     # 날짜 + 뒤따르는 자릿수 없는 토큰 정리
