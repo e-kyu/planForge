@@ -56,4 +56,13 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
 - `/contract` — 계약 테스트(빌더 회귀) 실행
 - `/numcheck` — 수치 무결성 대조 검증 실행
 
-(테스트/빌드/마이그레이션 명령은 각 마일스톤에서 확정되는 대로 이 아래에 추가한다.)
+### 확정된 명령 (M1)
+
+- 테스트: `pytest` (저장소 루트 — conftest.py가 backend를 import 경로에 추가)
+- CLI (backend/에서 실행):
+  - `python -m reportagent parse <plan.md> [--doc 문서명]` — plan 파싱·문서 필터·골격 검증
+  - `python -m reportagent numcheck <plan.md> --slides <slides.json>|--report <report.json> [--doc 문서명]` — 수치 무결성 대조 (🔴 있으면 exit 1)
+  - `python -m reportagent build-ppt <slides.json> [output_dir]` · `build-doc <report.json> <md|html|docx> [output_dir]` — legacy 빌더 원형 실행
+- 빌더 원형: `backend/reportagent/builders/{build_ppt,build_doc,theme}.py` — docs/legacy/scripts/ 바이트 동일 이식본. 로직 변경 금지.
+
+(마이그레이션 명령은 M2에서 확정되는 대로 이 아래에 추가한다.)
