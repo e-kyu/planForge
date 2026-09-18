@@ -89,14 +89,42 @@ class OpenAICompatProvider:
         return {"content": msg.content, "tool_calls": tool_calls}
 
     def chat_stream(self, messages: list[dict], tools: list[dict] | None = None) -> Iterator[str]:
-        """SSE 스트리밍(토큰 단위) — M2 인터뷰 채팅용. 텍스트 델타를 순서대로 내보낸다.
+        """SSE 스트리밍(토큰 단위) — 레거시 텍스트 스트림. 새 코드는 stream()을 사용한다."""
+        for ev in self.stream(messages, tools):
+            if ev["type"] == "text":
+                yield ev["delta"]
 
-        스트리밍 중 tool calling 델타는 M2에서 도구 루프와 함께 확장한다."""
+    def stream(self, messages: list[dict], tools: list[dict] | None = None) -> Iterator[dict]:
+        """SSE 스트리밍 + tool calling 델타 누적 (M2 인터뷰 도구 루프용).
+
+        반환 이벤트: {"type": "text", "delta": str}
+                     {"type": "tool_call", "name": str, "arguments": dict-or-str}  (인덱스별 완성 시 1회)
+        """
         kwargs = dict(model=self.model, messages=messages, stream=True)
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
         stream = self._client.chat.completions.create(**kwargs)
+        pending: dict[int, dict] = {}  # tool_call index → {name, arguments}
         for event in stream:
-            if event.choices and event.choices[0].delta and event.choices[0].delta.content:
-                yield event.choices[0].delta.content
+            if not event.choices:
+                continue
+            delta = event.choices[0].delta
+            if delta is None:
+                continue
+            if delta.content:
+                yield {"type": "text", "delta": delta.content}
+            for tc in (delta.tool_calls or []):
+                slot = pending.setdefault(tc.index, {"name": "", "arguments": ""})
+                if tc.function and tc.function.name:
+                    slot["name"] += tc.function.name
+                if tc.function and tc.function.arguments:
+                    slot["arguments"] += tc.function.arguments
+        # 스트림 종료 후 완성된 도구 호출을 순서대로 방출
+        for idx in sorted(pending):
+            slot = pending[idx]
+            try:
+                args = json.loads(slot["arguments"]) if slot["arguments"] else {}
+            except json.JSONDecodeError:
+                args = slot["arguments"]
+            yield {"type": "tool_call", "name": slot["name"], "arguments": args}

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from . import derivatives, jobs, projects
+from . import derivatives, facts, interview, jobs, projects
 
 api_router = APIRouter()
 api_router.include_router(projects.router)
 api_router.include_router(derivatives.router)
 api_router.include_router(jobs.router)
+api_router.include_router(facts.router)
+api_router.include_router(interview.router)
