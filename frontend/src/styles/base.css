@@ -1,0 +1,43 @@
+/* 기본 리셋 + 레이아웃 공통 (자체 CSS — 컴포넌트 라이브러리 미도입 §3.1) */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  color: var(--text);
+  background: var(--bg-soft);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--navy);
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: var(--fs-body);
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: var(--fs-body);
+}
+
+a {
+  color: var(--blue);
+}

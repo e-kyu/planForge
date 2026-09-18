@@ -106,7 +106,8 @@ def _session_or_404(db: Session, sid: int) -> InterviewSession:
 
 # ---------------------------------------------------------------- 조회/생성
 
-@router.post("/api/projects/{project_id}/interview/sessions", status_code=201)
+@router.post("/api/projects/{project_id}/interview/sessions", status_code=201,
+             response_model=SessionOut)
 def create_session(project_id: int, _body: SessionCreate, db: Session = Depends(get_db)):
     if db.get(Project, project_id) is None:
         raise http_404(f"프로젝트 없음: {project_id}")
@@ -116,7 +117,7 @@ def create_session(project_id: int, _body: SessionCreate, db: Session = Depends(
     return SessionOut.model_validate(s)
 
 
-@router.get("/api/interview/sessions/{session_id}")
+@router.get("/api/interview/sessions/{session_id}", response_model=SessionOut)
 def get_session(session_id: int, db: Session = Depends(get_db)):
     return SessionOut.model_validate(_session_or_404(db, session_id))
 

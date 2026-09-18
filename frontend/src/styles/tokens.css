@@ -1,0 +1,38 @@
+/*
+ * 디자인 토큰 — backend/reportagent/builders/theme.py의 CSS 변수 렌더.
+ *
+ * 원칙 7 (디자인 토큰 4종 세트): 권위는 theme.py다. theme.py 토큰 변경 시
+ * 이 파일의 대응 값을 반드시 함께 고친다 (문서·토큰·렌더러·샘플 + 화면).
+ * 화면은 산출물(PPT·문서)과 같은 팔레트로 톤을 맞춘다 (§3.1).
+ */
+:root {
+  /* 색 — theme.py: NAVY BLUE LIGHT_BLUE BG BG_SOFT TEXT TEXT_SUB LINE ACCENT */
+  --navy: #1f3b5c;
+  --blue: #2e6db4;
+  --light-blue: #8fb8e0;
+  --bg: #ffffff;
+  --bg-soft: #f2f5f9;
+  --text: #222222;
+  --text-sub: #666666;
+  --line: #d8dee6;
+  --accent: #e8a33d;
+
+  /* 상태 색 (검수 심각도 — FR-4.2) */
+  --danger: #c0392b;
+  --warn: #b7791f;
+  --ok: #2f855a;
+
+  /* 폰트 — theme.py FONT(맑은 고딕) + 시스템 폴백 */
+  --font: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", monospace;
+
+  /* 크기 스케일 — theme.py pt 토큰 기반 (화면 표시 배율) */
+  --fs-title: 28px;    /* SIZE_SLIDE_TITLE */
+  --fs-heading: 18px;  /* SIZE_HEADING */
+  --fs-body: 14px;     /* SIZE_BODY */
+  --fs-caption: 11px;  /* SIZE_CAPTION */
+
+  /* 여백 — theme.py MARGIN 0.6in ≈ 24px */
+  --margin: 24px;
+  --radius: 8px;
+}

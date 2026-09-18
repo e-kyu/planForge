@@ -1,0 +1,46 @@
+/* 앱 셸 레이아웃 */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: var(--margin);
+  padding: 12px var(--margin);
+  background: var(--navy);
+  color: #fff;
+}
+
+.app-title {
+  font-size: var(--fs-heading);
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.health {
+  font-size: var(--fs-caption);
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.health-ok {
+  color: #d8f5e3;
+  border-color: #5aa97c;
+}
+
+.health-down {
+  color: #ffd9d4;
+  border-color: #d98c85;
+}
+
+.app-main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--margin);
+}
+
+.placeholder {
+  color: var(--text-sub);
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  padding: var(--margin);
+}
