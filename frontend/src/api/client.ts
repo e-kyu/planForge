@@ -51,6 +51,14 @@ export const apiPost = <T>(path: string, body?: unknown) =>
 
 export const apiDelete = (path: string) => api<void>(path, { method: "DELETE" });
 
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(path, { method: "POST", body: fd });
+  if (!res.ok) throw new ApiError(res.status, await errorText(res));
+  return (await res.json()) as T;
+}
+
 /* ---------------------------------------------------------------- SSE (D6) */
 
 /** 인터뷰 SSE 이벤트 — backend/app/events.py Event(name, payload)와 대응 */

@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "./api/client";
-import { useHashRoute } from "./lib/hashRoute";
+import { routeParam, useHashRoute } from "./lib/hashRoute";
+import ProjectsPage from "./pages/ProjectsPage";
+import ProjectPage, { type ProjectTab } from "./pages/ProjectPage";
 
-/** 상단 앱 바 + 해시 라우트 스위치. 화면은 PR-2~5에서 갈아낀다. */
+const TAB_KEYS = new Set(["interview", "plan", "outputs", "sources"]);
+
+/** 상단 앱 바 + 해시 라우트:
+ *  #/                     → 프로젝트 목록 (FR-1.1)
+ *  #/projects/:id/:tab    → 프로젝트 셸 (FR-5) */
 export default function App() {
   const route = useHashRoute();
   const [health, setHealth] = useState<"ok" | "down" | "checking">("checking");
@@ -17,19 +23,41 @@ export default function App() {
     };
   }, []);
 
+  let body: React.ReactNode;
+  if (route === "/" || route.startsWith("/projects")) {
+    const pid = Number(routeParam(route, 2));
+    const tabParam = routeParam(route, 3);
+    const tab = (tabParam && TAB_KEYS.has(tabParam) ? tabParam : "interview") as ProjectTab;
+    body = pid > 0 && tabParam ? (
+      <ProjectPage pid={pid} tab={tab} />
+    ) : pid > 0 ? (
+      // #/projects/:id → 기본 탭으로 치환
+      <ProjectRedirect pid={pid} />
+    ) : (
+      <ProjectsPage />
+    );
+  } else {
+    body = <p className="hint">알 수 없는 경로: {route}</p>;
+  }
+
   return (
     <>
       <header className="app-header">
-        <h1 className="app-title">report-agent</h1>
+        <a className="app-home" href="#/">
+          <h1 className="app-title">report-agent</h1>
+        </a>
         <span className={`health health-${health}`}>
           {health === "ok" ? "API 연결됨" : health === "down" ? "API 연결 안 됨" : "확인 중…"}
         </span>
       </header>
-      <main className="app-main">
-        <p className="placeholder">
-          화면은 M3 PR-2(프로젝트 목록·소스)부터 채워진다. route={route}
-        </p>
-      </main>
+      <main className="app-main">{body}</main>
     </>
   );
+}
+
+function ProjectRedirect({ pid }: { pid: number }) {
+  useEffect(() => {
+    window.location.replace(`#/projects/${pid}/interview`);
+  }, [pid]);
+  return null;
 }
