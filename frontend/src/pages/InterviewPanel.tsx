@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   apiGet,
   apiPost,
@@ -337,7 +337,7 @@ function Bubble(props: { side: "left" | "right"; text: string }) {
   );
 }
 
-function StaticCard(props: { title: string; children: React.ReactNode }) {
+function StaticCard(props: { title: string; children: ReactNode }) {
   return (
     <div className="chat-row">
       <div className="card chat-card">

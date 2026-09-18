@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { apiGet } from "./api/client";
 import { routeParam, useHashRoute } from "./lib/hashRoute";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -23,7 +23,7 @@ export default function App() {
     };
   }, []);
 
-  let body: React.ReactNode;
+  let body: ReactNode;
   if (route === "/" || route.startsWith("/projects")) {
     const pid = Number(routeParam(route, 2));
     const tabParam = routeParam(route, 3);

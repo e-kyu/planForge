@@ -1,0 +1,120 @@
+/* 산출물 갤러리 (PR-5) */
+.panel-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel-actions select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.output-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.output-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 10px 4px;
+}
+
+.output-row-active {
+  background: var(--bg-soft);
+}
+
+.output-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  border: none;
+  background: transparent;
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.output-open:hover {
+  background: var(--bg-soft);
+  border-radius: 6px;
+}
+
+.output-title {
+  color: var(--navy);
+  font-size: var(--fs-body);
+}
+
+.output-row .btn {
+  padding: 6px 12px;
+  font-size: var(--fs-caption);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.html-preview {
+  width: 100%;
+  height: 60vh;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.job-list li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-caption);
+}
+
+.badge-job-done {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.badge-job-queued,
+.badge-job-running {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.badge-job-failed,
+.badge-job-cancelled {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.job-meta {
+  color: var(--text-sub);
+}
+
+/* plan 상태 배지 */
+.badge-plan-draft {
+  border-color: var(--accent);
+  color: var(--warn);
+}
+
+.badge-plan-approved {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.badge-plan-superseded {
+  color: var(--text-sub);
+}

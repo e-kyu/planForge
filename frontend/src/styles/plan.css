@@ -1,0 +1,159 @@
+/* plan 뷰어/에디터 (PR-4) */
+.plan-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: var(--margin);
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .plan-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plan-side h3,
+.plan-side h4 {
+  font-size: var(--fs-heading);
+  margin-bottom: 8px;
+}
+
+.plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plan-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-top: none;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.plan-list li:first-child .plan-row {
+  border-top: 1px solid var(--line);
+  border-radius: 6px 6px 0 0;
+}
+
+.plan-list li:last-child .plan-row {
+  border-radius: 0 0 6px 6px;
+}
+
+.plan-row-active {
+  background: var(--light-blue);
+}
+
+.plan-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.plan-toolbar-left,
+.plan-toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.chk {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: var(--fs-caption);
+  color: var(--text-sub);
+}
+
+.plan-body {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.plan-editor {
+  display: block;
+}
+
+.plan-editor-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+}
+
+@media (max-width: 800px) {
+  .plan-editor-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cm-scroll {
+  overflow: auto;
+  max-height: 70vh;
+}
+
+.cm-host {
+  min-height: 320px;
+}
+
+.cm-host .cm-editor {
+  border: none;
+}
+
+.cm-host .cm-gutters {
+  background: var(--bg-soft);
+  border-right: 1px solid var(--line);
+}
+
+/* merge view (diff) */
+.cm-host .cm-mergeView {
+  height: 100%;
+}
+
+.md-preview {
+  padding: 16px;
+  overflow: auto;
+  max-height: 70vh;
+  line-height: 1.7;
+}
+
+.md-preview h1,
+.md-preview h2,
+.md-preview h3 {
+  color: var(--navy);
+  margin: 0.8em 0 0.4em;
+}
+
+.md-preview pre {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.md-preview code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+.md-preview table {
+  border-collapse: collapse;
+}
+
+.md-preview th,
+.md-preview td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+}

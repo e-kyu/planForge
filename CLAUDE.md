@@ -83,3 +83,13 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
   - `POST /api/plans/{id}/approve` — 승인 게이트 (FR-2.9), 이전 승인본은 superseded
   - `POST /api/plans/{id}/revise` — plan 수정 → 새 세대 DRAFT (FR-4.3)
 - 인터뷰 에이전트: `backend/app/agents/interview.py` 상태머신 + `agents/prompts/interview.md` (plan-doc.md 이식). 도구 스키마는 `agents/tools.py`. 동시 턴은 프로세스 내 세션 락(409)으로 직렬화 — 단일 uvicorn 프로세스 전제.
+- 소스 API (FR-2.1): `GET/POST/DELETE /api/projects/{pid}/sources` (프로젝트 소스, 검증: .md .txt .json .csv / 2MB / UTF-8 / 파일명 정규화 / 덮어쓰기 금지) + `GET /api/sources` (글로벌, 읽기전용)
+
+### 확정된 명령 (M3)
+
+- 프론트엔드 (frontend/에서 실행):
+  - `npm run dev` — Vite 개발 서버 (/api → localhost:8000 프록시)
+  - `npm run build` — tsc --noEmit + vite build
+  - `npm run gen:types` — OpenAPI → TS 타입 생성 (API 계약 잠금 §3.1)
+  - 타입 갱신 순서: backend/에서 `python scripts/export_openapi.py` → frontend에서 `npm run gen:types`
+- 디자인 토큰: 권위는 `theme.py`. 화면용 CSS 변수 렌더는 `frontend/src/styles/tokens.css` — theme.py 변경 시 함께 수정 (원칙 7)

@@ -4,6 +4,8 @@ import { Empty, Loading } from "../components/ui";
 import { navigate } from "../lib/hashRoute";
 import SourcesPanel from "./SourcesPanel";
 import InterviewPanel from "./InterviewPanel";
+import PlanPanel from "./PlanPanel";
+import OutputsPanel from "./OutputsPanel";
 
 export type ProjectTab = "interview" | "plan" | "outputs" | "sources";
 
@@ -53,8 +55,8 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
       <section className="tab-body">
         {tab === "sources" && <SourcesPanel pid={pid} />}
         {tab === "interview" && <InterviewPanel pid={pid} />}
-        {tab === "plan" && <Empty>plan 뷰어/에디터 — M3 PR-4에서 구현</Empty>}
-        {tab === "outputs" && <Empty>산출물 갤러리 — M3 PR-5에서 구현</Empty>}
+        {tab === "plan" && <PlanPanel pid={pid} />}
+        {tab === "outputs" && <OutputsPanel pid={pid} />}
       </section>
     </>
   );
