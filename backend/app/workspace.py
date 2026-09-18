@@ -79,6 +79,48 @@ def write_interview_log_mirror(ws: Path, fact_lines: list[str]) -> Path:
     return log
 
 
+# ---------------------------------------------------------------- 소스 파일 (FR-2.1, §5 업로드 검증)
+
+SOURCE_EXTS = (".md", ".txt", ".json", ".csv")  # read_sources_context와 동일 화이트리스트
+MAX_SOURCE_BYTES = 2 * 1024 * 1024  # 2MB — 인터뷰 컨텍스트 주입용 텍스트 소스의 상한
+FORBIDDEN_FILENAME_CHARS = '<>:"/\\|?*'  # Windows 금지 문자 (legacy _sanitize_title 규약 계열)
+
+
+class SourceError(ValueError):
+    pass
+
+
+def sanitize_source_filename(name: str) -> str:
+    """업로드 파일명 정규화: 경로 성분 제거 + Windows 금지 문자 치환.
+
+    - 경로 분리(/ \\)와 .. 트래버설은 성분 제거로 무력화하고,
+    - 금지 문자는 '_'로 치환 후 트레일링 공백/점을 제거한다 (Windows 규약).
+    """
+    base = os.path.basename((name or "").replace("\\", "/")).strip()
+    if not base or base in (".", ".."):
+        raise SourceError("파일명이 비어 있거나 올바르지 않습니다")
+    cleaned = "".join("_" if c in FORBIDDEN_FILENAME_CHARS else c for c in base).strip(" .")
+    if not cleaned or cleaned.startswith("."):
+        raise SourceError(f"허용되지 않는 파일명입니다: {name!r}")
+    return cleaned
+
+
+def validate_source_file(name: str, data: bytes) -> str:
+    """업로드 검증(§5): 확장자 화이트리스트·용량 상한·UTF-8 텍스트. 정규화된 이름 반환."""
+    cleaned = sanitize_source_filename(name)
+    ext = os.path.splitext(cleaned)[1].lower()
+    if ext not in SOURCE_EXTS:
+        raise SourceError(
+            f"지원하지 않는 확장자입니다 ({'/'.join(SOURCE_EXTS)}만 허용): {cleaned}")
+    if len(data) > MAX_SOURCE_BYTES:
+        raise SourceError(f"파일이 너무 큽니다 (최대 {MAX_SOURCE_BYTES // (1024 * 1024)}MB)")
+    try:
+        data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        raise SourceError("UTF-8 텍스트 파일만 업로드할 수 있습니다") from e
+    return cleaned
+
+
 def read_sources_context(sources_dirs: list[Path], max_chars: int = 8000) -> str:
     """인터뷰 소스 컨텍스트 수집 (FR-2.1). 텍스트 파일만, 파일별 크기 상한."""
     parts: list[str] = []

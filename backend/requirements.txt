@@ -14,3 +14,4 @@ alembic>=1.13
 psycopg[binary]>=3.2  # postgresql+psycopg:// 방언
 sse-starlette>=2.1
 httpx>=0.27           # 테스트/클라이언트
+python-multipart>=0.0.9  # UploadFile (소스 업로드 API)
