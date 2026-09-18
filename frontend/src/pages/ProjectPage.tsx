@@ -6,13 +6,15 @@ import SourcesPanel from "./SourcesPanel";
 import InterviewPanel from "./InterviewPanel";
 import PlanPanel from "./PlanPanel";
 import OutputsPanel from "./OutputsPanel";
+import ReviewPanel from "./ReviewPanel";
 
-export type ProjectTab = "interview" | "plan" | "outputs" | "sources";
+export type ProjectTab = "interview" | "plan" | "outputs" | "review" | "sources";
 
 const TABS: { key: ProjectTab; label: string }[] = [
   { key: "interview", label: "인터뷰" },
   { key: "plan", label: "plan.md" },
   { key: "outputs", label: "산출물" },
+  { key: "review", label: "검수" },
   { key: "sources", label: "소스" },
 ];
 
@@ -57,6 +59,7 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
         {tab === "interview" && <InterviewPanel pid={pid} />}
         {tab === "plan" && <PlanPanel pid={pid} />}
         {tab === "outputs" && <OutputsPanel pid={pid} />}
+        {tab === "review" && <ReviewPanel pid={pid} />}
       </section>
     </>
   );

@@ -287,6 +287,46 @@ export interface paths {
         patch: operations["update_fact_api_projects__project_id__facts__fact_id__patch"];
         trace?: never;
     };
+    "/api/projects/{project_id}/facts/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact Preview
+         * @description LLM 통합 그룹 제안 (게이트 1단 — 승인 전까지는 아무 것도 바꾸지 않는다).
+         */
+        post: operations["compact_preview_api_projects__project_id__facts_compact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/facts/compact/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact Apply
+         * @description 승인된 그룹의 이전 팩트를 archive로 + interview-log 미러 재작성 (게이트 2단).
+         */
+        post: operations["compact_apply_api_projects__project_id__facts_compact_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/interview/sessions": {
         parameters: {
             query?: never;
@@ -441,6 +481,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reviews */
+        get: operations["list_reviews_api_projects__project_id__reviews_get"];
+        put?: never;
+        /**
+         * Enqueue Review
+         * @description 최신 승인 plan에 대한 검수 잡을 큐에 넣는다.
+         */
+        post: operations["enqueue_review_api_projects__project_id__reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Review */
+        get: operations["get_review_api_projects__project_id__reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -506,6 +584,60 @@ export interface components {
             size_bytes: number;
             /** Created At */
             created_at: unknown;
+        };
+        /** CompactApplyRequest */
+        CompactApplyRequest: {
+            /** Groups */
+            groups: components["schemas"]["CompactGroup"][];
+        };
+        /** CompactApplyResult */
+        CompactApplyResult: {
+            /** Archived */
+            archived: number[];
+            /** Active Remaining */
+            active_remaining: number;
+            /** Log Path */
+            log_path: string;
+            /** Archive Path */
+            archive_path: string;
+            /** Warnings */
+            warnings: string[];
+        };
+        /** CompactGroup */
+        CompactGroup: {
+            /**
+             * Topic
+             * @default
+             */
+            topic: string;
+            /** Keep Id */
+            keep_id: number;
+            /**
+             * Archive Ids
+             * @default []
+             */
+            archive_ids: number[];
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** CompactPreview */
+        CompactPreview: {
+            /** Ok */
+            ok: boolean;
+            /**
+             * Summary
+             * @default
+             */
+            summary: string;
+            /** Warning */
+            warning?: string | null;
+            /** Groups */
+            groups: components["schemas"]["CompactGroup"][];
+            /** Facts */
+            facts: components["schemas"]["FactOut"][];
         };
         /** DerivativeCreate */
         DerivativeCreate: {
@@ -595,6 +727,17 @@ export interface components {
             edits?: {
                 [key: string]: unknown;
             }[] | null;
+        };
+        /** FindingOut */
+        FindingOut: {
+            /** Code */
+            code: string;
+            /** Severity */
+            severity: string;
+            /** Where */
+            where: string;
+            /** Message */
+            message: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -714,6 +857,29 @@ export interface components {
             title?: string | null;
             /** Status */
             status?: ("active" | "archived") | null;
+        };
+        /** ReviewOut */
+        ReviewOut: {
+            /** Id */
+            id: number;
+            /** Project Id */
+            project_id: number;
+            /** Plan Id */
+            plan_id: number;
+            /** Findings */
+            findings: components["schemas"]["FindingOut"][];
+            /** Red Count */
+            red_count: number;
+            /** Yellow Count */
+            yellow_count: number;
+            /** White Count */
+            white_count: number;
+            /** Llm Ok */
+            llm_ok: boolean;
+            /** Summary */
+            summary: string;
+            /** Created At */
+            created_at: unknown;
         };
         /** SessionCreate */
         SessionCreate: Record<string, never>;
@@ -1453,6 +1619,72 @@ export interface operations {
             };
         };
     };
+    compact_preview_api_projects__project_id__facts_compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compact_apply_api_projects__project_id__facts_compact_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompactApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactApplyResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_session_api_projects__project_id__interview_sessions_post: {
         parameters: {
             query?: never;
@@ -1710,6 +1942,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_reviews_api_projects__project_id__reviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enqueue_review_api_projects__project_id__reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_api_projects__project_id__reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+                review_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewOut"];
                 };
             };
             /** @description Validation Error */

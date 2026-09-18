@@ -1007,6 +1007,102 @@
         }
       }
     },
+    "/api/projects/{project_id}/facts/compact": {
+      "post": {
+        "tags": [
+          "facts"
+        ],
+        "summary": "Compact Preview",
+        "description": "LLM 통합 그룹 제안 (게이트 1단 — 승인 전까지는 아무 것도 바꾸지 않는다).",
+        "operationId": "compact_preview_api_projects__project_id__facts_compact_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/facts/compact/apply": {
+      "post": {
+        "tags": [
+          "facts"
+        ],
+        "summary": "Compact Apply",
+        "description": "승인된 그룹의 이전 팩트를 archive로 + interview-log 미러 재작성 (게이트 2단).",
+        "operationId": "compact_apply_api_projects__project_id__facts_compact_apply_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompactApplyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompactApplyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/interview/sessions": {
       "post": {
         "tags": [
@@ -1403,6 +1499,144 @@
         }
       }
     },
+    "/api/projects/{project_id}/reviews": {
+      "post": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Enqueue Review",
+        "description": "최신 승인 plan에 대한 검수 잡을 큐에 넣는다.",
+        "operationId": "enqueue_review_api_projects__project_id__reviews_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "List Reviews",
+        "operationId": "list_reviews_api_projects__project_id__reviews_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewOut"
+                  },
+                  "title": "Response List Reviews Api Projects  Project Id  Reviews Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/reviews/{review_id}": {
+      "get": {
+        "tags": [
+          "reviews"
+        ],
+        "summary": "Get Review",
+        "operationId": "get_review_api_projects__project_id__reviews__review_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "review_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Review Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1543,6 +1777,137 @@
           "created_at"
         ],
         "title": "BuildOut"
+      },
+      "CompactApplyRequest": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CompactGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "groups"
+        ],
+        "title": "CompactApplyRequest"
+      },
+      "CompactApplyResult": {
+        "properties": {
+          "archived": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Archived"
+          },
+          "active_remaining": {
+            "type": "integer",
+            "title": "Active Remaining"
+          },
+          "log_path": {
+            "type": "string",
+            "title": "Log Path"
+          },
+          "archive_path": {
+            "type": "string",
+            "title": "Archive Path"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "archived",
+          "active_remaining",
+          "log_path",
+          "archive_path",
+          "warnings"
+        ],
+        "title": "CompactApplyResult"
+      },
+      "CompactGroup": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic",
+            "default": ""
+          },
+          "keep_id": {
+            "type": "integer",
+            "title": "Keep Id"
+          },
+          "archive_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Archive Ids",
+            "default": []
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "keep_id"
+        ],
+        "title": "CompactGroup"
+      },
+      "CompactPreview": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/CompactGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/FactOut"
+            },
+            "type": "array",
+            "title": "Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "groups",
+          "facts"
+        ],
+        "title": "CompactPreview"
       },
       "DerivativeCreate": {
         "properties": {
@@ -1803,6 +2168,34 @@
           "approve"
         ],
         "title": "FactsConfirmCreate"
+      },
+      "FindingOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "where": {
+            "type": "string",
+            "title": "Where"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "where",
+          "message"
+        ],
+        "title": "FindingOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -2152,6 +2545,66 @@
         },
         "type": "object",
         "title": "ProjectUpdate"
+      },
+      "ReviewOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "project_id": {
+            "type": "integer",
+            "title": "Project Id"
+          },
+          "plan_id": {
+            "type": "integer",
+            "title": "Plan Id"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/FindingOut"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "red_count": {
+            "type": "integer",
+            "title": "Red Count"
+          },
+          "yellow_count": {
+            "type": "integer",
+            "title": "Yellow Count"
+          },
+          "white_count": {
+            "type": "integer",
+            "title": "White Count"
+          },
+          "llm_ok": {
+            "type": "boolean",
+            "title": "Llm Ok"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "created_at": {
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "project_id",
+          "plan_id",
+          "findings",
+          "red_count",
+          "yellow_count",
+          "white_count",
+          "llm_ok",
+          "summary",
+          "created_at"
+        ],
+        "title": "ReviewOut"
       },
       "SessionCreate": {
         "properties": {},

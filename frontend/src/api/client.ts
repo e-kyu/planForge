@@ -7,8 +7,12 @@ export type Fact = components["schemas"]["FactOut"];
 export type Plan = components["schemas"]["PlanOut"];
 export type Derivative = components["schemas"]["DerivativeOut"];
 export type Build = components["schemas"]["BuildOut"];
+export type Review = components["schemas"]["ReviewOut"];
+export type ReviewFinding = components["schemas"]["FindingOut"];
 export type SourceFile = components["schemas"]["SourceOut"];
 export type Session = components["schemas"]["SessionOut"];
+export type CompactPreview = components["schemas"]["CompactPreview"];
+export type CompactApplyResult = components["schemas"]["CompactApplyResult"];
 export type Message = components["schemas"]["MessageOut"];
 
 export class ApiError extends Error {
