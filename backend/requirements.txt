@@ -6,4 +6,11 @@ openai>=1.50          # LLM provider 추상화 계층 (CLAUDE.md: openai SDK 기
 # 테스트
 pytest>=8.0
 
-# M2에서 추가 예정: SQLAlchemy>=2.0, alembic, fastapi, uvicorn
+# M2 웹 백엔드
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0
+alembic>=1.13
+psycopg[binary]>=3.2  # postgresql+psycopg:// 방언
+sse-starlette>=2.1
+httpx>=0.27           # 테스트/클라이언트
