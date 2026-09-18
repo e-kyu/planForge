@@ -66,4 +66,20 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
   - `python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]` — LLM 변환 + 검증 게이트 + 빌드 (make-ppt/make-doc 이식). LLM 설정은 `backend/reportagent/config.json` (예시: `llm/config.example.json`, 기본 ollama — 필요 시 프로필별 모델 지정)
 - 빌더 원형: `backend/reportagent/builders/{build_ppt,build_doc,theme}.py` — docs/legacy/scripts/ 바이트 동일 이식본. 로직 변경 금지.
 
-(마이그레이션 명령은 M2에서 확정되는 대로 이 아래에 추가한다.)
+### 확정된 명령 (M2)
+
+- DB: `docker compose up -d postgres` 후 `alembic upgrade head` (backend/에서)
+- 서버: `uvicorn app.main:app --reload` (backend/에서) — 개발용 `init_db`는 alembic 대체로만 사용
+- 인터뷰 SSE 턴 (text/event-stream 반환):
+  - `POST /api/projects/{pid}/interview/sessions` — 세션 생성 (phase=hypothesis)
+  - `POST /api/interview/sessions/{id}/kick` — 인터뷰 시작 (FR-2.2 가설 선제시)
+  - `POST /api/interview/sessions/{id}/turn` — 자유 텍스트 턴
+  - `POST /api/interview/sessions/{id}/answers` — 라운드 답변 (FR-2.3)
+  - `POST /api/interview/sessions/{id}/facts/confirm` — 팩트 확인 게이트, 승인 시에만 적립 (FR-2.4)
+  - `POST /api/interview/sessions/{id}/key-messages` — 핵심 메시지 승인 게이트 (FR-2.6)
+  - `GET /api/interview/sessions/{id}/messages?after=seq` — 이력·재접속 리플레이 (D6)
+- plan API:
+  - `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}`
+  - `POST /api/plans/{id}/approve` — 승인 게이트 (FR-2.9), 이전 승인본은 superseded
+  - `POST /api/plans/{id}/revise` — plan 수정 → 새 세대 DRAFT (FR-4.3)
+- 인터뷰 에이전트: `backend/app/agents/interview.py` 상태머신 + `agents/prompts/interview.md` (plan-doc.md 이식). 도구 스키마는 `agents/tools.py`. 동시 턴은 프로세스 내 세션 락(409)으로 직렬화 — 단일 uvicorn 프로세스 전제.

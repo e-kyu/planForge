@@ -85,3 +85,23 @@ def correct_report_payload() -> dict:
 
 def plan_sample_markdown() -> str:
     return (Path(__file__).parent / "fixtures" / "plan.sample.md").read_text(encoding="utf-8-sig")
+
+class FakeStreamLLM:
+    """stream_fn 계약(provider.stream) 가짜 — 인터뷰 에이전트 턴 스크립트.
+
+    turns: [(text, [(name, args), ...]), ...] — LLM 호출 1회분 = 텍스트 + 도구 호출들.
+    """
+
+    def __init__(self, turns):
+        self.turns = list(turns)
+        self.calls: list[list[dict]] = []
+
+    def stream(self, messages, tools=None):
+        self.calls.append(list(messages))
+        if not self.turns:
+            raise AssertionError("스크립트된 턴을 모두 소진했습니다")
+        text, calls = self.turns.pop(0)
+        if text:
+            yield {"type": "text", "delta": text}
+        for name, args in calls:
+            yield {"type": "tool_call", "name": name, "arguments": args}

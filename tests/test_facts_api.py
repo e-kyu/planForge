@@ -26,7 +26,7 @@ def test_messages_after_cursor_replay(client):
     pid = _make_project(client)
     client.post(f"/api/projects/{pid}/interview/sessions", json={})
     # 이력 행을 직접 적립해 커서 리플레이를 검증한다 (에이전트는 PR-4에서 연결)
-    from app.api.interview import append_message
+    from app.transcript import append_message
     from app.db import make_session_factory
     from app.main import create_app  # noqa: F401 — app fixture와 동일 엔진 사용
 
