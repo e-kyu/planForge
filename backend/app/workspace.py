@@ -79,6 +79,33 @@ def write_interview_log_mirror(ws: Path, fact_lines: list[str]) -> Path:
     return log
 
 
+def compact_interview_log(ws: Path, active_lines: list[str],
+                          archived_lines: list[str]) -> tuple[Path, Path]:
+    """팩트 압축 반영 (FR-6.1) — 활성 로그를 통합본으로 재작성 + archive로 이전 항목 이동.
+
+    legacy compact-log.md 절차 2~3 이식: 활성 로그는 남은 활성 팩트만 남기고,
+    archive 파일이 없으면 동일 헤더 구조로 생성해 상단에 '참고용' 안내를 명시한다.
+    DB Fact 행이 권위이며 이 함수는 미러만 다시 쓴다 (SSOT — 원칙 1).
+    """
+    docs = ws / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    log = docs / "interview-log.md"
+    body = "# interview-log\n\n"
+    if active_lines:
+        body += "\n".join(active_lines) + "\n"
+    log.write_text(body, encoding="utf-8")
+    arch = docs / "interview-log-archive.md"
+    if not arch.exists():
+        arch.write_text(
+            "# interview-log-archive\n\n"
+            "압축 시 밀어낸 이전 팩트 이력. 참고용으로만 읽는다.\n\n",
+            encoding="utf-8")
+    with arch.open("a", encoding="utf-8") as f:
+        for line in archived_lines:
+            f.write(line + "\n")
+    return log, arch
+
+
 # ---------------------------------------------------------------- 소스 파일 (FR-2.1, §5 업로드 검증)
 
 SOURCE_EXTS = (".md", ".txt", ".json", ".csv")  # read_sources_context와 동일 화이트리스트
