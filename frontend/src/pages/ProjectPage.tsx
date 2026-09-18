@@ -3,6 +3,7 @@ import { apiGet, ApiError, type Project } from "../api/client";
 import { Empty, Loading } from "../components/ui";
 import { navigate } from "../lib/hashRoute";
 import SourcesPanel from "./SourcesPanel";
+import InterviewPanel from "./InterviewPanel";
 
 export type ProjectTab = "interview" | "plan" | "outputs" | "sources";
 
@@ -51,7 +52,7 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
       </div>
       <section className="tab-body">
         {tab === "sources" && <SourcesPanel pid={pid} />}
-        {tab === "interview" && <Empty>인터뷰 화면 — M3 PR-3에서 구현</Empty>}
+        {tab === "interview" && <InterviewPanel pid={pid} />}
         {tab === "plan" && <Empty>plan 뷰어/에디터 — M3 PR-4에서 구현</Empty>}
         {tab === "outputs" && <Empty>산출물 갤러리 — M3 PR-5에서 구현</Empty>}
       </section>

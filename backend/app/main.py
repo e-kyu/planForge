@@ -62,3 +62,8 @@ def create_app(llm_overrides: dict | None = None, start_worker: bool = True) -> 
 def init_db(engine) -> None:
     """개발용 헬퍼 — 운영은 alembic upgrade head를 사용한다."""
     Base.metadata.create_all(engine)
+
+
+# 확정 명령(`uvicorn app.main:app --reload`)용 모듈 레벨 인스턴스.
+# 테스트는 create_app(llm_overrides=...) 팩토리를 직접 쓴다.
+app = create_app()
