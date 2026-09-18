@@ -20,6 +20,7 @@ DEFAULT_BASE_URLS = {
     "ollama": "http://localhost:11434/v1",
     "openai": "https://api.openai.com/v1",
 }
+REQUEST_TIMEOUT = 600.0  # 초 — 침묵 소켓에 무한 대기하지 않는다 (사고: derive 호출 정체)
 
 
 @dataclass
@@ -69,24 +70,23 @@ class OpenAICompatProvider:
         else:
             api_key = "ollama"  # 사내 서버 내부 통신 — 더미 키
         self.model = profile.model
-        self._client = OpenAI(base_url=base_url, api_key=api_key)
+        self._client = OpenAI(base_url=base_url, api_key=api_key, timeout=REQUEST_TIMEOUT)
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
-        """1회 완료 호출. tool calling 지원. 반환: {"content": str|None, "tool_calls": [{name, arguments}]}"""
-        kwargs = dict(model=self.model, messages=messages)
-        if tools:
-            kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
-        resp = self._client.chat.completions.create(**kwargs)
-        msg = resp.choices[0].message
-        tool_calls = []
-        for tc in (msg.tool_calls or []):
-            try:
-                args = json.loads(tc.function.arguments)
-            except (json.JSONDecodeError, TypeError):
-                args = tc.function.arguments
-            tool_calls.append({"name": tc.function.name, "arguments": args})
-        return {"content": msg.content, "tool_calls": tool_calls}
+        """1회 완료 호출. tool calling 지원. 반환: {"content": str|None, "tool_calls": [{name, arguments}]}
+
+        비스트리밍 응답은 생성이 길어질 때 첫 바이트까지 침묵해 ReadTimeout이 난다
+        (사고: ollama cloud glm-5.3 derive 호출). 그래서 내부적으로 스트리밍으로
+        받아 누적한다 — 인터페이스(chat_fn 계약)는 그대로 유지된다.
+        """
+        content_parts: list[str] = []
+        tool_calls: list[dict] = []
+        for ev in self.stream(messages, tools):
+            if ev["type"] == "text":
+                content_parts.append(ev["delta"])
+            else:  # tool_call
+                tool_calls.append({"name": ev["name"], "arguments": ev["arguments"]})
+        return {"content": "".join(content_parts) or None, "tool_calls": tool_calls}
 
     def chat_stream(self, messages: list[dict], tools: list[dict] | None = None) -> Iterator[str]:
         """SSE 스트리밍(토큰 단위) — 레거시 텍스트 스트림. 새 코드는 stream()을 사용한다."""
