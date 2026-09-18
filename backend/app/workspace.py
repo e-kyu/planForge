@@ -10,7 +10,9 @@ workspaces/<slug>/{work,output,docs,sources,assets}
 """
 from __future__ import annotations
 
+import os
 import re
+import shutil
 from pathlib import Path
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -94,3 +96,55 @@ def read_sources_context(sources_dirs: list[Path], max_chars: int = 8000) -> str
                 continue
             parts.append(f"### 소스: {f.name}\n{text}")
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------- 원자적 빌드 (§5 원자성 + 원칙 5)
+
+BUILD_VER_RE = re.compile(r"_v(\d+)\.[A-Za-z]+$")
+
+
+def atomic_build(ws: Path, run_builder) -> list[Path]:
+    """빌더를 temp output dir에서 실행해 output/으로 원자 이동한다.
+
+    - 채번 연속성: 기존 output 파일을 tmp에 복사해 두므로 빌더의 _next_version glob이
+      기존 vNN을 보고 vNN+1을 만든다 (빌더 코드 무변경).
+    - 원자성: 산출물은 완성된 파일만 os.replace로 output에 나타난다 (crash 시 부분 파일 없음).
+    - run_builder(tmp_dir)는 동기 빌더 실행 함수. 새로 생성된 파일명 리스트를 반환한다.
+    """
+    out = ws / "output"
+    out.mkdir(parents=True, exist_ok=True)
+    tmp = out / ".tmp-build"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir(parents=True)
+
+    existing: dict[str, bytes] = {}
+    try:
+        for f in sorted(out.iterdir()):
+            if f.is_file():
+                existing[f.name] = f.read_bytes()
+                shutil.copy2(f, tmp / f.name)
+
+        run_builder(tmp)
+
+        made: list[Path] = []
+        for f in sorted(tmp.iterdir()):
+            if not f.is_file() or f.name in existing:
+                continue
+            target = out / f.name
+            os.replace(f, target)  # 동일 볼륨 — 원자 이동
+            made.append(target)
+        return made
+    finally:
+        if tmp.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+def parse_build_filename(name: str) -> tuple[str, int, str] | None:
+    """`<title>_vNN.<ext>` → (title, version_no, ext). 버전 파일이 아니면 None."""
+    m = BUILD_VER_RE.search(name)
+    if not m:
+        return None
+    title = name[: m.start()]
+    ext = name.rsplit(".", 1)[1].lower()
+    return title, int(m.group(1)), ext

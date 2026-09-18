@@ -14,14 +14,36 @@ from .errors import install_error_handlers
 from .models import Base
 
 
-def create_app(llm_overrides: dict | None = None) -> FastAPI:
+def create_app(llm_overrides: dict | None = None, start_worker: bool = True) -> FastAPI:
+    from contextlib import asynccontextmanager
+
+    from .db import make_session_factory
+    from .worker import JobContext, worker_loop
+
     settings = get_settings()
 
-    # llm_overrides는 PR-3(LLMRegistry)에서 사용 — 미리 받아두어 API 시그니처 고정
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # 단일 백그라운드 워커 — 빌드 직렬화의 구조적 보장 (worker.py 모듈 주석 참조)
+        task = None
+        if start_worker:
+            ctx = JobContext(
+                session_factory=make_session_factory(settings.database_url),
+                settings=settings,
+                llm_overrides=app.state.llm_overrides,
+            )
+            import asyncio
+
+            task = asyncio.create_task(worker_loop(ctx))
+        yield
+        if task is not None:
+            task.cancel()
+
     app = FastAPI(
         title="report-agent",
         version="0.2.0",
         description="기획 문서 생성 에이전트 웹 서비스 (M2 백엔드)",
+        lifespan=lifespan,
     )
     app.state.settings = settings
     app.state.engine = make_engine(settings.database_url)
@@ -40,13 +62,3 @@ def create_app(llm_overrides: dict | None = None) -> FastAPI:
 def init_db(engine) -> None:
     """개발용 헬퍼 — 운영은 alembic upgrade head를 사용한다."""
     Base.metadata.create_all(engine)
-
-
-app = None
-
-
-def get_app() -> FastAPI:
-    global app
-    if app is None:
-        app = create_app()
-    return app

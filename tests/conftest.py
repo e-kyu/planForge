@@ -41,7 +41,8 @@ def test_engine(db_env):
 def app(db_env, test_engine):
     from app.main import create_app
 
-    return create_app()
+    # 워커 루프 비활성 — 테스트는 run_job을 직접 호출해 결정론적으로 검증한다
+    return create_app(start_worker=False)
 
 
 @pytest.fixture()

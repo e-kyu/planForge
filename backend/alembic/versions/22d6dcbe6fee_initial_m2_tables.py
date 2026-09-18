@@ -1,8 +1,8 @@
 """initial - M2 tables
 
-Revision ID: 0647be688307
+Revision ID: 22d6dcbe6fee
 Revises: 
-Create Date: 2026-09-18 13:18:49.397292
+Create Date: 2026-09-18 13:43:34.641384
 """
 from typing import Sequence, Union
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision: str = '0647be688307'
+revision: str = '22d6dcbe6fee'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -23,7 +23,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('slug', sa.String(length=64), nullable=False),
     sa.Column('title', sa.String(length=200), nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'ARCHIVED', name='projectstatus', native_enum=False, length=32), server_default='active', nullable=False),
+    sa.Column('status', sa.Enum('active', 'archived', name='projectstatus', native_enum=False, length=32), server_default='active', nullable=False),
     sa.Column('owner', sa.String(length=100), nullable=True),
     sa.Column('workspace_path', sa.String(length=500), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
@@ -33,9 +33,9 @@ def upgrade() -> None:
     op.create_table('interview_sessions',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('project_id', sa.Integer(), nullable=False),
-    sa.Column('phase', sa.Enum('HYPOTHESIS', 'AWAITING_ANSWERS', 'FACT_GATE', 'KEY_MESSAGE_GATE', 'PLAN_REVIEW', 'APPROVED', 'FAILED', name='sessionphase', native_enum=False, length=32), server_default='hypothesis', nullable=False),
+    sa.Column('phase', sa.Enum('hypothesis', 'awaiting_answers', 'fact_gate', 'key_message_gate', 'plan_review', 'approved', 'failed', name='sessionphase', native_enum=False, length=32), server_default='hypothesis', nullable=False),
     sa.Column('round_no', sa.Integer(), server_default='0', nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'DONE', 'ABORTED', name='sessionstatus', native_enum=False, length=32), server_default='active', nullable=False),
+    sa.Column('status', sa.Enum('active', 'done', 'aborted', name='sessionstatus', native_enum=False, length=32), server_default='active', nullable=False),
     sa.Column('pending_questions', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
     sa.Column('pending_facts', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
     sa.Column('pending_key_messages', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
@@ -52,11 +52,11 @@ def upgrade() -> None:
     op.create_table('jobs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('project_id', sa.Integer(), nullable=True),
-    sa.Column('type', sa.Enum('DERIVE_BUILD', name='jobtype', native_enum=False, length=32), nullable=False),
-    sa.Column('status', sa.Enum('QUEUED', 'RUNNING', 'DONE', 'FAILED', 'CANCELLED', name='jobstatus', native_enum=False, length=32), server_default='queued', nullable=False),
+    sa.Column('type', sa.Enum('derive_build', name='jobtype', native_enum=False, length=32), nullable=False),
+    sa.Column('status', sa.Enum('queued', 'running', 'done', 'failed', 'cancelled', name='jobstatus', native_enum=False, length=32), server_default='queued', nullable=False),
     sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=False),
     sa.Column('result', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('error_class', sa.Enum('VALIDATION', 'SCHEMA', 'LLM', 'BUILDER', 'INTERNAL', name='joberrorclass', native_enum=False, length=32), nullable=True),
+    sa.Column('error_class', sa.Enum('validation', 'schema', 'llm', 'builder', 'internal', name='joberrorclass', native_enum=False, length=32), nullable=True),
     sa.Column('error', sa.Text(), nullable=True),
     sa.Column('attempts', sa.Integer(), server_default='0', nullable=False),
     sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
@@ -74,9 +74,9 @@ def upgrade() -> None:
     sa.Column('docs', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
     sa.Column('parsed_ok', sa.Boolean(), server_default='false', nullable=False),
     sa.Column('parse_error', sa.Text(), nullable=True),
-    sa.Column('status', sa.Enum('DRAFT', 'APPROVED', 'SUPERSEDED', name='planstatus', native_enum=False, length=32), server_default='draft', nullable=False),
+    sa.Column('status', sa.Enum('draft', 'approved', 'superseded', name='planstatus', native_enum=False, length=32), server_default='draft', nullable=False),
     sa.Column('approved_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('origin', sa.Enum('INTERVIEW', 'EDIT', name='planorigin', native_enum=False, length=32), server_default='interview', nullable=False),
+    sa.Column('origin', sa.Enum('interview', 'edit', name='planorigin', native_enum=False, length=32), server_default='interview', nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id'),
@@ -87,7 +87,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('plan_id', sa.Integer(), nullable=False),
     sa.Column('project_id', sa.Integer(), nullable=False),
-    sa.Column('kind', sa.Enum('SLIDES', 'REPORT', name='derivativekind', native_enum=False, length=32), nullable=False),
+    sa.Column('kind', sa.Enum('slides', 'report', name='derivativekind', native_enum=False, length=32), nullable=False),
     sa.Column('doc', sa.String(length=100), nullable=False),
     sa.Column('json', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=False),
     sa.Column('slides_count', sa.Integer(), server_default='0', nullable=False),
@@ -108,8 +108,8 @@ def upgrade() -> None:
     sa.Column('date', sa.Date(), nullable=False),
     sa.Column('content', sa.Text(), nullable=False),
     sa.Column('source', sa.String(length=300), server_default='', nullable=False),
-    sa.Column('status', sa.Enum('ACTIVE', 'ARCHIVED', name='factstatus', native_enum=False, length=32), server_default='active', nullable=False),
-    sa.Column('origin', sa.Enum('INTERVIEW', 'REVIEW', 'MANUAL', name='factorigin', native_enum=False, length=32), server_default='interview', nullable=False),
+    sa.Column('status', sa.Enum('active', 'archived', name='factstatus', native_enum=False, length=32), server_default='active', nullable=False),
+    sa.Column('origin', sa.Enum('interview', 'review', 'manual', name='factorigin', native_enum=False, length=32), server_default='interview', nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.ForeignKeyConstraint(['session_id'], ['interview_sessions.id'], ),
@@ -120,8 +120,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=False),
     sa.Column('seq', sa.Integer(), nullable=False),
-    sa.Column('role', sa.Enum('USER', 'ASSISTANT', 'SYSTEM', 'TOOL', 'EVENT', name='messagerole', native_enum=False, length=32), nullable=False),
-    sa.Column('kind', sa.Enum('TEXT', 'QUESTIONS', 'FACTS', 'KEY_MESSAGES', 'PLAN_DRAFT', 'STATE', 'NOTICE', 'ERROR', 'TOOL_CALL', name='messagekind', native_enum=False, length=32), nullable=False),
+    sa.Column('role', sa.Enum('user', 'assistant', 'system', 'tool', 'event', name='messagerole', native_enum=False, length=32), nullable=False),
+    sa.Column('kind', sa.Enum('text', 'questions', 'facts', 'key_messages', 'plan_draft', 'state', 'notice', 'error', 'tool_call', name='messagekind', native_enum=False, length=32), nullable=False),
     sa.Column('content', sa.Text(), server_default='', nullable=False),
     sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),

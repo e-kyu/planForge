@@ -46,7 +46,9 @@ class StrEnum(str, enum.Enum):
 
 
 def _enum(enum_cls, **kw):
-    return Enum(enum_cls, native_enum=False, length=32, **kw)
+    # value 기준 저장 (기본은 name 저장 — 'queued'가 'QUEUED'로 기록되는 문제 방지)
+    return Enum(enum_cls, values_callable=lambda e: [m.value for m in e],
+                native_enum=False, length=32, **kw)
 
 
 class ProjectStatus(StrEnum):
