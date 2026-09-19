@@ -1,6 +1,8 @@
 # 런타임 워크스페이스/산출물 — DB 메타와 워크스페이스에만 존재, 커밋하지 않음
 workspaces/
 output/
+# 글로벌 소스 (인터뷰 소스 확인용 — compose에서 bind mount)
+sources/
 
 # legacy 원본 사본 (참조용 — 커밋하지 않음, SSOT는 docs/legacy/)
 makeReportAgent2/
@@ -24,5 +26,13 @@ backend/reportagent/config.json
 # OS
 Thumbs.db
 .DS_Store
+# SQLite 런타임 DB (기본 DATABASE_URL: 저장소 루트 data/reportagent.db)
+data/
+*.db
+*.db-wal
+*.db-shm
 # 스모크/테스트 산출물 (fixture 디렉토리 오염 방지)
 _smoke_out/
+# 브라우저 e2e 스모크 산출물 (스크립트 자체도 수동 검증용 — 커밋 대상 아님)
+.e2e-shots/
+frontend/e2e-smoke.mjs

@@ -8,7 +8,6 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 
 revision: str = '22d6dcbe6fee'
@@ -26,7 +25,7 @@ def upgrade() -> None:
     sa.Column('status', sa.Enum('active', 'archived', name='projectstatus', native_enum=False, length=32), server_default='active', nullable=False),
     sa.Column('owner', sa.String(length=100), nullable=True),
     sa.Column('workspace_path', sa.String(length=500), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_projects_slug'), 'projects', ['slug'], unique=True)
@@ -36,15 +35,15 @@ def upgrade() -> None:
     sa.Column('phase', sa.Enum('hypothesis', 'awaiting_answers', 'fact_gate', 'key_message_gate', 'plan_review', 'approved', 'failed', name='sessionphase', native_enum=False, length=32), server_default='hypothesis', nullable=False),
     sa.Column('round_no', sa.Integer(), server_default='0', nullable=False),
     sa.Column('status', sa.Enum('active', 'done', 'aborted', name='sessionstatus', native_enum=False, length=32), server_default='active', nullable=False),
-    sa.Column('pending_questions', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('pending_facts', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('pending_key_messages', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('checklist', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('key_messages_approved', sa.Boolean(), server_default='false', nullable=False),
-    sa.Column('hypothesis', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
+    sa.Column('pending_questions', sa.JSON(), nullable=True),
+    sa.Column('pending_facts', sa.JSON(), nullable=True),
+    sa.Column('pending_key_messages', sa.JSON(), nullable=True),
+    sa.Column('checklist', sa.JSON(), nullable=True),
+    sa.Column('key_messages_approved', sa.Boolean(), server_default=sa.text('0'), nullable=False),
+    sa.Column('hypothesis', sa.JSON(), nullable=True),
     sa.Column('llm_turns', sa.Integer(), server_default='0', nullable=False),
     sa.Column('error', sa.Text(), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -54,14 +53,14 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Integer(), nullable=True),
     sa.Column('type', sa.Enum('derive_build', name='jobtype', native_enum=False, length=32), nullable=False),
     sa.Column('status', sa.Enum('queued', 'running', 'done', 'failed', 'cancelled', name='jobstatus', native_enum=False, length=32), server_default='queued', nullable=False),
-    sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=False),
-    sa.Column('result', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
+    sa.Column('payload', sa.JSON(), nullable=False),
+    sa.Column('result', sa.JSON(), nullable=True),
     sa.Column('error_class', sa.Enum('validation', 'schema', 'llm', 'builder', 'internal', name='joberrorclass', native_enum=False, length=32), nullable=True),
     sa.Column('error', sa.Text(), nullable=True),
     sa.Column('attempts', sa.Integer(), server_default='0', nullable=False),
     sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -71,13 +70,13 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Integer(), nullable=False),
     sa.Column('version_no', sa.Integer(), nullable=False),
     sa.Column('markdown', sa.Text(), nullable=False),
-    sa.Column('docs', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('parsed_ok', sa.Boolean(), server_default='false', nullable=False),
+    sa.Column('docs', sa.JSON(), nullable=True),
+    sa.Column('parsed_ok', sa.Boolean(), server_default=sa.text('0'), nullable=False),
     sa.Column('parse_error', sa.Text(), nullable=True),
     sa.Column('status', sa.Enum('draft', 'approved', 'superseded', name='planstatus', native_enum=False, length=32), server_default='draft', nullable=False),
     sa.Column('approved_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('origin', sa.Enum('interview', 'edit', name='planorigin', native_enum=False, length=32), server_default='interview', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('project_id', 'version_no', name='uq_project_planver')
@@ -89,12 +88,12 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Integer(), nullable=False),
     sa.Column('kind', sa.Enum('slides', 'report', name='derivativekind', native_enum=False, length=32), nullable=False),
     sa.Column('doc', sa.String(length=100), nullable=False),
-    sa.Column('json', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=False),
+    sa.Column('json', sa.JSON(), nullable=False),
     sa.Column('slides_count', sa.Integer(), server_default='0', nullable=False),
     sa.Column('sections_count', sa.Integer(), server_default='0', nullable=False),
-    sa.Column('unconfirmed', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
+    sa.Column('unconfirmed', sa.JSON(), nullable=True),
     sa.Column('attempts', sa.Integer(), server_default='1', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -110,7 +109,7 @@ def upgrade() -> None:
     sa.Column('source', sa.String(length=300), server_default='', nullable=False),
     sa.Column('status', sa.Enum('active', 'archived', name='factstatus', native_enum=False, length=32), server_default='active', nullable=False),
     sa.Column('origin', sa.Enum('interview', 'review', 'manual', name='factorigin', native_enum=False, length=32), server_default='interview', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ),
     sa.ForeignKeyConstraint(['session_id'], ['interview_sessions.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -123,8 +122,8 @@ def upgrade() -> None:
     sa.Column('role', sa.Enum('user', 'assistant', 'system', 'tool', 'event', name='messagerole', native_enum=False, length=32), nullable=False),
     sa.Column('kind', sa.Enum('text', 'questions', 'facts', 'key_messages', 'plan_draft', 'state', 'notice', 'error', 'tool_call', name='messagekind', native_enum=False, length=32), nullable=False),
     sa.Column('content', sa.Text(), server_default='', nullable=False),
-    sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'postgresql'), nullable=True),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('payload', sa.JSON(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['session_id'], ['interview_sessions.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('session_id', 'seq', name='uq_session_seq')
@@ -142,7 +141,7 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=300), nullable=False),
     sa.Column('file_path', sa.String(length=500), nullable=False),
     sa.Column('size_bytes', sa.Integer(), server_default='0', nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default='now()', nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.ForeignKeyConstraint(['derivative_id'], ['derivatives.id'], ),
     sa.ForeignKeyConstraint(['job_id'], ['jobs.id'], ),
     sa.ForeignKeyConstraint(['plan_id'], ['plans.id'], ),

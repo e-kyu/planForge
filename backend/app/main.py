@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from .api import api_router
 from .config import get_settings
-from .db import make_engine
+from .db import get_engine
 from .errors import install_error_handlers
 from .models import Base
 
@@ -46,7 +46,7 @@ def create_app(llm_overrides: dict | None = None, start_worker: bool = True) -> 
         lifespan=lifespan,
     )
     app.state.settings = settings
-    app.state.engine = make_engine(settings.database_url)
+    app.state.engine = get_engine(settings.database_url)
     app.state.llm_overrides = llm_overrides or {}
 
     install_error_handlers(app)

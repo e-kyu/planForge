@@ -2,7 +2,7 @@
 """M2 데이터 모델 (SQLAlchemy 2.x).
 
 원칙 대응:
-- 원칙 4(팩트 선적립): facts 테이블 — 확정 팩트만 기록, pending은 세션 JSONB
+- 원칙 4(팩트 선적립): facts 테이블 — 확정 팩트만 기록, pending은 세션 JSON
 - 원칙 5(무손실 채번): builds는 빌더 fs glob의 미러(채번 권위는 파일시스템), 절대 재사용 없음
 - 원칙 1(SSOT): plans.markdown이 콘텐츠 유일 원본, work/*.json은 derivatives.json 미러 + 파생물 재생성만
 - 추적성(§5): builds → derivative_id → plan_id 역참조 사슬
@@ -22,24 +22,42 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
+    text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.types import JSON
+from sqlalchemy.types import JSON, TypeDecorator
 
 from .db import Base
 
-# 테스트가 임시로 다른 방언(SQLite 등)을 쓰지 않는다 — PostgreSQL 고정(사용자 결정).
-# JSONB를 그대로 쓰되, alembic/모델 모두 postgres 전용 타입으로 유지한다.
-JSONVariant = JSONB().with_variant(JSON(), "postgresql")
+# SQLite 단일 방언 (2026-09-19 전환) — 방언 분기(with_variant) 없이 JSON 하나로 통일.
+JSONVariant = JSON
 
 
-def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+class UTCDateTime(TypeDecorator):
+    """DateTime(timezone=True) 시맨틱을 SQLite에 맞춘다.
+
+    저장: aware → UTC 변환 후 naive 기록 (SQLite는 tz 보존 불가)
+    로드: naive → UTC aware 부여 — 기존 timestamptz 계약(aware 반환) 유지,
+    Pydantic이 +00:00 오프셋을 실어 직렬화한다.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class StrEnum(str, enum.Enum):
-    """native_enum=False String Enum 공통 베이스 (PG enum 마이그레이션 부담 회피)."""
+    """native_enum=False String Enum 공통 베이스 (SQLite에는 네이티브 ENUM 타입이 없다)."""
 
     def __str__(self) -> str:  # pragma: no cover - 표기 편의
         return self.value
@@ -151,7 +169,7 @@ class Project(Base):
     )
     owner: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 추후 접근제어 확장(§5)
     workspace_path: Mapped[str] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
     sessions: Mapped[list["InterviewSession"]] = relationship(back_populates="project")
 
@@ -173,12 +191,12 @@ class InterviewSession(Base):
     pending_key_messages: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
     checklist: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
     key_messages_approved: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false"
+        Boolean, default=False, server_default=text("0")
     )
     hypothesis: Mapped[dict | None] = mapped_column(JSONVariant, nullable=True)
     llm_turns: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
     project: Mapped[Project] = relationship(back_populates="sessions")
     messages: Mapped[list["InterviewMessage"]] = relationship(
@@ -199,7 +217,7 @@ class InterviewMessage(Base):
     kind: Mapped[MessageKind] = mapped_column(_enum(MessageKind))
     content: Mapped[str] = mapped_column(Text, default="", server_default="")
     payload: Mapped[dict | None] = mapped_column(JSONVariant, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
     session: Mapped[InterviewSession] = relationship(back_populates="messages")
 
@@ -221,7 +239,7 @@ class Fact(Base):
     origin: Mapped[FactOrigin] = mapped_column(
         _enum(FactOrigin), default=FactOrigin.INTERVIEW, server_default="interview"
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
 class Plan(Base):
@@ -233,16 +251,16 @@ class Plan(Base):
     version_no: Mapped[int] = mapped_column(Integer)  # 1부터, project별 독립
     markdown: Mapped[str] = mapped_column(Text)  # 원칙 1 — SSOT
     docs: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)  # 파싱 캐시
-    parsed_ok: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    parsed_ok: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"))
     parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[PlanStatus] = mapped_column(
         _enum(PlanStatus), default=PlanStatus.DRAFT, server_default="draft"
     )
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     origin: Mapped[PlanOrigin] = mapped_column(
         _enum(PlanOrigin), default=PlanOrigin.INTERVIEW, server_default="interview"
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
 class Derivative(Base):
@@ -258,7 +276,7 @@ class Derivative(Base):
     sections_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     unconfirmed: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
 class Build(Base):
@@ -275,7 +293,7 @@ class Build(Base):
     title: Mapped[str] = mapped_column(String(300))
     file_path: Mapped[str] = mapped_column(String(500))  # 워크스페이스 상대 경로
     size_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
 class Job(Base):
@@ -294,9 +312,9 @@ class Job(Base):
     error_class: Mapped[JobErrorClass | None] = mapped_column(_enum(JobErrorClass), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
 class ReviewReport(Base):
@@ -317,6 +335,6 @@ class ReviewReport(Base):
     red_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     yellow_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     white_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    llm_ok: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    llm_ok: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("1"))
     summary: Mapped[str] = mapped_column(Text, default="", server_default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default="now()")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())

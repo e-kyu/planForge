@@ -68,7 +68,8 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
 
 ### 확정된 명령 (M2)
 
-- DB: `docker compose up -d postgres` 후 `alembic upgrade head` (backend/에서)
+- DB: SQLite 단일 방언 (2026-09-19 전환). `alembic upgrade head` (backend/에서) — 기본
+  DATABASE_URL은 저장소 루트 `data/reportagent.db`. WAL·foreign_keys=ON은 db.py 연결 리스너가 설정
 - 서버: `uvicorn app.main:app --reload` (backend/에서) — 개발용 `init_db`는 alembic 대체로만 사용
 - 인터뷰 SSE 턴 (text/event-stream 반환):
   - `POST /api/projects/{pid}/interview/sessions` — 세션 생성 (phase=hypothesis)

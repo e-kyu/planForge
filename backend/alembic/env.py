@@ -21,8 +21,16 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 database_url = os.environ.get("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+if not database_url:
+    # app.config 기본값으로 폴백 — alembic.ini의 URL과 드리프트하지 않는다
+    from app.config import get_settings  # noqa: E402
+
+    database_url = get_settings().database_url
+if database_url.startswith("sqlite"):
+    from app.db import ensure_sqlite_dir  # noqa: E402
+
+    ensure_sqlite_dir(database_url)
+config.set_main_option("sqlalchemy.url", database_url)
 
 target_metadata = Base.metadata
 
@@ -45,7 +53,10 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # render_as_batch — SQLite는 ALTER TABLE 제약이 커서 스키마 변경에 batch 모드가 필요하다
+        context.configure(
+            connection=connection, target_metadata=target_metadata, render_as_batch=True
+        )
         with context.begin_transaction():
             context.run_migrations()
 

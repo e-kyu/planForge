@@ -3,7 +3,7 @@
 
 - 빌드 동시성이 거의 없는 팀 단위 서비스(1~10명)라 Redis/Celery 없이 job 테이블 + 단일 워커.
 - 빌더(build_ppt.BLANK_LAYOUT_IDX 모듈 전역)는 스레드 안전하지 않으므로
-  **절대 병렬 실행 금지** — claim이 FOR UPDATE SKIP LOCKED 단건이고 워커 태스크도 1개다.
+  **절대 병렬 실행 금지** — 워커 태스크가 1개이고 run_job은 단일 스레드에서 직렬 실행된다.
 """
 from __future__ import annotations
 
@@ -45,16 +45,18 @@ class JobContext:
 
 
 def claim_next_job(session: Session) -> Job | None:
-    """큐에서 다음 job을 원자적으로 클레임한다 (동시 워커 대비 방어 — 현재는 워커 1개)."""
-    job_id = session.execute(
-        text(
-            "SELECT id FROM jobs WHERE status = 'queued' "
-            "ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1"
-        )
-    ).scalar()
-    if job_id is None:
+    """큐에서 다음 job을 클레임한다.
+
+    SQLite 전환(2026-09-19): FOR UPDATE SKIP LOCKED는 SQLite 미지원이라 제거했다.
+    워커는 정확히 1개(lifespan asyncio 태스크 1개, run_job은 단일 스레드 직렬)이므로
+    '조회 → running 전이' 경쟁이 존재하지 않는다. 멀티 워커 전환 시에는
+    BEGIN IMMEDIATE 트랜잭션 기반으로 재설계한다 (원칙 5 — 단일 프로세스 전제).
+    """
+    job = session.scalars(
+        select(Job).where(Job.status == JobStatus.QUEUED).order_by(Job.id).limit(1)
+    ).first()
+    if job is None:
         return None
-    job = session.get(Job, job_id)
     job.status = JobStatus.RUNNING
     job.attempts = (job.attempts or 0) + 1
     job.started_at = datetime.now(timezone.utc)

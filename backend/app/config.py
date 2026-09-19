@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+# 런타임 DB 파일 — workspaces/·sources/와 같은 레벨(저장소 루트)의 data/
+DATA_DIR = BACKEND_DIR.parent / "data"
 
 
 class Settings:
@@ -14,7 +16,7 @@ class Settings:
     def __init__(self) -> None:
         self.database_url: str = os.environ.get(
             "DATABASE_URL",
-            "postgresql+psycopg://reportagent:reportagent@localhost:5432/reportagent",
+            f"sqlite:///{(DATA_DIR / 'reportagent.db').as_posix()}",
         )
         self.workspaces_dir: Path = Path(
             os.environ.get("WORKSPACES_DIR", BACKEND_DIR.parent / "workspaces")

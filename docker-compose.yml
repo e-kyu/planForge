@@ -1,23 +1,31 @@
-# M2 개발 환경 (backend/frontend/ollama 서비스는 후속 PR에서 확장)
+# 배포 환경 (§3.1): backend + frontend + ollama. DB는 호스트 볼륨의 SQLite 파일(data/).
+# ollama 사용 시 최초 1회 인증이 필요하다: docker compose --profile ollama exec ollama ollama signin
+# 다른 프로바이더(openai 등)는 backend/reportagent/config.json의 base_url이 LLM_BASE_URL보다 우선.
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: reportagent-postgres
+  backend:
+    build: ./backend
     environment:
-      POSTGRES_USER: reportagent
-      POSTGRES_PASSWORD: reportagent
-      # docker/postgres-init.sql이 reportagent + reportagent_test DB를 생성한다
-      POSTGRES_DB: reportagent
-    ports:
-      - "5432:5432"
+      # SQLite 파일은 호스트 볼륨(./data)에 남는다 — 컨테이너 재생성에도 유지
+      DATABASE_URL: sqlite:////srv/data/reportagent.db
+      # 워크스페이스/산출물은 호스트에 남긴다 (gitignore의 workspaces/·sources/와 동일 경로)
+      WORKSPACES_DIR: /srv/workspaces
+      GLOBAL_SOURCES_DIR: /srv/global-sources
+      LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+      PYTHONUTF8: "1"
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U reportagent"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      - ./workspaces:/srv/workspaces
+      - ./sources:/srv/global-sources
+      # SQLite DB. 바인드 마운트에서 WAL lock 이슈가 생기면 named volume으로 전환
+      - ./data:/srv/data
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
 
   ollama:
     image: ollama/ollama:latest
@@ -28,5 +36,4 @@ services:
       - ollama-models:/root/.ollama
 
 volumes:
-  pgdata:
   ollama-models:
