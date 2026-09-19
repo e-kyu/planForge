@@ -11,11 +11,11 @@ import ReviewPanel from "./ReviewPanel";
 export type ProjectTab = "interview" | "plan" | "outputs" | "review" | "sources";
 
 const TABS: { key: ProjectTab; label: string }[] = [
+  { key: "sources", label: "소스" },
   { key: "interview", label: "인터뷰" },
-  { key: "plan", label: "plan.md" },
+  { key: "plan", label: "계획정의" },
   { key: "outputs", label: "산출물" },
   { key: "review", label: "검수" },
-  { key: "sources", label: "소스" },
 ];
 
 /** 프로젝트 셸 — 탭 라우팅 (#/projects/:id/:tab, FR-5 화면 구조). */
