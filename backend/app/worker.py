@@ -320,6 +320,7 @@ def requeue_stale_running(session_factory) -> int:
 async def worker_loop(ctx: JobContext, poll_seconds: float = 1.0) -> None:
     """단일 백그라운드 워커 — lifespan이 시작/중단을 관리한다."""
     import asyncio
+    import time
 
     import anyio
 
@@ -336,5 +337,9 @@ async def worker_loop(ctx: JobContext, poll_seconds: float = 1.0) -> None:
         if job is None:
             await asyncio.sleep(poll_seconds)
             continue
+        # 진행 관측용 로그 — '고착인지 느린 실행인지'를 밖에서 판별 가능하게 한다.
+        t0 = time.monotonic()
+        print(f"[worker] job #{job.id} {job.type} 실행 (attempt {job.attempts})", flush=True)
         # 빌더·LLM은 블로킹 — 스레드로. 실행은 절대 병렬로 만들지 않는다.
         await anyio.to_thread.run_sync(run_job, ctx, job)
+        print(f"[worker] job #{job.id} 종료 ({time.monotonic() - t0:.0f}s)", flush=True)

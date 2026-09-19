@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -21,6 +22,9 @@ DEFAULT_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
 }
 REQUEST_TIMEOUT = 600.0  # 초 — 침묵 소켓에 무한 대기하지 않는다 (사고: derive 호출 정체)
+STREAM_DEADLINE = 900.0  # 초 — 호출 1건의 총 벽시계 한도. keepalive 트리클은 read timeout이
+# 못 잡는다 (사고 2건: ollama cloud 스트림이 유효 출력 없이 12분+ 정체). 초과 시 호출을
+# 중단하고 TimeoutError — 잡은 failed로 기록되고 사용자가 재실행한다 (자동 재시도 금지).
 
 
 @dataclass
@@ -111,21 +115,29 @@ class OpenAICompatProvider:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
         stream = self._client.chat.completions.create(**kwargs)
+        deadline = time.monotonic() + STREAM_DEADLINE
         pending: dict[int, dict] = {}  # tool_call index → {name, arguments}
-        for event in stream:
-            if not event.choices:
-                continue
-            delta = event.choices[0].delta
-            if delta is None:
-                continue
-            if delta.content:
-                yield {"type": "text", "delta": delta.content}
-            for tc in (delta.tool_calls or []):
-                slot = pending.setdefault(tc.index, {"name": "", "arguments": ""})
-                if tc.function and tc.function.name:
-                    slot["name"] += tc.function.name
-                if tc.function and tc.function.arguments:
-                    slot["arguments"] += tc.function.arguments
+        try:
+            for event in stream:
+                if time.monotonic() > deadline:
+                    raise TimeoutError(
+                        f"LLM 호출이 {STREAM_DEADLINE:.0f}초를 넘었다 — 스트림이 정체됐다 "
+                        "(keepalive 트리클은 read timeout으로 잡히지 않는다)")
+                if not event.choices:
+                    continue
+                delta = event.choices[0].delta
+                if delta is None:
+                    continue
+                if delta.content:
+                    yield {"type": "text", "delta": delta.content}
+                for tc in (delta.tool_calls or []):
+                    slot = pending.setdefault(tc.index, {"name": "", "arguments": ""})
+                    if tc.function and tc.function.name:
+                        slot["name"] += tc.function.name
+                    if tc.function and tc.function.arguments:
+                        slot["arguments"] += tc.function.arguments
+        finally:
+            stream.close()  # 정체 연결을 즉시 닫는다 — 프로세스가 소켓을 붙잡지 않게
         # 스트림 종료 후 완성된 도구 호출을 순서대로 방출
         for idx in sorted(pending):
             slot = pending[idx]
