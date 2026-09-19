@@ -67,20 +67,97 @@
   background: #fff;
 }
 
+/* 작업 큐 타임라인 — 상태색 세로선 + 점, 항목당 2줄 카드 */
 .job-list {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.job-list .badge {
+  margin-left: 0; /* 전역 .badge margin-left:auto 해제 — 배지를 행 첫머리에 좌측정렬 */
+}
+
+.job-item {
+  position: relative;
+  margin-left: 6px;
+  border-left: 2px solid var(--line);
+  padding: 6px 0 12px 16px;
+}
+
+.job-item:last-child {
+  border-left-color: transparent; /* 선이 마지막 점에서 끝난다 */
+}
+
+.job-item::before {
+  content: "";
+  position: absolute;
+  left: -6px; /* 2px 선 중앙에 8px 점 */
+  top: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-sub);
+}
+
+.job-done {
+  border-left-color: var(--ok);
+}
+
+.job-done::before {
+  background: var(--ok);
+}
+
+.job-queued,
+.job-running {
+  border-left-color: var(--blue);
+}
+
+.job-queued::before,
+.job-running::before {
+  background: var(--blue);
+}
+
+.job-failed,
+.job-cancelled {
+  border-left-color: var(--danger);
+}
+
+.job-failed::before,
+.job-cancelled::before {
+  background: var(--danger);
+}
+
+@keyframes job-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.job-running::before {
+  animation: job-pulse 1.2s ease-in-out infinite;
+}
+
+.job-head {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.job-list li {
-  display: flex;
-  gap: 10px;
-  align-items: center;
+.job-time {
   font-size: var(--fs-caption);
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.job-title {
+  font-size: var(--fs-body);
+}
+
+.job-detail {
+  font-size: var(--fs-caption);
+  color: var(--text-sub);
+  margin-top: 2px;
 }
 
 .badge-job-done {
@@ -98,10 +175,6 @@
 .badge-job-cancelled {
   border-color: var(--danger);
   color: var(--danger);
-}
-
-.job-meta {
-  color: var(--text-sub);
 }
 
 /* plan 상태 배지 */

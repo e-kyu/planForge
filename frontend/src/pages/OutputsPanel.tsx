@@ -19,6 +19,28 @@ const EXT_LABEL: Record<string, string> = {
 
 type JobCounts = { slides?: number; sections?: number; attempts?: number };
 
+const JOB_TYPE_LABEL: Record<string, string> = {
+  derive_build: "파생물 생성",
+  review: "검수",
+  plan_revise: "plan 반영",
+};
+
+const JOB_STATUS: Record<string, { icon: string; label: string }> = {
+  queued: { icon: "○", label: "대기" },
+  running: { icon: "⟳", label: "진행" },
+  done: { icon: "✓", label: "완료" },
+  failed: { icon: "✕", label: "실패" },
+  cancelled: { icon: "−", label: "취소" },
+};
+
+const ERROR_CLASS_LABEL: Record<string, string> = {
+  validation: "스키마/포맷 문제",
+  schema: "스키마/포맷 문제",
+  llm: "LLM 변환 문제",
+  builder: "빌더 문제",
+  internal: "내부 오류",
+};
+
 /** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드). */
 export default function OutputsPanel({ pid }: { pid: number }) {
   const [builds, setBuilds] = useState<Build[] | null>(null);
@@ -155,16 +177,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
 
       {failedJobs.length > 0 && (
         <Banner kind="error">
-          실패한 작업 {failedJobs.length}건 —{" "}
-          {failedJobs[failedJobs.length - 1]!.error_class === "validation" ||
-          failedJobs[failedJobs.length - 1]!.error_class === "schema"
-            ? "스키마/포맷 문제"
-            : failedJobs[failedJobs.length - 1]!.error_class === "llm"
-              ? "LLM 변환 문제"
-              : failedJobs[failedJobs.length - 1]!.error_class === "builder"
-                ? "빌더 문제"
-                : "내부 오류"}
-          : {failedJobs[failedJobs.length - 1]!.error?.split("\n")[0] ?? ""}
+          실패한 작업 {failedJobs.length}건 — {jobDetail(failedJobs[failedJobs.length - 1]!)}
         </Banner>
       )}
 
@@ -221,21 +234,24 @@ export default function OutputsPanel({ pid }: { pid: number }) {
       {recentJobs.length > 0 && (
         <div className="card">
           <div className="panel-head">
-            <h4>작업 큐 (최근)</h4>
+            <h4>작업 큐 (최근 5건)</h4>
           </div>
           <ul className="job-list">
-            {recentJobs.map((j) => (
-              <li key={j.id}>
-                <span className={`badge badge-job-${j.status}`}>{j.status}</span>
-                <span className="job-meta">
-                  #{j.id} {j.type} · 파생물 {(j.payload as { kind?: string }).kind ?? "-"}
-                  {(() => {
-                    const c = j.result?.counts as JobCounts | undefined;
-                    return c ? ` · 슬라이드 ${c.slides ?? "-"}/섹션 ${c.sections ?? "-"}` : "";
-                  })()}
-                </span>
-              </li>
-            ))}
+            {recentJobs.map((j) => {
+              const st = JOB_STATUS[j.status];
+              return (
+                <li key={j.id} className={`job-item job-${j.status}`}>
+                  <div className="job-head">
+                    <span className="job-time">{fmtDateTime(j.created_at)}</span>
+                    <span className={`badge badge-job-${j.status}`}>
+                      {st?.icon} {st?.label ?? j.status}
+                    </span>
+                    <span className="job-title">{JOB_TYPE_LABEL[j.type] ?? j.type} #{j.id}</span>
+                  </div>
+                  <div className="job-detail">{jobDetail(j)}</div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -245,4 +261,23 @@ export default function OutputsPanel({ pid }: { pid: number }) {
 
 function fmtVersion(n: number): string {
   return `v${String(n).padStart(2, "0")}`;
+}
+
+/** 작업 상세줄 — 실패는 오류 한 줄, 타입별 결과 요약 (result 스키마는 worker.py 참조). */
+function jobDetail(j: Job): string {
+  if (j.status === "failed") {
+    const cls = j.error_class ? (ERROR_CLASS_LABEL[j.error_class] ?? "내부 오류") : "오류";
+    return `${cls} — ${j.error?.split("\n")[0] ?? ""}`;
+  }
+  if (j.type === "review") {
+    const c = j.result?.counts as { red?: number; yellow?: number; white?: number } | undefined;
+    return c ? `🔴 ${c.red ?? 0} · 🟡 ${c.yellow ?? 0} · ⚪ ${c.white ?? 0}` : "결과 대기 중";
+  }
+  if (j.type === "plan_revise") {
+    const r = j.result as { version_no?: number; applied_count?: number } | null;
+    return r ? `plan v${r.version_no} 생성 (반영 ${r.applied_count ?? 0}건)` : "결과 대기 중";
+  }
+  const kind = (j.payload as { kind?: string }).kind ?? "-";
+  const c = j.result?.counts as JobCounts | undefined;
+  return c ? `${kind} · 슬라이드 ${c.slides ?? "-"}/섹션 ${c.sections ?? "-"}` : kind;
 }
