@@ -58,7 +58,7 @@ export function CmDiff(props: { before: string; after: string }) {
     if (!host.current) return;
     const opts = (doc: string) => ({
       doc,
-      extensions: [basicSetup, markdown(), EditorView.editable.of(false)],
+      extensions: [basicSetup, markdown(), EditorView.lineWrapping, EditorView.editable.of(false)],
     });
     const mv = new MergeView({
       a: opts(props.before),

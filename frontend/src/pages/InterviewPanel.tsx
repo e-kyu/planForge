@@ -163,6 +163,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
   }
 
   const phase = session.phase;
+  const isKick = phase === "hypothesis" && messages.length === 0;
 
   return (
     <section className="chat">
@@ -231,7 +232,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
 
         <CompactCard pid={pid} refreshKey={messages.length} />
 
-        <div className="chat-input">
+        <div className={isKick ? "chat-input chat-input-kick" : "chat-input"}>
           <textarea
             value={draft}
             placeholder={

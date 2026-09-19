@@ -116,9 +116,10 @@
   border-right: 1px solid var(--line);
 }
 
-/* merge view (diff) */
+/* merge view (diff) — merge view 자체가 스크롤 컨테이너(@codemirror/merge 문서 기준) */
 .cm-host .cm-mergeView {
-  height: 100%;
+  max-height: 70vh;
+  overflow: auto;
 }
 
 .md-preview {
