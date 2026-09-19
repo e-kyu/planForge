@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """검수 API (FR-4) — 리포트 큐 진입·조회.
 
-수정 적용(FR-4.3)은 별도 엔드포인트가 아니라 기존 게이트를 재사용한다:
-plan 탭에서 plan 수정(revise) → 승인(approve) → 산출물 재생성. 검수는 판단만 하고
-SSOT·게이트·채번 구조를 건드리지 않는다.
+수정 적용(FR-4.3)은 기존 게이트를 재사용한다: 수동은 plan 탭 revise → 승인 → 재생성,
+자동은 POST /api/plans/{plan_id}/revise-from-review job(LLM plan 수정 → 새 DRAFT 세대).
+어느 쪽이든 검수는 판단만 하고 SSOT·게이트·채번 구조를 건드리지 않는다.
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ class FindingOut(BaseModel):
     severity: str
     where: str
     message: str
+    suggestion: str | None = None  # LLM 발견사항의 plan 수정 방향 (결정론 발견사항엔 없음)
 
 
 class ReviewOut(BaseModel):

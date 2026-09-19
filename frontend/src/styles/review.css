@@ -105,6 +105,17 @@
   line-height: 1.4;
 }
 
+.finding-check {
+  margin-top: 3px;
+  accent-color: var(--navy);
+  flex: none;
+}
+
+.finding-suggestion {
+  font-size: var(--fs-caption);
+  color: var(--text-sub);
+}
+
 .finding-body {
   display: flex;
   flex-direction: column;

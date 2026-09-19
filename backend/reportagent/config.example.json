@@ -2,6 +2,7 @@
   "profiles": {
     "interview": { "provider": "ollama", "model": "gemma4:26b" },
     "derive": { "provider": "ollama", "model": "gemma4:26b" },
-    "review": { "provider": "ollama", "model": "gemma4:26b" }
+    "review": { "provider": "ollama", "model": "gemma4:26b" },
+    "plan_revise": { "provider": "ollama", "model": "gemma4:26b" }
   }
 }

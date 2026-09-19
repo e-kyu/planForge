@@ -539,6 +539,59 @@
         }
       }
     },
+    "/api/plans/{plan_id}/revise-from-review": {
+      "post": {
+        "tags": [
+          "plans"
+        ],
+        "summary": "Revise Plan From Review",
+        "description": "검수 발견사항 → LLM plan 수정 job (FR-4.3).\n\n동기 LLM 호출이 아니라 job 큐로 간다 (derive/review와 동일 — LLM 지연 흡수).\n워커가 포맷 검증 게이트를 통과한 plan만 새 DRAFT 세대로 만들며, 승인 게이트와\n파생물 재생성은 기존 게이트를 그대로 경유한다.",
+        "operationId": "revise_plan_from_review_api_plans__plan_id__revise_from_review_post",
+        "parameters": [
+          {
+            "name": "plan_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Plan Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanReviseFromReview"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/derivatives": {
       "post": {
         "tags": [
@@ -2186,6 +2239,17 @@
           "message": {
             "type": "string",
             "title": "Message"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
           }
         },
         "type": "object",
@@ -2438,6 +2502,33 @@
           "markdown"
         ],
         "title": "PlanRevise"
+      },
+      "PlanReviseFromReview": {
+        "properties": {
+          "review_id": {
+            "type": "integer",
+            "title": "Review Id"
+          },
+          "finding_indices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Indices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "review_id"
+        ],
+        "title": "PlanReviseFromReview"
       },
       "ProjectCreate": {
         "properties": {

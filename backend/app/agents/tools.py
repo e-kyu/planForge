@@ -11,6 +11,23 @@ from typing import Any
 
 # ---------------------------------------------------------------- OpenAI function 스키마
 
+WRITE_PLAN_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "write_plan",
+        "description": ("plan.md 마크다운 전체를 전달한다 (정확히 3개의 핵심 메시지, "
+                        "7종 유형 표기, 근거 없는 수치는 (미확정)). 서버가 포맷을 검증하고 "
+                        "통과하면 다음 단계(승인 게이트)로 넘어간다."),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "markdown": {"type": "string"},
+            },
+            "required": ["markdown"],
+        },
+    },
+}
+
 INTERVIEW_TOOLS: list[dict] = [
     {
         "type": "function",
@@ -129,22 +146,7 @@ INTERVIEW_TOOLS: list[dict] = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_plan",
-            "description": ("인터뷰 결과를 plan.md 마크다운으로 작성한다 (정확히 3개의 핵심 메시지, "
-                            "7종 유형 표기, 근거 없는 수치는 (미확정)). 서버가 포맷을 검증하고 "
-                            "통과하면 plan 승인 게이트로 넘어간다."),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "markdown": {"type": "string"},
-                },
-                "required": ["markdown"],
-            },
-        },
-    },
+    WRITE_PLAN_TOOL,
 ]
 
 BLOCKING_TOOLS = {"ask_questions", "save_facts", "confirm_key_messages", "write_plan"}

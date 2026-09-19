@@ -130,6 +130,7 @@ class PlanStatus(StrEnum):
 class PlanOrigin(StrEnum):
     INTERVIEW = "interview"
     EDIT = "edit"
+    REVIEW = "review"
 
 
 class DerivativeKind(StrEnum):
@@ -140,6 +141,7 @@ class DerivativeKind(StrEnum):
 class JobType(StrEnum):
     DERIVE_BUILD = "derive_build"
     REVIEW = "review"
+    PLAN_REVISE = "plan_revise"
 
 
 class JobStatus(StrEnum):

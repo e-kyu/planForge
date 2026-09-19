@@ -14,20 +14,24 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reportagent.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from reportagent.plan import PlanError
 from reportagent.plan import Plan as ParsedPlan
 
 from ..db import get_db
 from ..errors import http_404, http_409
 from ..models import (
     InterviewSession,
+    Job,
+    JobType,
     Plan,
     PlanOrigin,
     PlanStatus,
     Project,
+    ReviewReport,
     SessionPhase,
     SessionStatus,
 )
+from ..schemas import JobOut
 from ..workspace import write_plan_mirror
 
 router = APIRouter(tags=["plans"])
@@ -60,13 +64,13 @@ def _plan_or_404(db: Session, plan_id: int) -> "Plan":
 
 
 def _validate_markdown(markdown: str) -> ParsedPlan:
-    """plan 포맷 + 골격 검증 (원칙 8 — 미달 시 PlanError → 422)."""
-    plan = parse_plan_text(markdown)
-    if len(plan.key_messages) != 3:
-        raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
-    for doc in plan.docs:
-        validate_skeleton(filter_slides(plan.slides, doc))
-    return plan
+    """plan 포맷 + 골격 검증 (원칙 8 — 미달 시 PlanError → 422).
+
+    단일 권위는 agents.planrevise.validate_plan_markdown — 워커의 plan 반영 검증과
+    같은 함수다 (중복 검증 규칙의 괴리 방지).
+    """
+    from ..agents.planrevise import validate_plan_markdown
+    return validate_plan_markdown(markdown)
 
 
 @router.get("/api/projects/{project_id}/plans", response_model=list[PlanOut])
@@ -139,3 +143,46 @@ def revise_plan(plan_id: int, body: PlanRevise, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(p)
     return PlanOut.model_validate(p)
+
+
+class PlanReviseFromReview(BaseModel):
+    review_id: int
+    finding_indices: list[int] | None = None  # None → 전체 발견사항
+
+
+@router.post("/api/plans/{plan_id}/revise-from-review", status_code=202,
+             response_model=JobOut)
+def revise_plan_from_review(plan_id: int, body: PlanReviseFromReview,
+                            db: Session = Depends(get_db)):
+    """검수 발견사항 → LLM plan 수정 job (FR-4.3).
+
+    동기 LLM 호출이 아니라 job 큐로 간다 (derive/review와 동일 — LLM 지연 흡수).
+    워커가 포맷 검증 게이트를 통과한 plan만 새 DRAFT 세대로 만들며, 승인 게이트와
+    파생물 재생성은 기존 게이트를 그대로 경유한다.
+    """
+    plan = _plan_or_404(db, plan_id)
+    r = db.get(ReviewReport, body.review_id)
+    if r is None or r.project_id != plan.project_id:
+        raise http_404(f"검수 리포트 없음: {body.review_id}")
+    if r.plan_id != plan_id:
+        raise http_409("검수 리포트의 plan 세대가 다릅니다 — 검수 대상 세대의 plan에 반영하세요")
+
+    findings = list(r.findings or [])
+    if body.finding_indices is None:
+        indices = list(range(len(findings)))
+    else:
+        indices = body.finding_indices
+        if len(set(indices)) != len(indices):
+            raise http_409("finding_indices에 중복이 있습니다")
+        for i in indices:
+            if not 0 <= i < len(findings):
+                raise http_409(f"finding 인덱스가 범위 밖입니다: {i} (0..{len(findings) - 1})")
+    if not indices:
+        raise http_409("반영할 발견사항이 선택되지 않았습니다")
+
+    job = Job(project_id=plan.project_id, type=JobType.PLAN_REVISE,
+              payload={"plan_id": plan_id, "review_id": body.review_id,
+                       "finding_indices": indices})
+    db.add(job)
+    db.flush()
+    return JobOut.model_validate(job)

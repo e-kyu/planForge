@@ -137,6 +137,7 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
 ### 확정된 명령 (M4)
 
 - 검수 (FR-4): `POST /api/projects/{pid}/reviews` (202 → review job), `GET /api/projects/{pid}/reviews`·`GET .../reviews/{rid}`. 결정론 검수(numcheck·문서태그·팩트 대조·세대 대응) + LLM 내용 검수 → `ReviewReport` 1건 (🔴/🟡/⚪ 카운트). LLM 내용 검수 실패는 리포트를 막지 않는다(llm_ok=false 표기).
+- 검수→plan 반영 (FR-4.3): `POST /api/plans/{plan_id}/revise-from-review` (202 → plan_revise job) — 검수 리포트 발견사항(선택 indices)을 LLM이 plan에 반영 → 포맷 검증 게이트 통과 시 새 DRAFT 세대(origin=review). 수동 경로는 기존 plan 탭 revise 게이트 그대로. LLM 프로필 `plan_revise`(미설정 시 review 프로필 fallback).
 - 팩트 압축 (FR-6.1): `POST /api/projects/{pid}/facts/compact` (미리보기) → `POST .../facts/compact/apply` (활성 팩트 통합 + 아카이브). 팩트 단건은 `PATCH /api/projects/{pid}/facts/{fact_id}`.
 - 산출물 (FR-3.5): `GET /api/projects/{pid}/outputs` (갤러리) · `GET .../outputs/{build_id}/download` (파일 다운로드).
 - job 조회: `GET /api/jobs/{job_id}` · `GET /api/projects/{pid}/jobs` — 202 수락 뒤 폴링.

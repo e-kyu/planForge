@@ -166,6 +166,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plans/{plan_id}/revise-from-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revise Plan From Review
+         * @description 검수 발견사항 → LLM plan 수정 job (FR-4.3).
+         *
+         *     동기 LLM 호출이 아니라 job 큐로 간다 (derive/review와 동일 — LLM 지연 흡수).
+         *     워커가 포맷 검증 게이트를 통과한 plan만 새 DRAFT 세대로 만들며, 승인 게이트와
+         *     파생물 재생성은 기존 게이트를 그대로 경유한다.
+         */
+        post: operations["revise_plan_from_review_api_plans__plan_id__revise_from_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{project_id}/derivatives": {
         parameters: {
             query?: never;
@@ -738,6 +762,8 @@ export interface components {
             where: string;
             /** Message */
             message: string;
+            /** Suggestion */
+            suggestion?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -823,6 +849,13 @@ export interface components {
         PlanRevise: {
             /** Markdown */
             markdown: string;
+        };
+        /** PlanReviseFromReview */
+        PlanReviseFromReview: {
+            /** Review Id */
+            review_id: number;
+            /** Finding Indices */
+            finding_indices?: number[] | null;
         };
         /** ProjectCreate */
         ProjectCreate: {
@@ -1309,6 +1342,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revise_plan_from_review_api_plans__plan_id__revise_from_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanReviseFromReview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
                 };
             };
             /** @description Validation Error */

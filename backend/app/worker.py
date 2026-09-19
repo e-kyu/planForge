@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from reportagent.derive import DeriveError, Deriver
 from reportagent.plan import PlanError, parse_plan_file
 
+from .agents.planrevise import PlanReviseError, run_plan_revise, validate_plan_markdown
 from .models import (
     Build,
     Derivative,
@@ -28,6 +29,7 @@ from .models import (
     JobErrorClass,
     JobStatus,
     Plan,
+    PlanOrigin,
     PlanStatus,
     Project,
     ReviewReport,
@@ -94,6 +96,8 @@ def _classify(e: Exception) -> JobErrorClass:
     if isinstance(e, PlanError):
         return JobErrorClass.VALIDATION
     if isinstance(e, DeriveError):
+        return JobErrorClass.LLM
+    if isinstance(e, PlanReviseError):  # ValueError 상속 — ValueError 판정 전에
         return JobErrorClass.LLM
     if isinstance(e, ValueError):
         return JobErrorClass.SCHEMA
@@ -298,7 +302,63 @@ def _review(ctx: JobContext, session: Session, job: Job) -> dict:
     return {"review_id": report.id, "counts": counts}
 
 
-_HANDLERS = {"derive_build": _derive_build, "review": _review}
+# ---------------------------------------------------------------- plan revise 핸들러 (FR-4.3)
+
+def _plan_revise(ctx: JobContext, session: Session, job: Job) -> dict:
+    """검수 발견사항 반영: LLM plan 수정 → 결정론 검증 → 새 DRAFT 세대 (FR-4.3).
+
+    파생물·빌드는 건드리지 않는다 — plan 세대만 추가하고, 승인 게이트·재생성은
+    기존 게이트(derive_build의 APPROVED 검사)를 그대로 경유한다 (SSOT, 원칙 5).
+    """
+    payload = job.payload
+    plan = session.get(Plan, payload["plan_id"])
+    project = session.get(Project, job.project_id)
+    if plan is None or project is None:
+        raise ValueError("plan 또는 project가 없습니다")
+    review = session.get(ReviewReport, payload["review_id"])
+    if review is None or review.project_id != job.project_id:
+        raise ValueError("검수 리포트가 없습니다")
+    if review.plan_id != plan.id:
+        raise ValueError("검수 리포트의 plan 세대가 job payload와 다릅니다")
+
+    findings = list(review.findings or [])
+    indices = payload.get("finding_indices")
+    if indices is None:
+        selected = findings
+    else:
+        selected = [findings[i] for i in indices if 0 <= i < len(findings)]
+    if not selected:
+        raise PlanError("반영할 발견사항이 없습니다")
+
+    from .agents.llm import LLMRegistry
+
+    registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
+    try:
+        chat_fn = registry.chat_fn("plan_revise")
+    except KeyError:
+        chat_fn = registry.chat_fn("review")  # 신규 프로필이 없는 기존 config 호환
+    md, parsed = run_plan_revise(chat_fn, plan.markdown, selected, review.summary or "")
+
+    validate_plan_markdown(md)  # 이중 방어 — run_plan_revise 내부 검증과 동일 권위
+    if md.strip() == (plan.markdown or "").strip():
+        raise PlanError("LLM 결과에 변경이 없습니다 — plan 세대를 만들지 않았습니다")
+
+    max_ver = session.scalar(
+        select(Plan.version_no).where(Plan.project_id == plan.project_id)
+        .order_by(Plan.version_no.desc()).limit(1)
+    )
+    new_plan = Plan(project_id=plan.project_id, version_no=(max_ver or 0) + 1,
+                    markdown=md, docs=parsed.docs, parsed_ok=True,
+                    status=PlanStatus.DRAFT, origin=PlanOrigin.REVIEW)
+    session.add(new_plan)
+    session.flush()
+    # SSOT 미러 — revise_plan(api/plans.py)과 동일: DRAFT 세대도 미러를 갱신한다
+    write_plan_mirror(Path(project.workspace_path), md)
+    return {"plan_id": new_plan.id, "version_no": new_plan.version_no,
+            "applied_count": len(selected)}
+
+
+_HANDLERS = {"derive_build": _derive_build, "review": _review, "plan_revise": _plan_revise}
 
 
 # ---------------------------------------------------------------- 워커 루프 (앱 lifespan용)
