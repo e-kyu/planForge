@@ -62,7 +62,13 @@ class OpenAICompatProvider:
             raise SystemExit("openai SDK가 필요합니다: pip install openai")
         if not profile.model:
             raise ValueError("모델이 설정되지 않았습니다 (config의 profiles.<단계>.model 지정 필수)")
-        base_url = profile.base_url or DEFAULT_BASE_URLS.get(profile.provider)
+        # 우선순위: config.json의 base_url > LLM_BASE_URL 환경변수 > 프로바이더 기본값.
+        # 컨테이너 배포에서 ollama가 localhost가 아니므로 환경변수로 기본값을 대체한다.
+        base_url = (
+            profile.base_url
+            or os.environ.get("LLM_BASE_URL", "")
+            or DEFAULT_BASE_URLS.get(profile.provider)
+        )
         if profile.provider == "openai":
             api_key = os.environ.get(profile.api_key_env, "")
             if not api_key:
