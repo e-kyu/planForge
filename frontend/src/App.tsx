@@ -4,7 +4,7 @@ import { routeParam, useHashRoute } from "./lib/hashRoute";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectPage, { type ProjectTab } from "./pages/ProjectPage";
 
-const TAB_KEYS = new Set(["interview", "plan", "outputs", "sources"]);
+const TAB_KEYS = new Set(["interview", "plan", "outputs", "review", "sources"]);
 
 /** 상단 앱 바 + 해시 라우트:
  *  #/                     → 프로젝트 목록 (FR-1.1)

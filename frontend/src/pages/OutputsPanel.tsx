@@ -56,10 +56,13 @@ export default function OutputsPanel({ pid }: { pid: number }) {
   useEffect(() => {
     const active = jobs.some((j) => j.status === "queued" || j.status === "running");
     if (!active) {
+      // 완료 경로는 cleanup이 먼저 돌아 pollRef를 null로 만들므로, busy 해제는
+      // pollRef 조건 없이 항상 실행해야 한다 — 조건부였더니 job 완료 후 busy가
+      // true로 고착되어 생성 버튼이 영구 disabled 되는 버그 (e2e 5단계 사망 원인).
+      setBusy(false);
       if (pollRef.current !== null) {
         window.clearInterval(pollRef.current);
         pollRef.current = null;
-        setBusy(false);
         void load().then(() => undefined);
       }
       return;

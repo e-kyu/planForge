@@ -49,10 +49,12 @@ export default function ReviewPanel({ pid }: { pid: number }) {
   useEffect(() => {
     const active = jobs.some((j) => j.type === "review" && (j.status === "queued" || j.status === "running"));
     if (!active) {
+      // OutputsPanel과 동일 — busy 해제는 pollRef 조건 없이 항상 실행
+      // (완료 경로는 cleanup이 pollRef를 null로 만들어 조건부면 busy가 고착된다).
+      setBusy(false);
       if (pollRef.current !== null) {
         window.clearInterval(pollRef.current);
         pollRef.current = null;
-        setBusy(false);
         void load().then(() => undefined);
       }
       return;
