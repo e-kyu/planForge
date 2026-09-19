@@ -56,7 +56,7 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
   시작 시 `requeue_stale_running`이 이전 프로세스의 running 잔재를 재큐잉한다.
 - **LLM 계층**: `app/agents/llm.py LLMRegistry`가 프로필(interview/derive/review)별
   provider·모델을 `REPORTAGENT_CONFIG`(기본 `backend/reportagent/config.json`, gitignored —
-  예시 `llm/config.example.json`)에서 읽는다. `reportagent/llm/provider.py`는 openai SDK
+  예시 `config.example.json`)에서 읽는다. `reportagent/llm/provider.py`는 openai SDK
   기반 OpenAI 호환 단일 프로토콜. 테스트는 `create_app(llm_overrides=...)` /
   `JobContext(llm_overrides=...)`로 fake LLM을 주입한다.
 - **LLM 프롬프트 위치**: 인터뷰·검수·압축은 `backend/app/agents/prompts/*.md`(plan-doc 등
@@ -102,7 +102,7 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
   - `python -m reportagent parse <plan.md> [--doc 문서명]` — plan 파싱·문서 필터·골격 검증
   - `python -m reportagent numcheck <plan.md> --slides <slides.json>|--report <report.json> [--doc 문서명]` — 수치 무결성 대조 (🔴 있으면 exit 1)
   - `python -m reportagent build-ppt <slides.json> [output_dir]` · `build-doc <report.json> <md|html|docx> [output_dir]` — legacy 빌더 원형 실행
-  - `python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]` — LLM 변환 + 검증 게이트 + 빌드 (make-ppt/make-doc 이식). LLM 설정은 `backend/reportagent/config.json` (예시: `llm/config.example.json`, 기본 ollama — 필요 시 프로필별 모델 지정)
+  - `python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]` — LLM 변환 + 검증 게이트 + 빌드 (make-ppt/make-doc 이식). LLM 설정은 `backend/reportagent/config.json` (예시: `config.example.json`, 기본 ollama — 필요 시 프로필별 모델 지정)
 - 빌더 원형: `backend/reportagent/builders/{build_ppt,build_doc,theme}.py` — docs/legacy/scripts/ 바이트 동일 이식본. 로직 변경 금지.
 
 ### 확정된 명령 (M2)

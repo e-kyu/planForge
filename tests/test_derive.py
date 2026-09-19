@@ -260,7 +260,7 @@ def test_render_slides_text_verbatim():
 
 def test_load_config_profiles():
     from reportagent.llm import load_config
-    profiles = load_config(Path(__file__).parent.parent / "backend" / "reportagent" / "llm" / "config.example.json")
+    profiles = load_config(Path(__file__).parent.parent / "backend" / "reportagent" / "config.example.json")
     assert set(profiles) == {"interview", "derive", "review"}
     assert profiles["derive"].provider == "ollama"
     assert profiles["derive"].model == "gemma4:26b"

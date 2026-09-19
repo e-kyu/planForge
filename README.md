@@ -79,7 +79,7 @@ docker-compose.yml        배포 스택 (backend · frontend · ollama)
 
 ```powershell
 # 1) LLM 설정 만들기 (예시 파일을 복사해 모델 지정)
-copy backend\reportagent\llm\config.example.json backend\reportagent\config.json
+copy backend\reportagent\config.example.json backend\reportagent\config.json
 #   config.json 내용 예: {"profiles": {"interview": {...}, "derive": {...}, "review": {...}}}
 
 # 2) 빌드 및 기동
@@ -121,7 +121,7 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # LLM 설정 (gitignored — 배포 시점에 확정)
-copy reportagent\llm\config.example.json reportagent\config.json
+copy reportagent\config.example.json reportagent\config.json
 
 # DB 스키마 생성 (기본 위치: 저장소 루트 data\reportagent.db)
 alembic upgrade head
@@ -142,7 +142,7 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 ### 4.3 LLM 설정 상세
 
-`backend/reportagent/config.json` (gitignored — 예시: `backend/reportagent/llm/config.example.json`).
+`backend/reportagent/config.json` (gitignored — 예시: `backend/reportagent/config.example.json`).
 인터뷰·파생·검수 각 단계(**프로필**)마다 프로바이더와 모델을 다르게 지정할 수 있다:
 
 ```json
@@ -240,7 +240,7 @@ python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report `
 ```
 
 LLM 설정은 웹과 동일하게 `backend/reportagent/config.json`을 읽는다
-(예시: `llm/config.example.json`, 기본 ollama — 프로필별 모델 지정 가능).
+(예시: `config.example.json`, 기본 ollama — 프로필별 모델 지정 가능).
 
 ---
 
