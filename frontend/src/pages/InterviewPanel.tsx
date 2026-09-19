@@ -229,7 +229,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
           />
         )}
 
-        <CompactCard pid={pid} />
+        <CompactCard pid={pid} refreshKey={messages.length} />
 
         <div className="chat-input">
           <textarea
@@ -475,8 +475,9 @@ function FactGate(props: {
   );
 }
 
-/** 팩트 압축 (FR-6.1, compact-log 이식) — LLM 통합 제안 → 승인 → 아카이브 적용. */
-function CompactCard({ pid }: { pid: number }) {
+/** 팩트 압축 (FR-6.1, compact-log 이식) — LLM 통합 제안 → 승인 → 아카이브 적용.
+ *  refreshKey(대화 진행)가 바뀔 때마다 팩트를 다시 당겨온다 — 인터뷰 중 적립된 팩트 반영. */
+function CompactCard({ pid, refreshKey }: { pid: number; refreshKey: number }) {
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [preview, setPreview] = useState<CompactPreview | null>(null);
   const [result, setResult] = useState<CompactApplyResult | null>(null);
@@ -493,7 +494,7 @@ function CompactCard({ pid }: { pid: number }) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   async function propose() {
     setBusy(true);

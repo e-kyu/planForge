@@ -182,6 +182,7 @@ class Deriver:
                 args = json.loads(args)
             args_json = json.dumps(args, ensure_ascii=False)
             payload = dict(args)
+            self._snap_literals(slides, payload)  # 수치 리터럴 표기 보정 (원칙 3)
             try:
                 findings = self._check(kind, plan, slides, payload)
                 reds = [f for f in findings if f.severity == "red"]
@@ -194,12 +195,56 @@ class Deriver:
             last_findings = findings
             _feedback(resp.get("content") or "", args_json,
                       "수치 무결성 검증 실패(🔴). 아래 발견사항을 모두 해소해 "
-                      f"{tool_name} 도구를 다시 호출하라:\n"
+                      f"{tool_name} 도구를 다시 호출하라. 수치 토큰은 plan 표기를 문자열 "
+                      "그대로 복사한다 — 소수점 자리·단위·기호를 정규화하지 않는다 "
+                      "(15.0→15 금지, '15.0억 원'→'15.0억' 금지):\n"
                       + "\n".join(str(f) for f in reds))
         raise DeriveError(
             f"수치 무결성 위반이 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
             "(수치·표·차트는 plan과 한 글자도 같아야 합니다):\n"
             + "\n".join(str(f) for f in last_findings))
+
+    def _snap_literals(self, slides, payload: dict) -> None:
+        """LLM이 정규화한 수치 리터럴(15.0→15)을 plan 표기로 되돌린다 (결정론 보정).
+
+        chart/data 값이 plan의 어떤 수치와 **값이 같을 때만** plan의 리터럴
+        (int/float 구분 — 파서가 원본 표기 보존)로 교체한다. 값이 다르면 건드리지
+        않는다 — 그런 위반은 numcheck가 red로 잡아 재변환을 유도한다 (원칙 3).
+        """
+        plan_lits: dict[float, object] = {}
+        for s in slides:
+            if s.chart is not None:
+                for sr in s.chart.series:
+                    for v in sr.values:
+                        try:
+                            plan_lits[float(v)] = v
+                        except (TypeError, ValueError):
+                            continue
+        if not plan_lits:
+            return
+
+        def snap(v):
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                return v
+            tok = plan_lits.get(float(v))
+            if tok is None or str(v) == str(tok):
+                return v
+            return tok  # 파서가 만든 int|float 리터럴 — JSON 표기가 plan과 같아진다
+
+        if payload.get("slides") is not None:
+            for sl in payload["slides"]:
+                chart = sl.get("chart") if isinstance(sl, dict) else None
+                if chart:
+                    chart["series"] = [
+                        {**sr, "values": [snap(v) for v in sr.get("values", [])]}
+                        for sr in chart.get("series", []) if isinstance(sr, dict)]
+        else:
+            for sec in payload.get("sections", []):
+                for b in (sec.get("blocks") or []) if isinstance(sec, dict) else []:
+                    if isinstance(b, dict) and b.get("kind") == "data":
+                        for sr in b.get("series", []):
+                            if isinstance(sr, dict):
+                                sr["values"] = [snap(v) for v in sr.get("values", [])]
 
     def _check(self, kind: str, plan: Plan, slides, payload: dict) -> list[Finding]:
         if kind == "slides":

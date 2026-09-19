@@ -39,7 +39,7 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 MAX_TOOL_TURNS = 8   # 한 턴 내 LLM 호출 한도 (도구 루프 폭주 방지)
 MAX_ROUNDS = 8       # 세션 전체 라운드 한도
-PLAN_FIX_ATTEMPTS = 2  # write_plan 검증 실패 재시도 한도
+PLAN_FIX_ATTEMPTS = 3  # write_plan 검증 실패 재시도 한도 (포맷 오류 2회 연속 사고 대응)
 
 
 class TurnError(RuntimeError):

@@ -112,6 +112,90 @@ def test_derive_gives_up_after_max_attempts():
             Deriver(llm, td).derive(PLAN, "slides", "제안서")
 
 
+# ---------------------------------------------------------------- 수치 리터럴 스냅 (LLM 정규화 교정)
+
+CHART_PLAN = """# 제안서 기획 (차트 샘플)
+
+## 메타
+- 목적: 테스트
+- 청중: 경영진
+- 예상 분량: 4장
+
+## 핵심 메시지 (3개)
+1. 3분기 매출 12.4억 원
+2. 4분기 목표 15.0억 원
+3. 성장 지속
+
+## 슬라이드 목록
+
+### 1. [유형: 표지] 표지
+- 핵심문장: 표지 문장
+- 근거/출처: (미확정)
+
+### 2. [유형: 목차] 목차
+- 핵심문장: 01 매출 추이
+
+### 3. [유형: 차트] 매출 추이
+- 차트:
+  - 범주: 3분기, 4분기
+  - 매출(억 원) | 12.4, 15.0
+- 근거/출처: 사내 집계
+
+### 4. [유형: 마무리] 마무리
+- 핵심문장: 마무리 문장
+"""
+
+
+def _chart_slides():
+    from reportagent.plan import filter_slides
+
+    plan = parse_plan_file(_md_to_tmp(CHART_PLAN))
+    return filter_slides(plan.slides, plan.docs[0])
+
+
+def _md_to_tmp(md: str):
+    import tempfile
+    from pathlib import Path
+
+    f = Path(tempfile.mkdtemp()) / "plan.md"
+    f.write_text(md, encoding="utf-8")
+    return f
+
+
+def test_snap_literals_restores_plan_decimal_notation():
+    """LLM이 15.0을 15로 정규화해도 결정론 스냅이 plan 표기(15.0)로 되돌린다."""
+    deriver = Deriver(None, ".")
+    slides = _chart_slides()
+    payload = {"slides": [{"type": "chart", "title": "매출 추이",
+                           "chart": {"categories": ["3분기", "4분기"],
+                                     "series": [{"name": "매출(억 원)", "values": [12.4, 15]}]}}]}
+    deriver._snap_literals(slides, payload)
+    assert payload["slides"][0]["chart"]["series"][0]["values"] == [12.4, 15.0]
+
+
+def test_snap_literals_leaves_unknown_values_untouched():
+    """plan에 수치적으로 동일한 값이 없으면 건드리지 않는다 (창작 교정 아님)."""
+    deriver = Deriver(None, ".")
+    slides = _chart_slides()
+    payload = {"slides": [{"type": "chart", "title": "매출 추이",
+                           "chart": {"categories": ["3분기", "4분기"],
+                                     "series": [{"name": "매출(억 원)", "values": [12.4, 20]}]}}]}
+    deriver._snap_literals(slides, payload)
+    assert payload["slides"][0]["chart"]["series"][0]["values"] == [12.4, 20]
+
+
+def test_snap_literals_report_data_block():
+    deriver = Deriver(None, ".")
+    slides = _chart_slides()
+    payload = {"sections": [{"type": "section", "title": "매출 추이",
+                             "blocks": [{"kind": "data", "heading": "매출 추이",
+                                         "categories": ["3분기", "4분기"],
+                                         "series": [{"name": "매출(억 원)", "values": [15]}]}]}]}
+    deriver._snap_literals(slides, payload)
+    block = payload["sections"][0]["blocks"][0]
+    assert block["series"][0]["values"] == [15.0]
+
+
 # ---------------------------------------------------------------- 문서 파생 (문서체 재구성)
 
 def correct_report_payload():
