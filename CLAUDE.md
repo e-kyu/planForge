@@ -75,7 +75,6 @@ Claude Code 없이 동작하는 웹 서비스로 이식하는 프로젝트다.
 - LLM 호출은 `openai` SDK 기반 provider 추상화 계층으로만 한다. anthropic SDK 사용 금지.
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env에 설정됨). 파일명 금지 문자
   정규화는 legacy `_sanitize_title` 규칙을 유지한다.
-- `makeReportAgent2/`는 원본 저장소의 gitignored 참조 사본 — 편집 대상 아님(권위는 `docs/legacy/`).
 - 커밋 전 `git status`로 `workspaces/`·`data/`·`backend/reportagent/config.json` 등
   ignored 경로가 섞이지 않았는지 확인.
 
