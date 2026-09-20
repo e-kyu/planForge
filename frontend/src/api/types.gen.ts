@@ -33,7 +33,15 @@ export interface paths {
         get: operations["get_project_api_projects__project_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Project
+         * @description 프로젝트 하드 삭제 — 추적성 사슬(§5) 전체 + 워크스페이스 디렉토리를 함께 제거한다.
+         *
+         *     대기/실행 중 job이 있으면 409로 막는다(단일 워커 직렬 전제 — 실행 도중
+         *     프로젝트가 사라지는 것 방지). 자식 → 부모 순서로 삭제하며(SQLite FK ON),
+         *     파일 삭제는 DB 커밋 후 수행한다(파일보다 레코드가 권위).
+         */
+        delete: operations["delete_project_api_projects__project_id__delete"];
         options?: never;
         head?: never;
         /** Update Project */
@@ -1064,6 +1072,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_api_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

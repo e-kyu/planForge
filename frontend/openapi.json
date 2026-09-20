@@ -188,6 +188,40 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Delete Project",
+        "description": "프로젝트 하드 삭제 — 추적성 사슬(§5) 전체 + 워크스페이스 디렉토리를 함께 제거한다.\n\n대기/실행 중 job이 있으면 409로 막는다(단일 워커 직렬 전제 — 실행 도중\n프로젝트가 사라지는 것 방지). 자식 → 부모 순서로 삭제하며(SQLite FK ON),\n파일 삭제는 DB 커밋 후 수행한다(파일보다 레코드가 권위).",
+        "operationId": "delete_project_api_projects__project_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/projects/{project_id}/sources": {
