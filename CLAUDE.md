@@ -1,4 +1,8 @@
-# CLAUDE.md — report-agent 개발 규칙
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+# report-agent 개발 규칙
 
 이 저장소는 Claude Code 기반 기획 문서 생성 에이전트(docs/legacy, 원문은 git 이력에만
 존재)를 Claude Code 없이 동작하는 웹 서비스로 이식한 프로젝트다.
@@ -58,13 +62,17 @@
 - LLM 호출은 `openai` SDK 기반 provider 추상화 계층으로만 한다. anthropic SDK 사용 금지.
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
   legacy `_sanitize_title` 규칙 유지.
-- 커밋 전 `git status`로 `workspaces/`·`data/`·`backend/reportagent/config.json` 등
-  ignored 경로가 섞이지 않았는지 확인.
+- 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/reportagent/config.json`
+  등 ignored 경로가 섞이지 않았는지 확인.
 
 ## 테스트
 
 - 실행: 저장소 루트에서 `pytest` (conftest.py가 backend를 import 경로에 추가).
   단일 테스트는 `pytest tests/test_numcheck.py::이름` 처럼 파일/노드ID로 지정.
+- 프론트 타입 체크·빌드: frontend/에서 `npm run build` (`tsc --noEmit` 포함 — lint 설정은 없음).
+- 브라우저 e2e 스모크: 양쪽 dev 서버(backend 8000 + frontend 5173) 기동 후 frontend/에서
+  `node e2e-smoke.mjs` — 실제 LLM을 호출하는 수동 검증 스크립트(커밋 대상 아님),
+  스크린샷은 `.e2e-shots/`에 쌓인다. `visual-smoke.mjs`는 임시 리스타일 확인용.
 - 앱 테스트는 테스트별 tmp_path 임시 SQLite DB로 완전 격리 (`TEST_DATABASE_URL`로 오버라이드).
 - 앱 테스트는 워커 루프를 비활성(`create_app(start_worker=False)`)하고 job은 `run_job`
   직접 호출로 결정론 검증한다 (tests/test_jobs_worker.py 참조).

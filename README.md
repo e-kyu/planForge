@@ -59,12 +59,15 @@ backend/                  FastAPI 백엔드 + 코어 엔진
     derive.py, review.py, numcheck.py
   alembic/                DB 마이그레이션
 frontend/                 React 19 + TypeScript (Vite)
-  src/pages/              ProjectsPage · ProjectPage(인터뷰/plan/산출물/검수/소스 탭)
-  e2e-smoke.mjs           브라우저 e2e 수동 스모크 스크립트
+  src/pages/              ProjectsPage · ProjectPage + 탭 패널 5종
+                          (소스·인터뷰·plan·산출물·검수, components/에 CodeMirror 에디터)
+  e2e-smoke.mjs           브라우저 e2e 수동 스모크 스크립트 (실제 LLM 사용)
+  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (reportagent.db, gitignored)
-docs/legacy/              이식 대상 원문 (커맨드·스킬·빌더 스크립트 — 권위 있는 문서)
+docs/                     보조 문서 (token-checklist.md — 이식 원문 docs/legacy는
+                          git 이력에만 보존)
 tests/                    pytest (계약 테스트 fixture 포함)
 AGENT-DEV-REQUEST.md      개발 요청서 (기능 요구사항·수용 기준의 원전)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개)
@@ -143,14 +146,16 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 ### 4.3 LLM 설정 상세
 
 `backend/reportagent/config.json` (gitignored — 예시: `backend/reportagent/config.example.json`).
-인터뷰·파생·검수 각 단계(**프로필**)마다 프로바이더와 모델을 다르게 지정할 수 있다:
+인터뷰·파생·검수·plan 재작성(revise) 각 단계(**프로필**)마다 프로바이더와 모델을
+다르게 지정할 수 있다:
 
 ```json
 {
   "profiles": {
-    "interview": { "provider": "ollama", "model": "gemma4:26b" },
-    "derive":    { "provider": "openai", "model": "gpt-4.1" },
-    "review":    { "provider": "openai", "model": "gpt-4.1" }
+    "interview":   { "provider": "ollama", "model": "gemma4:26b" },
+    "derive":      { "provider": "openai", "model": "gpt-4.1" },
+    "review":      { "provider": "openai", "model": "gpt-4.1" },
+    "plan_revise": { "provider": "openai", "model": "gpt-4.1" }
   }
 }
 ```
@@ -166,9 +171,11 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 브라우저에서 http://localhost:5173 을 연다. 화면은 **프로젝트 목록 → 프로젝트 탭(5개)** 구조다.
 
-### ① 프로젝트 생성
+### ① 프로젝트 생성·삭제
 - 프로젝트 목록 화면에서 생성 버튼으로 새 프로젝트를 만든다.
 - 슬러그는 ASCII 소문자-하이픈만 허용된다 (예: `acme-erp-proposal`).
+- 목록의 행별 **삭제** 버튼으로 삭제한다 — 이름 확인 모달 뒤 **영구 삭제**되며
+  팩트·plan·산출물·워크스페이스가 모두 함께 제거된다(되돌릴 수 없음).
 
 ### ② 소스 등록 ("소스" 탭)
 - 기존 기획자료를 업로드한다. 확장자 `.md .txt .json .csv`, 2MB 이하, UTF-8만 허용.
@@ -189,6 +196,8 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 ### ④ plan 작성·승인 ("plan" 탭)
 - 인터뷰에서 만든 plan(마크다운)을 뷰어/에디터로 확인한다. 근거 없는 수치는 `(미확정)`으로 표기된다.
+- 표시 방식 토글: **보기**(코드|뷰어 — 뷰어는 렌더링) · **편집**(코드|분할|뷰어 3단) ·
+  **diff**(이전 세대 마크다운과 대비, 이전 세대가 없으면 비활성).
 - 수정이 필요하면 편집하고 diff를 확인한다.
 - **승인 버튼**을 눌러야 파생물 생성이 가능하다. 승인 후 다시 고치면 새 세대(DRAFT)가 만들어지고
   재승인이 필요하다. 이전 승인본은 superseded로 표시된다(세대 추적).
@@ -250,7 +259,7 @@ LLM 설정은 웹과 동일하게 `backend/reportagent/config.json`을 읽는다
 
 | 영역 | 엔드포인트 |
 |---|---|
-| 프로젝트 | `POST/GET /api/projects` |
+| 프로젝트 | `POST/GET /api/projects` · `DELETE /api/projects/{pid}` |
 | 소스 | `GET/POST/DELETE /api/projects/{pid}/sources` · `GET /api/sources`(글로벌 읽기전용) |
 | 인터뷰(SSE) | `POST .../interview/sessions` → `.../kick` · `.../turn` · `.../answers` · `.../facts/confirm` · `.../key-messages` · `GET .../messages?after=seq` |
 | plan | `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}` · `POST /api/plans/{id}/approve` · `POST /api/plans/{id}/revise` |
@@ -294,8 +303,9 @@ docker compose build && docker compose up -d
 - DB 스키마 변경: `backend/`에서 `alembic revision`으로 마이그레이션 추가 → 배포 시 컨테이너 CMD가
   `alembic upgrade head`를 기동 시 자동 실행한다(개발용 `init_db`는 alembic 대체로만 사용).
 - DB는 SQLite 단일 방언(호스트 볼륨 `data/`). WAL + foreign_keys=ON은 연결 리스너가 설정한다.
-- 디자인 토큰(색·폰트·여백) 변경 절차: `docs/token-checklist.md` — theme.py → SKILL.md →
-  tokens.css 순으로 **4종 세트(문서·토큰·렌더러·샘플)를 동시 수정**해야 한다.
+- 디자인 토큰(색·폰트·여백) 변경 절차: `docs/token-checklist.md` —
+  theme.py(기준점) 수정 → tokens.css 미러 수정 → 빌더 리터럴 점검 → 좌표 규격 변경 시
+  fixture 갱신. **4종 세트(theme.py·빌더·fixture·tokens.css)를 동시 점검·수정**해야 한다.
 
 ---
 
@@ -307,7 +317,8 @@ docker compose build && docker compose up -d
 4. **팩트 선(先)적립**: 확정 팩트는 DB `Fact`에 먼저 기록 후 plan 반영. 추측 수치는 `(미확정)`.
 5. **무손실 채번**: `<문서 제목>_vNN.<ext>`, 확장자별 독립 시퀀스, 절대 덮어쓰기 금지(동시성 포함 — 빌드 직렬화).
 6. **다중 문서 태그**: `[문서: 제안서+개발설계서]` 필터링 + 문서별 목차 재채번.
-7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 문서·토큰(theme.py)·렌더러·샘플 동시 수정.
+7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 토큰(theme.py)·렌더러(빌더)·
+   샘플(fixture)·프론트 미러(tokens.css) 동시 점검·수정 — 절차는 `docs/token-checklist.md`.
 8. **골격 검증**: 파생물 생성 전 표지·목차·마무리·내용 슬라이드 각 1개 이상 검증, 미달 시 중단.
 
 ---
