@@ -43,9 +43,26 @@ def _stream_events():
     ]
 
 
+class _FakeStream:
+    """SDK 스트림 래퍼 — provider.stream()의 finally에서 close()를 호출한다 (7fbe594)."""
+
+    def __init__(self, events):
+        self._it = iter(events)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._it)
+
+    def close(self):
+        pass
+
+
 def test_stream_yields_text_and_completed_tool_calls(monkeypatch):
     p = _provider()
-    p._client = NS(chat=NS(completions=NS(create=lambda **kw: iter(_stream_events()))))
+    p._client = NS(chat=NS(completions=NS(
+        create=lambda **kw: _FakeStream(_stream_events()))))
     events = list(p.stream([{"role": "user", "content": "hi"}]))
 
     texts = [e for e in events if e["type"] == "text"]
@@ -61,5 +78,6 @@ def test_stream_yields_text_and_completed_tool_calls(monkeypatch):
 def test_chat_stream_remains_text_only(monkeypatch):
     """레거시 chat_stream은 텍스트만 — M1 호환 유지."""
     p = _provider()
-    p._client = NS(chat=NS(completions=NS(create=lambda **kw: iter(_stream_events()))))
+    p._client = NS(chat=NS(completions=NS(
+        create=lambda **kw: _FakeStream(_stream_events()))))
     assert list(p.chat_stream([{"role": "user", "content": "hi"}])) == ["안녕", "하세요"]
