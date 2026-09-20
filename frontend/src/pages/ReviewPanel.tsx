@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle, type LucideIcon } from "lucide-react";
 import {
   apiGet,
   apiPost,
@@ -8,10 +9,11 @@ import {
   type Review,
   type ReviewFinding,
 } from "../api/client";
-import { Banner, Button, Empty, fmtDateTime } from "../components/ui";
+import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../components/ui";
 import { navigate } from "../lib/hashRoute";
 
-const SEV_ICON: Record<string, string> = { red: "🔴", yellow: "🟡", white: "⚪" };
+const SEV_ICON: Record<string, LucideIcon> = { red: XCircle, yellow: AlertTriangle, white: Info };
+const SEV_LABEL: Record<string, string> = { red: "필수", yellow: "권고", white: "선택" };
 const SEV_ORDER: Record<string, number> = { red: 0, yellow: 1, white: 2 };
 
 /** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3). */
@@ -122,21 +124,22 @@ export default function ReviewPanel({ pid }: { pid: number }) {
 
   return (
     <section>
-      <div className="panel-head">
-        <h3>검수</h3>
-        <div className="panel-actions">
-          {reviseDone && (
-            <Button onClick={() => navigate(`/projects/${pid}/plan`)}>plan 탭으로 이동</Button>
-          )}
-          {approvedPlan ? (
-            <Button onClick={() => void enqueue()} disabled={busy}>
-              검수 실행
-            </Button>
-          ) : (
-            <span className="hint">검수에는 승인된 plan이 필요합니다 (plan 탭).</span>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={ShieldCheck}
+        title="수치·내용 검수 (Review)"
+        desc="원본 plan.md(SSOT)와 생성된 파생 산출물 간 수치 오기와 구조 손실을 결정론 대조하고, LLM이 내용 검수를 수행합니다."
+      >
+        {reviseDone && (
+          <Button onClick={() => navigate(`/projects/${pid}/plan`)}>plan 탭으로 이동</Button>
+        )}
+        {approvedPlan ? (
+          <Button onClick={() => void enqueue()} disabled={busy}>
+            검수 실행
+          </Button>
+        ) : (
+          <span className="hint">검수에는 승인된 plan이 필요합니다 (plan 탭).</span>
+        )}
+      </PageHeader>
 
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
@@ -159,12 +162,24 @@ export default function ReviewPanel({ pid }: { pid: number }) {
                   <span className="review-title">
                     검수 #{r.id} · plan v{verById.get(r.plan_id) ?? r.plan_id}{" "}
                     {r.red_count > 0 ? (
-                      <span className="sev sev-red">🔴 {r.red_count}</span>
+                      <span className="sev sev-red">
+                        <XCircle /> {r.red_count}
+                      </span>
                     ) : (
-                      <span className="sev sev-clean">통과</span>
+                      <span className="sev sev-clean">
+                        <CheckCircle2 /> 통과
+                      </span>
                     )}
-                    {r.yellow_count > 0 && <span className="sev">🟡 {r.yellow_count}</span>}
-                    {r.white_count > 0 && <span className="sev">⚪ {r.white_count}</span>}
+                    {r.yellow_count > 0 && (
+                      <span className="sev sev-yellow">
+                        <AlertTriangle /> {r.yellow_count}
+                      </span>
+                    )}
+                    {r.white_count > 0 && (
+                      <span className="sev sev-white">
+                        <Info /> {r.white_count}
+                      </span>
+                    )}
                     {!r.llm_ok && <span className="sev sev-llm">LLM 검수 실패</span>}
                   </span>
                   <span className="hint">{fmtDateTime(r.created_at)}</span>
@@ -239,25 +254,31 @@ function ReviewDetail({ r }: { r: Review }) {
         <Empty>발견사항이 없습니다 — 결정론 대조와 LLM 내용 검수를 모두 통과했습니다.</Empty>
       ) : (
         <ul className="finding-list">
-          {findings.map(({ f, idx }) => (
-            <li key={idx} className={`finding finding-${f.severity}`}>
-              <input
-                type="checkbox"
-                className="finding-check"
-                aria-label="반영 대상 선택"
-                checked={selected.has(idx)}
-                onChange={() => toggle(idx)}
-              />
-              <span className="finding-sev">{SEV_ICON[f.severity] ?? f.severity}</span>
-              <span className="finding-body">
-                <span className="finding-where">
-                  {f.where} <code>{f.code}</code>
+          {findings.map(({ f, idx }) => {
+            const SevIcon = SEV_ICON[f.severity];
+            return (
+              <li key={idx} className={`finding finding-${f.severity}`}>
+                <input
+                  type="checkbox"
+                  className="finding-check"
+                  aria-label="반영 대상 선택"
+                  checked={selected.has(idx)}
+                  onChange={() => toggle(idx)}
+                />
+                <span className={`sev sev-${f.severity}`}>
+                  {SevIcon ? <SevIcon aria-hidden="true" /> : null}
+                  {SEV_LABEL[f.severity] ?? f.severity}
                 </span>
-                <span className="finding-msg">{f.message}</span>
-                {f.suggestion && <span className="finding-suggestion">↳ {f.suggestion}</span>}
-              </span>
-            </li>
-          ))}
+                <span className="finding-body">
+                  <span className="finding-where">
+                    {f.where} <code>{f.code}</code>
+                  </span>
+                  <span className="finding-msg">{f.message}</span>
+                  {f.suggestion && <span className="finding-suggestion">↳ {f.suggestion}</span>}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
       <p className="hint">

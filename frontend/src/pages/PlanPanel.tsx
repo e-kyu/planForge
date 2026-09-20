@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FileCode } from "lucide-react";
 import { apiGet, apiPost, ApiError, type Plan } from "../api/client";
 import { Banner, Button, Empty, Loading } from "../components/ui";
 import { CmDiff, CmEditor } from "../components/CmEditor";
@@ -88,7 +89,7 @@ export default function PlanPanel({ pid }: { pid: number }) {
   return (
     <section className="plan-layout">
       <aside className="plan-side">
-        <h3>plan 세대</h3>
+        <h3>plan 세대 (DB Plan — SSOT)</h3>
         <ul className="plan-list">
           {plans.map((p) => (
             <li key={p.id}>
@@ -105,6 +106,9 @@ export default function PlanPanel({ pid }: { pid: number }) {
                 <span className={`badge badge-plan-${p.status}`}>
                   {STATUS_LABEL[p.status] ?? p.status}
                 </span>
+                {(p.docs ?? []).length > 0 && (
+                  <span className="plan-row-docs">[문서: {(p.docs ?? []).map(String).join("+")}]</span>
+                )}
               </button>
             </li>
           ))}
@@ -117,6 +121,10 @@ export default function PlanPanel({ pid }: { pid: number }) {
 
         <div className="plan-toolbar">
           <div className="plan-toolbar-left">
+            <span className="plan-caption">
+              <FileCode aria-hidden="true" />
+              plan.md (Single Source of Truth)
+            </span>
             <Button
               variant="ghost"
               onClick={() => {
@@ -171,7 +179,7 @@ export default function PlanPanel({ pid }: { pid: number }) {
               </>
             )}
             {mode === "view" && sel?.status === "draft" && (
-              <Button onClick={() => void approve()} disabled={busy}>
+              <Button variant="ok" onClick={() => void approve()} disabled={busy}>
                 승인 (파생 단계 진입)
               </Button>
             )}

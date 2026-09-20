@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Bot, Database } from "lucide-react";
 import {
   apiGet,
   apiPost,
@@ -166,8 +167,12 @@ export default function InterviewPanel({ pid }: { pid: number }) {
   const isKick = phase === "hypothesis" && messages.length === 0;
 
   return (
-    <section className="chat">
+    <section className="chat-layout">
+      <div className="chat-panel">
       <div className="chat-head">
+        <span className="bot-chip" aria-hidden="true">
+          <Bot />
+        </span>
         <span className="badge">라운드 {session.round_no}</span>
         <span className="badge">{PHASE_LABEL[phase] ?? phase}</span>
         <span className="spacer" />
@@ -264,6 +269,9 @@ export default function InterviewPanel({ pid }: { pid: number }) {
           )}
         </div>
       </div>
+      </div>
+
+      <FactSidePanel pid={pid} refreshKey={messages.length} />
     </section>
   );
 
@@ -333,6 +341,115 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         return null; // state/tool_call/tool — LLM 내부 기록은 채팅에 노출하지 않는다
     }
   }
+}
+
+const FACT_FILTERS = [
+  { id: "all", label: "전체" },
+  { id: "active", label: "확립" },
+  { id: "unconfirmed", label: "미확정" },
+  { id: "archived", label: "아카이브" },
+] as const;
+type FactFilter = (typeof FACT_FILTERS)[number]["id"];
+
+const ORIGIN_LABEL: Record<string, string> = {
+  interview: "인터뷰",
+  review: "검수",
+  manual: "수동",
+};
+
+/** 팩트 저장소 사이드 패널 — 조회 전용 (설계 D4).
+ *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다(원칙 4 게이트 우회 금지).
+ *  미확정 필터는 백엔드 UNCONFIRMED 컨벤션("(미확정" 접두 마커)과 동일한 클라이언트 판별(설계 D5). */
+function FactSidePanel({ pid, refreshKey }: { pid: number; refreshKey: number }) {
+  const [facts, setFacts] = useState<Fact[] | null>(null);
+  const [filter, setFilter] = useState<FactFilter>("all");
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setFacts(await apiGet<Fact[]>(`/api/projects/${pid}/facts`));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    }
+  }, [pid]);
+
+  useEffect(() => {
+    void load();
+  }, [load, refreshKey]);
+
+  const isUnconfirmed = (f: Fact) => f.content.includes("(미확정");
+  const shown = (facts ?? []).filter((f) =>
+    filter === "all"
+      ? true
+      : filter === "active"
+        ? f.status === "active" && !isUnconfirmed(f)
+        : filter === "unconfirmed"
+          ? f.status === "active" && isUnconfirmed(f)
+          : f.status === "archived",
+  );
+  const statusOf = (f: Fact): "ok" | "warn" | "arch" =>
+    f.status === "archived" ? "arch" : isUnconfirmed(f) ? "warn" : "ok";
+  const STATUS_TEXT = { ok: "확립", warn: "미확정", arch: "아카이브" } as const;
+
+  return (
+    <aside className="fact-side">
+      <div className="fact-side-head">
+        <h4>
+          <Database aria-hidden="true" />
+          팩트 저장소
+        </h4>
+        <span className="fact-count">{facts === null ? "…" : `${facts.length}건`}</span>
+      </div>
+
+      <div className="fact-filter" role="tablist" aria-label="팩트 상태 필터">
+        {FACT_FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            className={`fact-filter-btn ${filter === f.id ? "fact-filter-active" : ""}`}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {error && <Banner kind="error">{error}</Banner>}
+
+      <div className="fact-side-list">
+        {shown.length === 0 ? (
+          <p className="hint">
+            {filter === "all" ? "아직 팩트가 없습니다 — 인터뷰를 진행하면 적립됩니다." : "해당 상태의 팩트가 없습니다."}
+          </p>
+        ) : (
+          shown.map((f) => {
+            const st = statusOf(f);
+            return (
+              <div key={f.id} className="fact-card">
+                <div className="fact-card-head">
+                  <span className={`fact-chip fact-chip-${f.origin}`}>
+                    {ORIGIN_LABEL[f.origin] ?? f.origin}
+                  </span>
+                  <span className={`fact-status fact-status-${st}`}>{STATUS_TEXT[st]}</span>
+                </div>
+                <p className="fact-card-body">{f.content}</p>
+                <div className="fact-meta">
+                  {f.source ? <span className="fact-src">출처: {f.source}</span> : <span className="fact-src">출처 없음</span>}
+                  <span className="spacer" />
+                  <span>{f.date}</span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <p className="fact-side-note">
+        팩트 확정(승인·적립)은 인터뷰의 [팩트 확인] 단계에서만 수행됩니다 — 게이트 우회 기록은 허용되지 않습니다.
+      </p>
+    </aside>
+  );
 }
 
 function Bubble(props: { side: "left" | "right"; text: string }) {

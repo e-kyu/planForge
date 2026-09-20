@@ -1,26 +1,67 @@
-/* 인터뷰 채팅 (PR-3) */
-.chat {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* 인터뷰 채팅 (PR-3) — 목업 리스타일: 채팅(좌) + 팩트 저장소(우) 12컬럼 */
+.chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: var(--space-4);
+  align-items: start;
 }
 
+@media (max-width: 1024px) {
+  .chat-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.chat-panel,
+.fact-side {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* 채팅 헤더 — 봇 칩 + 배지 + 새 세션 */
 .chat-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.bot-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--navy), var(--blue));
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.bot-chip svg {
+  width: 16px;
+  height: 16px;
 }
 
 .spacer {
   flex: 1;
 }
 
+/* 피드 — 반드시 이 요소가 스크롤 컨테이너여야 한다 (feed ref 자동스크롤 의존) */
 .chat-feed {
-  background: var(--bg);
-  border: 1px solid var(--line);
+  background: var(--surface-sub);
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  padding: 16px;
-  max-height: 60vh;
+  padding: var(--space-4);
+  max-height: 56vh;
   min-height: 240px;
   overflow-y: auto;
   display: flex;
@@ -39,32 +80,34 @@
 .bubble {
   max-width: 82%;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: var(--fs-caption);
+  box-shadow: var(--shadow-xs);
 }
 
 .bubble-left {
-  background: var(--bg-soft);
+  background: var(--surface);
   border: 1px solid var(--line);
 }
 
 .bubble-right {
-  background: var(--navy);
+  background: var(--blue);
   color: #fff;
 }
 
 .bubble-notice {
-  background: #fff8e8;
-  border: 1px solid var(--accent);
+  background: #fdf6e8;
+  border: 1px solid rgba(232, 163, 61, 0.55);
   color: var(--text);
   font-size: var(--fs-caption);
 }
 
 .bubble-error {
-  background: #fdecea;
-  border: 1px solid var(--danger);
+  background: #fdf1ef;
+  border: 1px solid rgba(192, 57, 43, 0.4);
   color: var(--danger);
   font-size: var(--fs-caption);
 }
@@ -134,10 +177,11 @@
 
 .option {
   border: 1px solid var(--line);
-  background: var(--bg);
-  border-radius: 8px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   text-align: left;
+  transition: border-color var(--speed), background var(--speed);
 }
 
 .option:hover {
@@ -146,15 +190,22 @@
 
 .option-picked {
   border-color: var(--blue);
-  background: var(--light-blue);
+  background: rgba(46, 109, 180, 0.12);
+  box-shadow: inset 0 0 0 1px var(--blue);
 }
 
 .free-input,
 .fact-edit {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   width: 100%;
+  background: var(--surface);
+}
+
+.free-input:focus,
+.fact-edit:focus {
+  border-color: var(--blue);
 }
 
 .hint-input {
@@ -166,6 +217,7 @@
   gap: 10px;
   margin-top: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .chat-actions {
@@ -183,6 +235,8 @@
   display: flex;
   gap: 10px;
   align-items: flex-end;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-soft);
 }
 
 .chat-input textarea {
@@ -191,6 +245,11 @@
   border-radius: var(--radius);
   padding: 10px 12px;
   resize: vertical;
+  background: var(--surface);
+}
+
+.chat-input textarea:focus {
+  border-color: var(--blue);
 }
 
 /* 인터뷰 시작 전: 버튼을 textarea 아래 우측으로 내림 */
@@ -202,4 +261,184 @@
 .chat-input-kick textarea {
   flex: 0 0 auto; /* column 방향에서 세로 팽창 방지 */
   width: 100%;
+}
+
+/* ---------------------------------------------------------------- 팩트 저장소 (우측, 조회 전용 — 설계 D4) */
+.fact-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.fact-side-head h4 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--navy);
+}
+
+.fact-side-head h4 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+}
+
+.fact-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+  background: rgba(46, 109, 180, 0.1);
+  border: 1px solid rgba(46, 109, 180, 0.3);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* 필터 세그먼트 */
+.fact-filter {
+  display: flex;
+  gap: 2px;
+  background: var(--line-soft);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+
+.fact-filter-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 0;
+  border-radius: 4px;
+  transition: background var(--speed), color var(--speed);
+}
+
+.fact-filter-btn:hover {
+  color: var(--navy);
+}
+
+.fact-filter-btn.fact-filter-active {
+  background: var(--surface);
+  color: var(--navy);
+  box-shadow: var(--shadow-xs);
+}
+
+/* 목록 */
+.fact-side-list {
+  overflow-y: auto;
+  max-height: 56vh;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color var(--speed);
+}
+
+.fact-card:hover {
+  border-color: var(--blue);
+}
+
+.fact-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.fact-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-sub);
+  color: var(--text-sub);
+}
+
+.fact-chip-interview {
+  color: var(--blue);
+  border-color: rgba(46, 109, 180, 0.35);
+  background: rgba(46, 109, 180, 0.08);
+}
+
+.fact-chip-review {
+  color: var(--accent);
+  border-color: rgba(232, 163, 61, 0.45);
+  background: rgba(232, 163, 61, 0.1);
+}
+
+.fact-chip-manual {
+  color: var(--text-sub);
+}
+
+.fact-status {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.fact-status-ok {
+  color: var(--ok);
+  border-color: rgba(47, 133, 90, 0.35);
+  background: rgba(47, 133, 90, 0.07);
+}
+
+.fact-status-warn {
+  color: var(--warn);
+  border-color: rgba(183, 121, 31, 0.4);
+  background: rgba(183, 121, 31, 0.08);
+}
+
+.fact-card-body {
+  font-size: var(--fs-caption);
+  color: var(--text);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.fact-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 10px;
+  color: var(--text-sub);
+  border-top: 1px solid var(--line-soft);
+  padding-top: 6px;
+}
+
+.fact-meta .fact-src {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.fact-side-note {
+  font-size: 10px;
+  color: var(--text-sub);
+  background: var(--surface-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
 }

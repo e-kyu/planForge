@@ -1,53 +1,81 @@
-/* plan 뷰어/에디터 (PR-4) */
+/* plan 뷰어/에디터 (PR-4) — 목업 리스타일: 버전 카드 사이드바 + 카드형 에디터 표면.
+ * 에디터는 라이트 유지 (설계 D10 — CodeMirror 다크 테마 미도입). */
 .plan-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: var(--margin);
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--space-4);
   align-items: start;
 }
 
 @media (max-width: 800px) {
   .plan-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.plan-side {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-4);
 }
 
 .plan-side h3,
 .plan-side h4 {
-  font-size: var(--fs-heading);
-  margin-bottom: 8px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .plan-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .plan-row {
+  flex-wrap: wrap;
+  gap: 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-top: none;
+  border-radius: var(--radius);
   padding: 10px 12px;
   font-family: var(--font-mono);
   font-size: var(--fs-caption);
+  transition: border-color var(--speed), background var(--speed);
+  text-align: left;
 }
 
-.plan-list li:first-child .plan-row {
-  border-top: 1px solid var(--line);
-  border-radius: 6px 6px 0 0;
-}
-
-.plan-list li:last-child .plan-row {
-  border-radius: 0 0 6px 6px;
+.plan-row:hover {
+  border-color: var(--blue);
 }
 
 .plan-row-active {
-  background: var(--light-blue);
+  background: rgba(46, 109, 180, 0.08);
+  border-color: var(--blue);
+  box-shadow: var(--shadow-xs);
+}
+
+.plan-row-docs {
+  flex-basis: 100%;
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--blue);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plan-toolbar {
@@ -56,7 +84,9 @@
   gap: 10px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: var(--space-3);
 }
 
 .plan-toolbar-left,
@@ -67,6 +97,22 @@
   flex-wrap: wrap;
 }
 
+.plan-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--navy);
+  margin-right: var(--space-2);
+}
+
+.plan-caption svg {
+  width: 14px;
+  height: 14px;
+  color: var(--blue);
+}
+
 .chk {
   display: flex;
   gap: 4px;
@@ -75,10 +121,19 @@
   color: var(--text-sub);
 }
 
-.plan-body {
+.plan-main {
+  background: var(--surface);
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.plan-body {
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface);
 }
 
 .plan-editor {
@@ -112,8 +167,8 @@
 }
 
 .cm-host .cm-gutters {
-  background: var(--bg-soft);
-  border-right: 1px solid var(--line);
+  background: var(--surface-sub);
+  border-right: 1px solid var(--line-soft);
 }
 
 /* merge view (diff) — merge view 자체가 스크롤 컨테이너(@codemirror/merge 문서 기준) */
@@ -137,9 +192,9 @@
 }
 
 .md-preview pre {
-  background: var(--bg-soft);
+  background: var(--surface-sub);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 12px;
   overflow-x: auto;
 }

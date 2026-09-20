@@ -1,22 +1,26 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
-/** 공통 UI 조각 — 자체 CSS(§3.1). 라이브러리 도입 없이 최소만 유지한다. */
+/** 공통 UI 조각 — 자체 CSS(§3.1). 라이브러리는 최소만 유지 (아이콘 lucide-react 허용). */
 
 export function Button(props: {
   children: ReactNode;
   onClick?: () => void;
-  variant?: "primary" | "ghost" | "danger";
+  variant?: "primary" | "ghost" | "danger" | "ok";
   disabled?: boolean;
   type?: "button" | "submit";
+  className?: string;
 }) {
   const cls =
     props.variant === "ghost"
       ? "btn btn-ghost"
       : props.variant === "danger"
         ? "btn btn-danger"
-        : "btn btn-primary";
+        : props.variant === "ok"
+          ? "btn btn-ok"
+          : "btn btn-primary";
   return (
-    <button className={cls} onClick={props.onClick} disabled={props.disabled}
+    <button className={`${cls} ${props.className ?? ""}`} onClick={props.onClick} disabled={props.disabled}
             type={props.type ?? "button"}>
       {props.children}
     </button>
@@ -37,6 +41,28 @@ export function Loading(props: { label?: string }) {
 
 export function Empty(props: { children: ReactNode }) {
   return <div className="empty">{props.children}</div>;
+}
+
+/** 페이지헤더 카드 — 목업의 page-header (아이콘+제목+설명 좌측, 액션 우측). */
+export function PageHeader(props: {
+  icon: LucideIcon;
+  title: string;
+  desc?: string;
+  children?: ReactNode;
+}) {
+  const Icon = props.icon;
+  return (
+    <div className="page-head">
+      <div className="page-head-text">
+        <h2>
+          <Icon aria-hidden="true" />
+          {props.title}
+        </h2>
+        {props.desc && <p>{props.desc}</p>}
+      </div>
+      {props.children && <div className="page-head-actions">{props.children}</div>}
+    </div>
+  );
 }
 
 export function fmtBytes(n: number): string {

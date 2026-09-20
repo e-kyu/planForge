@@ -1,33 +1,38 @@
-/* 산출물 갤러리 (PR-5) */
-.panel-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
+/* 산출물 갤러리 (PR-5) — 목업 리스타일: ext 칩 + 산출물 카드 + 작업 큐 타임라인 */
 .panel-actions select {
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
+  background: var(--surface);
 }
 
 .output-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .output-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border-top: 1px solid var(--line);
-  padding: 10px 4px;
+  gap: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+  transition: border-color var(--speed), background var(--speed);
+}
+
+.output-row:hover {
+  border-color: var(--blue);
 }
 
 .output-row-active {
-  background: var(--bg-soft);
+  background: rgba(46, 109, 180, 0.06);
+  border-color: var(--blue);
 }
 
 .output-open {
@@ -38,32 +43,71 @@
   align-items: flex-start;
   border: none;
   background: transparent;
-  padding: 4px 8px;
+  padding: 4px 6px;
   text-align: left;
+  min-width: 0;
 }
 
 .output-open:hover {
-  background: var(--bg-soft);
-  border-radius: 6px;
+  background: var(--surface-sub);
+  border-radius: var(--radius-sm);
 }
 
 .output-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--navy);
   font-size: var(--fs-body);
+  min-width: 0;
+}
+
+/* 확장자 칩 — 문서 파생물 종류 식별 (화면 전용 색, 미러 토큰 아님) */
+.ext-chip {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.ext-pptx {
+  background: var(--accent);
+}
+
+.ext-docx,
+.ext-html {
+  background: var(--blue);
+}
+
+.ext-md {
+  background: var(--text-sub);
 }
 
 .output-row .btn {
   padding: 6px 12px;
   font-size: var(--fs-caption);
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.output-row .btn svg {
+  width: 13px;
+  height: 13px;
 }
 
 .html-preview {
   width: 100%;
   height: 60vh;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: #fff;
 }
 
@@ -142,6 +186,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .job-time {

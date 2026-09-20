@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download, Layout } from "lucide-react";
 import {
   apiGet,
   apiPost,
@@ -7,7 +8,7 @@ import {
   type Job,
   type Plan,
 } from "../api/client";
-import { Banner, Button, Empty, fmtBytes, fmtDateTime } from "../components/ui";
+import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../components/ui";
 import { MarkdownPreview } from "../components/MarkdownPreview";
 
 const EXT_LABEL: Record<string, string> = {
@@ -143,33 +144,34 @@ export default function OutputsPanel({ pid }: { pid: number }) {
 
   return (
     <section>
-      <div className="panel-head">
-        <h3>산출물</h3>
-        <div className="panel-actions">
-          {approvedPlan ? (
-            <>
-              {docs.length > 1 && (
-                <select aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
-                  <option value="">전체 문서(plan 첫 문서)</option>
-                  {docs.map((d) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <Button onClick={() => void enqueue("slides", docSel || undefined)} disabled={busy}>
-                PPT 생성 (슬라이드)
-              </Button>
-              <Button onClick={() => void enqueue("report", docSel || undefined)} disabled={busy}>
-                문서 생성 (MD·HTML·DOCX)
-              </Button>
-            </>
-          ) : (
-            <span className="hint">파생물 생성에는 승인된 plan이 필요합니다 (plan 탭).</span>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        icon={Layout}
+        title="파생 산출물 (결정론 빌드)"
+        desc="승인된 plan(SSOT)에서 Python 빌더가 결정론적으로 생성합니다. 채번 규칙: 문서제목_vNN.확장자 — 절대 덮어쓰지 않습니다 (원칙 5)."
+      >
+        {approvedPlan ? (
+          <>
+            {docs.length > 1 && (
+              <select aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
+                <option value="">전체 문서(plan 첫 문서)</option>
+                {docs.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button onClick={() => void enqueue("slides", docSel || undefined)} disabled={busy}>
+              PPT 생성 (슬라이드)
+            </Button>
+            <Button onClick={() => void enqueue("report", docSel || undefined)} disabled={busy}>
+              문서 생성 (MD·HTML·DOCX)
+            </Button>
+          </>
+        ) : (
+          <span className="hint">파생물 생성에는 승인된 plan이 필요합니다 (plan 탭).</span>
+        )}
+      </PageHeader>
 
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
@@ -194,6 +196,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
               <li key={b.id} className={`output-row ${sel?.id === b.id ? "output-row-active" : ""}`}>
                 <button className="output-open" onClick={() => void preview(b)}>
                   <span className="output-title">
+                    <span className={`ext-chip ext-${b.ext}`}>{EXT_LABEL[b.ext] ?? b.ext}</span>
                     {b.doc_kind} {EXT_LABEL[b.ext] ?? b.ext} {fmtVersion(b.version_no)}
                   </span>
                   <span className="hint">
@@ -201,6 +204,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                   </span>
                 </button>
                 <a className="btn btn-ghost" href={`/api/projects/${pid}/outputs/${b.id}/download`}>
+                  <Download aria-hidden="true" />
                   {b.ext === "pptx" || b.ext === "docx" ? "다운로드" : "열기"}
                 </a>
               </li>

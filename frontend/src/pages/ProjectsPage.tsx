@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { ChevronRight, Folder, Trash2, X } from "lucide-react";
 import { apiDelete, apiGet, apiPost, ApiError, type Project } from "../api/client";
-import { Banner, Button, Loading } from "../components/ui";
+import { Banner, Button, Empty, Loading } from "../components/ui";
 import { navigate } from "../lib/hashRoute";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -109,25 +110,43 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <h2 className="page-title">프로젝트</h2>
-      {error && <Banner kind="error">{error}</Banner>}
-      {notice && <Banner kind="ok">{notice}</Banner>}
-      <div className="list-head">
+      <div className="projects-head">
+        <div>
+          <h2>프로젝트</h2>
+          <p>리포트 및 기획서 자동 생성을 위한 작업 공간을 관리합니다.</p>
+        </div>
         <Button onClick={() => setOpen(true)}>새 프로젝트</Button>
       </div>
+      {error && <Banner kind="error">{error}</Banner>}
+      {notice && <Banner kind="ok">{notice}</Banner>}
       {projects === null ? (
         <Loading />
       ) : projects.length === 0 ? (
-        <p className="hint">아직 프로젝트가 없습니다 — [새 프로젝트] 버튼으로 만들어 시작하세요.</p>
+        <Empty>아직 프로젝트가 없습니다 — [새 프로젝트] 버튼으로 만들어 시작하세요.</Empty>
       ) : (
         <ul className="project-list">
           {projects.map((p) => (
             <li key={p.id}>
               <button className="project-row" onClick={() => navigate(`/projects/${p.id}`)}>
-                <span className="project-title">{p.title}</span>
-                <span className="project-slug">{p.slug}</span>
-                <span className={`badge badge-${p.status}`}>
-                  {p.status === "active" ? "진행 중" : "보관"}
+                <span className="project-top">
+                  <span className={`badge badge-global badge-${p.status}`}>
+                    {p.status === "active" ? "진행 중" : "보관"}
+                  </span>
+                </span>
+                <span className="project-name">
+                  <Folder aria-hidden="true" />
+                  {p.title}
+                </span>
+                <span className="project-meta">
+                  {p.slug}
+                  {p.owner && <span className="project-owner">{p.owner}</span>}
+                </span>
+                <span className="project-foot">
+                  <span className="project-date">{p.created_at.slice(0, 10)}</span>
+                  <span className="project-open" aria-hidden="true">
+                    열기
+                    <ChevronRight />
+                  </span>
                 </span>
               </button>
               <button
@@ -136,8 +155,9 @@ export default function ProjectsPage() {
                 disabled={delBusy}
                 onClick={() => openDelete(p)}
                 aria-label={`${p.title} 삭제`}
+                title="삭제"
               >
-                삭제
+                <Trash2 aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -161,7 +181,7 @@ export default function ProjectsPage() {
                 disabled={busy}
                 aria-label="닫기"
               >
-                ×
+                <X />
               </button>
             </div>
             <form
@@ -220,7 +240,7 @@ export default function ProjectsPage() {
                 disabled={delBusy}
                 aria-label="닫기"
               >
-                ×
+                <X />
               </button>
             </div>
             <p className="hint del-warn">

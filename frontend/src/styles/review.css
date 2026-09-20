@@ -1,138 +1,192 @@
-/* 검수 리포트 (FR-4/FR-5) */
+/* 검수 리포트 (PR-5) — 목업 리스타일: 리포트 카드 + 심각도 필 + 발견사항 표형 행 */
 .review-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .review-row {
-  border-top: 1px solid var(--line);
-  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color var(--speed), background var(--speed);
 }
 
-.review-row:first-child {
-  border-top: none;
+.review-row:hover {
+  border-color: var(--blue);
 }
 
 .review-row-active {
-  background: var(--bg-soft);
+  border-color: var(--blue);
+  background: rgba(46, 109, 180, 0.06);
 }
 
 .review-open {
-  flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
   width: 100%;
   border: none;
   background: transparent;
-  padding: 6px 8px;
+  padding: 12px 14px;
   text-align: left;
-}
-
-.review-open:hover {
-  background: var(--bg-soft);
-  border-radius: 6px;
+  border-radius: var(--radius);
+  flex-wrap: wrap;
 }
 
 .review-title {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: var(--space-2);
   color: var(--navy);
-  font-size: var(--fs-body);
+  font-weight: 600;
   flex-wrap: wrap;
 }
 
+/* 심각도 필 — lucide 아이콘 포함 */
 .sev {
-  font-size: var(--fs-caption);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-sub);
   color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.sev svg {
+  width: 12px;
+  height: 12px;
 }
 
 .sev-red {
   color: var(--danger);
-  font-weight: 600;
+  border-color: rgba(192, 57, 43, 0.4);
+  background: rgba(192, 57, 43, 0.07);
+}
+
+.sev-yellow {
+  color: var(--warn);
+  border-color: rgba(183, 121, 31, 0.4);
+  background: rgba(183, 121, 31, 0.08);
+}
+
+.sev-white {
+  color: var(--text-sub);
 }
 
 .sev-clean {
   color: var(--ok);
+  border-color: rgba(47, 133, 90, 0.35);
+  background: rgba(47, 133, 90, 0.07);
 }
 
 .sev-llm {
-  border: 1px solid var(--warn);
-  border-radius: 4px;
-  padding: 1px 6px;
-  color: var(--warn);
+  color: var(--danger);
+  border-color: rgba(192, 57, 43, 0.4);
 }
 
-.review-summary {
-  color: var(--text-sub);
-  font-size: var(--fs-body);
-  margin: 0 0 12px;
-}
-
+/* 발견사항 — [체크박스][심각도 필][위치+code][내용·제안] 표형 그리드 */
 .finding-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .finding {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  display: grid;
+  grid-template-columns: auto auto minmax(140px, 180px) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   padding: 10px 12px;
 }
 
+@media (max-width: 800px) {
+  .finding {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .finding-where {
+    grid-column: 1 / -1;
+  }
+}
+
 .finding-red {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 6%, transparent);
+  border-left-color: var(--danger);
+  background: rgba(192, 57, 43, 0.03);
 }
 
 .finding-yellow {
-  border-color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 6%, transparent);
-}
-
-.finding-sev {
-  font-size: var(--fs-body);
-  line-height: 1.4;
+  border-left-color: var(--warn);
+  background: rgba(183, 121, 31, 0.03);
 }
 
 .finding-check {
-  margin-top: 3px;
-  accent-color: var(--navy);
-  flex: none;
-}
-
-.finding-suggestion {
-  font-size: var(--fs-caption);
-  color: var(--text-sub);
+  margin-top: 2px;
+  accent-color: var(--blue);
+  width: 15px;
+  height: 15px;
 }
 
 .finding-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .finding-where {
   font-size: var(--fs-caption);
   color: var(--navy);
+  font-weight: 600;
 }
 
 .finding-where code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
   color: var(--text-sub);
-  font-size: var(--fs-caption);
-  margin-left: 6px;
+  background: var(--surface-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
 }
 
 .finding-msg {
-  font-size: var(--fs-body);
+  font-size: var(--fs-caption);
+  color: var(--text);
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.finding-suggestion {
+  font-size: 10px;
+  color: var(--blue);
+  word-break: break-word;
+}
+
+.review-summary {
+  font-size: var(--fs-caption);
+  color: var(--text-sub);
+  background: var(--surface-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  line-height: 1.6;
 }
