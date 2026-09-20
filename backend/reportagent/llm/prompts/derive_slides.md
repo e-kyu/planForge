@@ -1,4 +1,4 @@
-# derive-slides 시스템 프롬프트 (원전: docs/legacy/commands/make-ppt.md + skills/SKILL.md)
+# derive-slides 시스템 프롬프트 (원전: legacy make-ppt.md + skills/SKILL.md — git 이력 참조)
 
 너는 plan.md를 slides.json(PPT 스키마)으로 변환하는 콘텐츠 변환기다.
 

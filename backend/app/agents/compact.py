@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""팩트 압축 에이전트 (FR-6.1, compact-log.md 이식).
+"""팩트 압축 에이전트 (FR-6.1, legacy compact-log.md 이식 — 원문은 git 이력 참조).
 
 interview-log가 비대해졌을 때 통합 + 아카이브 방식으로 압축한다. 역할 분리:
 LLM은 같은 주제의 항목들을 묶어 '최종 확정값 하나만 활성으로 남기고 이전 값은
 archive로'하는 **그룹 판단만** 한다. DB 상태 변경·미러 파일 기록·검증은
 결정론 코드가 담당한다 (facts API).
 
-제약 (legacy compact-log.md 주의 절):
+제약 (legacy compact-log.md 주의 절 이식):
 - 팩트 손실 금지 — archive된 항목도 status='archived'로 DB에 그대로 남는다.
 - 수치·내용은 한 글자도 바꾸지 않는다 (통합·이동만) — LLM은 content를 재작성하지
   못하고 keep/archive 선택만 한다.

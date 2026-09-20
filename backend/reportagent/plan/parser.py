@@ -30,7 +30,7 @@ _KEY_MSG_RE = re.compile(r"^\d+\.\s+(.+)$")
 _META_RE = re.compile(r"^(?:-\s+)?([^:：]+)[：:]?\s*(.*)$")  # "- 항목: 값" (전각 콜론 허용)
 _BRACKET_RE = re.compile(r"\[([^\]]+)\]")
 
-# 유형별 표기 헤더 불릿 (legacy CLAUDE.md "유형별 표기법")
+# 유형별 표기 헤더 불릿 (legacy 원문 "유형별 표기법" 이식 — 원문은 git 이력 참조)
 _RE_COL = re.compile(r"^\s*(?:-\s+)?(좌|우)\s*\(([^)]*)\)[：:]?\s*(.*)$")
 _RE_TABLE = re.compile(r"^\s*(?:-\s+)?표\s*[：:]\s*\[(.+)\]$")
 _RE_CHART = re.compile(r"^\s*(?:-\s+)?차트\s*[：:]?\s*(.*)$")

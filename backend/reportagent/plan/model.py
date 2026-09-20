@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """plan.md 결정론 파서의 데이터 모델.
 
-plan.md 포맷의 유일 권위는 docs/legacy/CLAUDE.md의 "plan.md 포맷" 절이다.
+plan.md 포맷의 권위는 본 파서와 계약 fixture(tests/fixtures/plan.sample.md)가 함께 잠근다.
 파서는 콘텐츠를 한 글자도 바꾸지 않는다 (수치·표·차트·(미확정)·근거/출처 문자열 원본 유지).
 """
 from __future__ import annotations

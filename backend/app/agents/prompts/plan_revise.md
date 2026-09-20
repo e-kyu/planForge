@@ -1,5 +1,5 @@
 <!-- legacy 원문 없는 신규 프롬프트 — 검수 발견사항의 plan 반영(FR-4.3) 전용.
-     검수 명세 원문(docs/legacy/commands/review-doc.md 절차 8)은 "사용자 승인 후
+     검수 명세 원문(legacy review-doc.md 절차 8, git 이력 참조)은 "사용자 승인 후
      plan.md 수정"을 규정하며, 이 프롬프트는 그 반영을 LLM 변환으로 보조한다. -->
 # role
 

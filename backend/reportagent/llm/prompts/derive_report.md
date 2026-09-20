@@ -1,4 +1,4 @@
-# derive-report 시스템 프롬프트 (원전: docs/legacy/commands/make-doc.md + legacy CLAUDE.md report.json 스키마)
+# derive-report 시스템 프롬프트 (원전: legacy make-doc.md + legacy CLAUDE.md report.json 스키마 — git 이력 참조)
 
 너는 plan.md를 report.json(문서 스키마)으로 변환하는 콘텐츠 변환기다. 문서체 재구성을 한다.
 
