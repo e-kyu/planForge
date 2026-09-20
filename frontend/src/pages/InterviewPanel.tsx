@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Bot, Database } from "lucide-react";
+import { Bot, Database, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { useStoredBoolean } from "../lib/viewPrefs";
 import {
   apiGet,
   apiPost,
@@ -41,6 +42,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [answers, setAnswers] = useState<Record<number, { option?: number; free?: string }>>({});
+  const [factCollapsed, setFactCollapsed] = useStoredBoolean("ra-fact-side-collapsed", false);
   const feed = useRef<HTMLDivElement>(null);
 
   const sid = session?.id ?? null;
@@ -167,7 +169,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
   const isKick = phase === "hypothesis" && messages.length === 0;
 
   return (
-    <section className="chat-layout">
+    <section className={`chat-layout ${factCollapsed ? "fact-collapsed" : ""}`}>
       <div className="chat-panel">
       <div className="chat-head">
         <span className="bot-chip" aria-hidden="true">
@@ -271,7 +273,12 @@ export default function InterviewPanel({ pid }: { pid: number }) {
       </div>
       </div>
 
-      <FactSidePanel pid={pid} refreshKey={messages.length} />
+      <FactSidePanel
+        pid={pid}
+        refreshKey={messages.length}
+        collapsed={factCollapsed}
+        onToggle={() => setFactCollapsed(!factCollapsed)}
+      />
     </section>
   );
 
@@ -360,10 +367,28 @@ const ORIGIN_LABEL: Record<string, string> = {
 /** 팩트 저장소 사이드 패널 — 조회 전용 (설계 D4).
  *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다(원칙 4 게이트 우회 금지).
  *  미확정 필터는 백엔드 UNCONFIRMED 컨벤션("(미확정" 접두 마커)과 동일한 클라이언트 판별(설계 D5). */
-function FactSidePanel({ pid, refreshKey }: { pid: number; refreshKey: number }) {
+function FactSidePanel({
+  pid,
+  refreshKey,
+  collapsed,
+  onToggle,
+}: {
+  pid: number;
+  refreshKey: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const [facts, setFacts] = useState<Fact[] | null>(null);
   const [filter, setFilter] = useState<FactFilter>("all");
   const [error, setError] = useState<string | null>(null);
+  const headBtn = useRef<HTMLButtonElement>(null);
+  const railBtn = useRef<HTMLButtonElement>(null);
+
+  function toggle() {
+    onToggle();
+    // 토글 버튼이 숨겨지므로 반대편 버튼으로 포커스 이동 (접근성)
+    requestAnimationFrame(() => (collapsed ? headBtn.current : railBtn.current)?.focus());
+  }
 
   const load = useCallback(async () => {
     try {
@@ -393,13 +418,27 @@ function FactSidePanel({ pid, refreshKey }: { pid: number; refreshKey: number })
   const STATUS_TEXT = { ok: "확립", warn: "미확정", arch: "아카이브" } as const;
 
   return (
-    <aside className="fact-side">
+    <aside className="fact-side" id="fact-side">
       <div className="fact-side-head">
         <h4>
           <Database aria-hidden="true" />
           팩트 저장소
         </h4>
-        <span className="fact-count">{facts === null ? "…" : `${facts.length}건`}</span>
+        <div className="fact-side-head-tools">
+          <span className="fact-count">{facts === null ? "…" : `${facts.length}건`}</span>
+          <button
+            type="button"
+            ref={headBtn}
+            className="fact-fold"
+            onClick={toggle}
+            aria-expanded={!collapsed}
+            aria-controls="fact-side"
+            aria-label="팩트 저장소 접기"
+            title="팩트 저장소 접기"
+          >
+            <PanelRightClose aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div className="fact-filter" role="tablist" aria-label="팩트 상태 필터">
@@ -448,6 +487,24 @@ function FactSidePanel({ pid, refreshKey }: { pid: number; refreshKey: number })
       <p className="fact-side-note">
         팩트 확정(승인·적립)은 인터뷰의 [팩트 확인] 단계에서만 수행됩니다 — 게이트 우회 기록은 허용되지 않습니다.
       </p>
+
+      <div className="fact-rail">
+        <button
+          type="button"
+          ref={railBtn}
+          className="fact-rail-btn"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+          aria-controls="fact-side"
+          aria-label="팩트 저장소 펼치기"
+          title="팩트 저장소 펼치기"
+        >
+          <PanelRightOpen aria-hidden="true" />
+        </button>
+        <span className="fact-rail-label" aria-hidden="true">
+          팩트
+        </span>
+      </div>
     </aside>
   );
 }

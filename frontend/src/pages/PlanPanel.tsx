@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { FileCode } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { FileCode, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { apiGet, apiPost, ApiError, type Plan } from "../api/client";
+import { useStoredBoolean } from "../lib/viewPrefs";
 import { Banner, Button, Empty, Loading } from "../components/ui";
 import { CmDiff, CmEditor } from "../components/CmEditor";
 import { MarkdownPreview } from "../components/MarkdownPreview";
@@ -49,6 +50,15 @@ export default function PlanPanel({ pid }: { pid: number }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [planCollapsed, setPlanCollapsed] = useStoredBoolean("ra-plan-side-collapsed", false);
+  const headBtn = useRef<HTMLButtonElement>(null);
+  const railBtn = useRef<HTMLButtonElement>(null);
+
+  function toggle() {
+    setPlanCollapsed(!planCollapsed);
+    // 토글 버튼이 숨겨지므로 반대편 버튼으로 포커스 이동 (접근성)
+    requestAnimationFrame(() => (planCollapsed ? headBtn.current : railBtn.current)?.focus());
+  }
 
   async function load(selectId?: number | null) {
     try {
@@ -112,9 +122,23 @@ export default function PlanPanel({ pid }: { pid: number }) {
   const vlabel = (n: number) => `v${String(n).padStart(2, "0")}`;
 
   return (
-    <section className="plan-layout">
-      <aside className="plan-side">
-        <h3>plan 세대 (DB Plan — SSOT)</h3>
+    <section className={`plan-layout ${planCollapsed ? "plan-collapsed" : ""}`}>
+      <aside className="plan-side" id="plan-side">
+        <div className="plan-side-head">
+          <h3>plan 세대 (DB Plan — SSOT)</h3>
+          <button
+            type="button"
+            ref={headBtn}
+            className="plan-fold"
+            onClick={toggle}
+            aria-expanded={!planCollapsed}
+            aria-controls="plan-side"
+            aria-label="plan 세대 접기"
+            title="plan 세대 접기"
+          >
+            <PanelLeftClose aria-hidden="true" />
+          </button>
+        </div>
         <ul className="plan-list">
           {plans.map((p) => (
             <li key={p.id}>
@@ -138,6 +162,24 @@ export default function PlanPanel({ pid }: { pid: number }) {
             </li>
           ))}
         </ul>
+
+        <div className="plan-rail">
+          <button
+            type="button"
+            ref={railBtn}
+            className="plan-rail-btn"
+            onClick={toggle}
+            aria-expanded={!planCollapsed}
+            aria-controls="plan-side"
+            aria-label="plan 세대 펼치기"
+            title="plan 세대 펼치기"
+          >
+            <PanelLeftOpen aria-hidden="true" />
+          </button>
+          <span className="plan-rail-label" aria-hidden="true">
+            플랜
+          </span>
+        </div>
       </aside>
 
       <div className="plan-main">

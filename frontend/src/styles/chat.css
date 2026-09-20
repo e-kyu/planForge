@@ -442,3 +442,92 @@
   border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
+
+/* ---------------------------------------------------------------- 사이드 접기/펼치기 (와이드 뷰포트 전용) */
+.fact-fold,
+.fact-rail-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--speed), background var(--speed);
+}
+
+.fact-fold svg,
+.fact-rail-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fact-fold:hover,
+.fact-rail-btn:hover {
+  color: var(--navy);
+  background: var(--surface-sub);
+}
+
+.fact-side-head-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* 접힘 레일 — 기본 숨김, 와이드+접힘에서만 표시 */
+.fact-rail {
+  display: none;
+}
+
+@media (min-width: 1025px) {
+  .chat-layout {
+    transition: grid-template-columns var(--speed);
+  }
+
+  /* minmax(0,7fr)/minmax(0,5fr) → minmax(0,1fr)/minmax(48px,0fr):
+     트랙별 min=length↔length, max=fr↔fr — 보간 가능 (미지원 엔진은 즉시 전환) */
+  .chat-layout.fact-collapsed {
+    grid-template-columns: minmax(0, 1fr) minmax(48px, 0fr);
+  }
+
+  .chat-layout.fact-collapsed .fact-side {
+    align-self: stretch; /* 레일을 채팅 패널 행 높이만큼 세로로 */
+    min-width: 0;
+    overflow: hidden;
+    padding: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  .chat-layout.fact-collapsed .fact-side > :not(.fact-rail) {
+    display: none;
+  }
+
+  .chat-layout.fact-collapsed .fact-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    padding-top: var(--space-1);
+    flex: 1;
+    min-height: 0;
+  }
+
+  .fact-rail-label {
+    writing-mode: vertical-rl;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-sub);
+    letter-spacing: 2px;
+    user-select: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .fact-fold {
+    display: none; /* 스택 레이아웃에서는 접기 무의미 */
+  }
+}
