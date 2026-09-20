@@ -1,0 +1,57 @@
+{
+  // 실행·디버그 구성 — "전체 스택" 컴파운드로 backend(8000) + frontend(5173) 동시 기동.
+  // Vite는 /api를 localhost:8000으로 프록시하므로(§3.1) backend를 먼저 띄우는 것을 권장.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: uvicorn (디버그)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "env": { "PYTHONUTF8": "1" },
+      "console": "internalConsole"
+    },
+    {
+      "name": "Backend: uvicorn (--reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.main:app", "--reload"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+      "env": { "PYTHONUTF8": "1" },
+      "console": "internalConsole"
+    },
+    {
+      "name": "Frontend: Vite (dev)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend",
+      "env": { "PYTHONUTF8": "1" },
+      "serverReadyAction": {
+        "pattern": "Local:.*http://localhost:([0-9]+)/",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Frontend: 브라우저 디버그 (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "preLaunchTask": "dev: frontend"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "전체 스택 (backend + frontend)",
+      "configurations": ["Backend: uvicorn (--reload)", "Frontend: Vite (dev)"],
+      "stopAll": true
+    }
+  ]
+}

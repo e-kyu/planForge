@@ -1,0 +1,11 @@
+{
+  // Python: backend 전용 venv 사용 (backend/.venv — requirements 설치된 곳)
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
+  // pytest는 저장소 루트에서 실행 (conftest.py가 backend를 import 경로에 추가)
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["${workspaceFolder}"],
+  // Windows 개발 환경 필수 (CLAUDE.md) — 통합 터미널에 적용
+  "terminal.integrated.env.windows": {
+    "PYTHONUTF8": "1"
+  }
+}
