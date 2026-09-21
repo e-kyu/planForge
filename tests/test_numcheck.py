@@ -2,8 +2,8 @@
 """numcheck(수치 무결성 대조) 단위 테스트 — 원칙 3 상시 실행용."""
 import pytest
 
-from reportagent.numcheck import check_report, check_slides, has_red, numeric_tokens
-from reportagent.plan.model import ChartSpec, Series, Slide, TableSpec
+from planforge.numcheck import check_report, check_slides, has_red, numeric_tokens
+from planforge.plan.model import ChartSpec, Series, Slide, TableSpec
 
 
 def make_plan_slides():

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session as DBSession
 
-from reportagent.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
 
 from ..events import Event, error_event, notice_event, state_event, token_event, done_event
 from ..models import (

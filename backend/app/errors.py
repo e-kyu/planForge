@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from reportagent.plan import PlanError
+from planforge.plan import PlanError
 
 from .workspace import WorkspaceError
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fakes import FakeLLM, correct_report_payload, correct_slides_payload, plan_sample_markdown, tool_call
 
-from reportagent.plan.parser import parse_plan_text
-from reportagent.review import check_doc_tags, check_facts
+from planforge.plan.parser import parse_plan_text
+from planforge.review import check_doc_tags, check_facts
 
 # ---------------------------------------------------------------- 결정론 엔진
 

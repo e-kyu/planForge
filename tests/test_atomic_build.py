@@ -21,7 +21,7 @@ def _work_report(ws: Path) -> Path:
 
 
 def _builder(work_path: Path, fmts=("md",)):
-    from reportagent.builders import build_doc
+    from planforge.builders import build_doc
 
     def run(tmp: Path):
         for fmt in fmts:

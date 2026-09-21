@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from reportagent.plan import Plan, Slide, filter_slides, parse_plan_file, validate_skeleton
-from reportagent.plan.filter import SkeletonError
+from planforge.plan import Plan, Slide, filter_slides, parse_plan_file, validate_skeleton
+from planforge.plan.filter import SkeletonError
 
 FIX = Path(__file__).parent / "fixtures"
 

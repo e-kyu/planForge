@@ -1,12 +1,12 @@
 # 배포 환경 (§3.1): backend + frontend + ollama. DB는 호스트 볼륨의 SQLite 파일(data/).
 # ollama 사용 시 최초 1회 인증이 필요하다: docker compose --profile ollama exec ollama ollama signin
-# 다른 프로바이더(openai 등)는 backend/reportagent/config.json의 base_url이 LLM_BASE_URL보다 우선.
+# 다른 프로바이더(openai 등)는 backend/planforge/config.json의 base_url이 LLM_BASE_URL보다 우선.
 services:
   backend:
     build: ./backend
     environment:
       # SQLite 파일은 호스트 볼륨(./data)에 남는다 — 컨테이너 재생성에도 유지
-      DATABASE_URL: sqlite:////srv/data/reportagent.db
+      DATABASE_URL: sqlite:////srv/data/planforge.db
       # 워크스페이스/산출물은 호스트에 남긴다 (gitignore의 workspaces/·sources/와 동일 경로)
       WORKSPACES_DIR: /srv/workspaces
       GLOBAL_SOURCES_DIR: /srv/global-sources

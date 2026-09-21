@@ -40,7 +40,7 @@ def create_app(llm_overrides: dict | None = None, start_worker: bool = True) -> 
             task.cancel()
 
     app = FastAPI(
-        title="report-agent",
+        title="PlanForge",
         version="0.2.0",
         description="기획 문서 생성 에이전트 웹 서비스 (M2 백엔드)",
         lifespan=lifespan,

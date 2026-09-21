@@ -1,7 +1,7 @@
-# backend — report-agent 백엔드 + M1 코어 엔진
+# backend — PlanForge 백엔드 + M1 코어 엔진
 
 FastAPI 웹 백엔드(`app/`)와 Claude Code 없이 동작하는 기획 문서 생성 코어 엔진
-(`reportagent/`)이 함께 있는 패키지다. 사용자 관점의 전체 흐름(인터뷰 → plan 승인 →
+(`planforge/`)이 함께 있는 패키지다. 사용자 관점의 전체 흐름(인터뷰 → plan 승인 →
 빌드 → 검수)과 설치·실행 방법은 저장소 루트 [README.md](../README.md), 개발 계약
 (설계 원칙 8개)은 [CLAUDE.md](../CLAUDE.md)를 참고한다.
 
@@ -13,7 +13,7 @@ FastAPI 웹 백엔드(`app/`)와 Claude Code 없이 동작하는 기획 문서 �
 | 패키지 | 역할 | 진입점 |
 |---|---|---|
 | `app/` | 웹 백엔드 — REST/SSE API, SQLite DB, 작업 큐·단일 워커, 인터뷰 에이전트 | `uvicorn app.main:app --reload` (포트 8000) |
-| `reportagent/` | M1 코어 엔진 — plan 파싱·문서 필터·골격 검증, LLM 파생물 변환, 결정론 빌더, 수치 무결성 검사 | `python -m reportagent parse\|numcheck\|derive\|build-ppt\|build-doc` |
+| `planforge/` | M1 코어 엔진 — plan 파싱·문서 필터·골격 검증, LLM 파생물 변환, 결정론 빌더, 수치 무결성 검사 | `python -m planforge parse\|numcheck\|derive\|build-ppt\|build-doc` |
 
 ## 디렉터리 구조
 
@@ -41,7 +41,7 @@ backend/
 │       ├── planrevise.py         검수 발견사항 → plan 수정 (검증 단일 권위)
 │       ├── review.py             LLM 내용 검수 (결정론 검수와 역할 분리)
 │       └── prompts/              interview.md · compact.md · plan_revise.md · review.md
-├── reportagent/                  M1 코어 엔진 (CLI 진입점)
+├── planforge/                  M1 코어 엔진 (CLI 진입점)
 │   ├── __main__.py               5개 서브커맨드 (parse|numcheck|derive|build-ppt|build-doc)
 │   ├── derive.py                 Deriver — LLM 변환 + 검증 게이트 + 빌드 오케스트레이션
 │   ├── numcheck.py               수치 무결성 대조 (plan ↔ 파생물)
@@ -76,7 +76,7 @@ Project → InterviewSession → Fact → Plan(세대) → Derivative → Build 
 
 plan 본문의 원본은 DB `Plan.markdown`이다. `app/workspace.py`의 `write_plan_mirror`가
 워크스페이스에 기록하는 `plan.md`는 **미러**일 뿐이다 — Deriver·빌더가 파일로 읽기 위한
-것. 파생 경로: `Plan` 레코드 → 미러 → `reportagent/derive.py`(`Deriver`) →
+것. 파생 경로: `Plan` 레코드 → 미러 → `planforge/derive.py`(`Deriver`) →
 `app/workspace.py`의 `atomic_build` → 채번 등록(`Build` 행). `workspaces/*/work/slides.json`
 등 파생물 파일에 대한 직접 쓰기는 설계상 존재하지 않는다.
 
@@ -119,9 +119,9 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/workspace.py`의 `write_
 
 ### `app/config.py` — Settings
 
-`DATABASE_URL`·`WORKSPACES_DIR`·`REPORTAGENT_CONFIG`·`GLOBAL_SOURCES_DIR`·
+`DATABASE_URL`·`WORKSPACES_DIR`·`PLANFORGE_CONFIG`·`GLOBAL_SOURCES_DIR`·
 `SSE_KEEPALIVE_SECONDS` 환경변수를 읽는다. 기본값: DB는 저장소 루트
-`data/reportagent.db`, 워크스페이스는 루트 `workspaces/`, 글로벌 소스는 루트 `sources/`.
+`data/planforge.db`, 워크스페이스는 루트 `workspaces/`, 글로벌 소스는 루트 `sources/`.
 
 ### `app/db.py`
 
@@ -170,7 +170,7 @@ SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeou
   `update_checklist`·`write_plan`)의 OpenAI function 스키마와 서버측 검증 —
   라운드당 최대 4문항, 핵심 메시지는 정확히 3개.
 - `llm.py`: `LLMRegistry`가 프로필(interview/derive/review/plan_revise)별
-  provider·모델을 `reportagent/llm`에서 읽어 `chat_fn`/`stream_fn`으로 노출.
+  provider·모델을 `planforge/llm`에서 읽어 `chat_fn`/`stream_fn`으로 노출.
   `llm_overrides`에 있으면 가짜가 우선(테스트 주입 훅).
 - `compact.py`·`planrevise.py`·`review.py`: LLM은 판단/보고만 하고, 적용·검증은
   결정론 코드가 담당하는 역할 분리. plan 마크다운 검증의 단일 권위는
@@ -215,23 +215,23 @@ SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeou
 | | GET | `/api/projects/{pid}/reviews` | 리포트 목록(최신순) |
 | | GET | `/api/projects/{pid}/reviews/{review_id}` | 리포트 단건(findings 포함) |
 
-## reportagent/ 모듈 가이드
+## planforge/ 모듈 가이드
 
 ### CLI (`__main__.py`)
 
 ```powershell
 # backend/ 에서 실행
-python -m reportagent parse <plan.md> [--doc 문서명]
-python -m reportagent numcheck <plan.md> (--slides <json> | --report <json>) [--doc 문서명]
-python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report `
+python -m planforge parse <plan.md> [--doc 문서명]
+python -m planforge numcheck <plan.md> (--slides <json> | --report <json>) [--doc 문서명]
+python -m planforge derive <plan.md> --workspace <dir> --kind slides|report `
     [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed] [--config <json>]
-python -m reportagent build-ppt <slides.json> [output_dir]
-python -m reportagent build-doc <report.json> <md|html|docx> [output_dir]
+python -m planforge build-ppt <slides.json> [output_dir]
+python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 ```
 
 - `numcheck`는 red 발견 시 exit 1 (CI/훅에서 게이트로 사용).
-- config 해석 우선순위: `--config` 인자 > `REPORTAGENT_CONFIG` env >
-  `backend/reportagent/config.json`.
+- config 해석 우선순위: `--config` 인자 > `PLANFORGE_CONFIG` env >
+  `backend/planforge/config.json`.
 
 ### `plan/` — 파서·필터·골격 검증
 
@@ -310,7 +310,7 @@ legacy `scripts/build_*.py`의 **바이트 동일 이식본**이다. 로직 변�
 
 ## 데이터베이스·마이그레이션
 
-- SQLite 단일 방언. 기본 파일은 저장소 루트 `data/reportagent.db`(WAL 파일 동반).
+- SQLite 단일 방언. 기본 파일은 저장소 루트 `data/planforge.db`(WAL 파일 동반).
 - 스키마 변경은 반드시 `alembic revision`으로 마이그레이션을 추가한다:
 
   ```powershell
@@ -329,12 +329,12 @@ legacy `scripts/build_*.py`의 **바이트 동일 이식본**이다. 로직 변�
 
 | 변수 | 위치 | 기본값 |
 |---|---|---|
-| `DATABASE_URL` | `app/config.py` · `alembic/env.py` | 저장소 루트 `data/reportagent.db` |
+| `DATABASE_URL` | `app/config.py` · `alembic/env.py` | 저장소 루트 `data/planforge.db` |
 | `WORKSPACES_DIR` | `app/config.py` | 저장소 루트 `workspaces/` |
 | `GLOBAL_SOURCES_DIR` | `app/config.py` | 저장소 루트 `sources/` |
-| `REPORTAGENT_CONFIG` | `app/config.py` · CLI | `backend/reportagent/config.json` |
+| `PLANFORGE_CONFIG` | `app/config.py` · CLI | `backend/planforge/config.json` |
 | `SSE_KEEPALIVE_SECONDS` | `app/config.py` | 15 |
-| `LLM_BASE_URL` | `reportagent/llm/provider.py` | — (config base_url 다음 우선순위) |
+| `LLM_BASE_URL` | `planforge/llm/provider.py` | — (config base_url 다음 우선순위) |
 | `OPENAI_API_KEY` | `provider.py` | provider가 openai일 때 필수(프로필별 `api_key_env`로 이름 지정 가능) |
 | `PYTHONUTF8=1` | Dockerfile · compose | Windows에서 필수 |
 | `TEST_DATABASE_URL` | `tests/conftest.py` | 테스트 DB 격리 오버라이드 |
@@ -349,7 +349,7 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
-copy reportagent\config.example.json reportagent\config.json   # LLM 프로필 설정
+copy planforge\config.example.json planforge\config.json   # LLM 프로필 설정
 alembic upgrade head                                            # DB 스키마 생성
 uvicorn app.main:app --reload                                   # http://localhost:8000
 ```
@@ -395,7 +395,7 @@ npm run gen:types                    # openapi-typescript로 TS 타입 생성
 
 ## 개발 시 주의사항
 
-- **빌더 로직 변경 금지** — `reportagent/builders/*`는 legacy의 바이트 동일 이식본.
+- **빌더 로직 변경 금지** — `planforge/builders/*`는 legacy의 바이트 동일 이식본.
   경로/워크스페이스 주입만 어댑터로 처리.
 - **LLM은 콘텐츠 변환만** — 파일 조립·좌표 배치·채번은 결정론 코드. LLM이 pptx/docx
   바이너리를 만드는 코드는 금지.

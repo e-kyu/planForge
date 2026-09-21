@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """LLM 바인딩 — 프로필 → chat_fn/stream_fn. 테스트 주입 훅: create_app(llm_overrides=...).
 
-engine(reportagent.llm)은 상태리스 provider만 제공하므로, 웹 레이어가 프로필 해석을 담당한다.
+engine(planforge.llm)은 상태리스 provider만 제공하므로, 웹 레이어가 프로필 해석을 담당한다.
 """
 from __future__ import annotations
 
 from typing import Callable
 
-from reportagent.llm import ProfileConfig, get_provider, load_config
+from planforge.llm import ProfileConfig, get_provider, load_config
 
 ChatFn = Callable[..., dict]
 StreamFn = Callable[..., object]  # PR-3에서 Iterator[dict]로 확정

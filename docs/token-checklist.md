@@ -1,6 +1,6 @@
 # 디자인 토큰 일관성 체크리스트 (FR-6.2)
 
-디자인 토큰(색·폰트·여백·좌표)의 SSOT는 `backend/reportagent/builders/theme.py`다.
+디자인 토큰(색·폰트·여백·좌표)의 SSOT는 `backend/planforge/builders/theme.py`다.
 토큰 값을 바꿀 때는 아래 파일들의 결합을 반드시 함께 점검·수정한다. 하나만 고친 PR은
 리뷰에서 반려한다 (AGENT-DEV-REQUEST.md 원칙 7, CLAUDE.md 설계 원칙 7과 동일).
 
@@ -8,8 +8,8 @@
 
 | # | 파일 | 결합 방식 | 토큰 변경 시 |
 |---|---|---|---|
-| 1 | `backend/reportagent/builders/theme.py` | 토큰 상수 (권위) | **수정** (기준점) |
-| 2 | `backend/reportagent/builders/build_ppt.py` · `build_doc.py` | `import theme as T` — 이름 참조만, 리터럴 하드코딩 없음 | **점검** — 새 토큰이면 참조 추가, 리터럴 추가 금지 |
+| 1 | `backend/planforge/builders/theme.py` | 토큰 상수 (권위) | **수정** (기준점) |
+| 2 | `backend/planforge/builders/build_ppt.py` · `build_doc.py` | `import theme as T` — 이름 참조만, 리터럴 하드코딩 없음 | **점검** — 새 토큰이면 참조 추가, 리터럴 추가 금지 |
 | 3 | `tests/fixtures/*.sample.json` | 현재 토큰 리터럴 비의존 (레이아웃·구조 잠금) | **점검** — 좌표 규격이 바뀌는 변경이면 fixture 갱신 |
 | 4 | `frontend/src/styles/tokens.css` | 리터럴 값을 CSS 변수로 미러 | **수정** — 같은 값으로 |
 
@@ -29,7 +29,7 @@
 
   ```
   grep -rniE "1F3B5C|2E6DB4|Malgun Gothic" \
-      backend/reportagent/builders/theme.py frontend/src/styles/tokens.css
+      backend/planforge/builders/theme.py frontend/src/styles/tokens.css
   ```
 
 - **프론트 빌드**: `npm run build` (frontend/) — tokens.css 문법 오류를 잡는다.

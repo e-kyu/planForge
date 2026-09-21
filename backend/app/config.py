@@ -16,14 +16,14 @@ class Settings:
     def __init__(self) -> None:
         self.database_url: str = os.environ.get(
             "DATABASE_URL",
-            f"sqlite:///{(DATA_DIR / 'reportagent.db').as_posix()}",
+            f"sqlite:///{(DATA_DIR / 'planforge.db').as_posix()}",
         )
         self.workspaces_dir: Path = Path(
             os.environ.get("WORKSPACES_DIR", BACKEND_DIR.parent / "workspaces")
         )
-        # M1 LLM 설정과 동일한 해석 순서 (REPORTAGENT_CONFIG > 기본 경로)
+        # M1 LLM 설정과 동일한 해석 순서 (PLANFORGE_CONFIG > 기본 경로)
         self.llm_config_path: Path = Path(
-            os.environ.get("REPORTAGENT_CONFIG", BACKEND_DIR / "reportagent" / "config.json")
+            os.environ.get("PLANFORGE_CONFIG", BACKEND_DIR / "planforge" / "config.json")
         )
         # 인터뷰 소스 확인용 글로벌 sources (plan-doc: 글로벌 sources/ + 프로젝트 sources/)
         self.global_sources_dir: Path = Path(

@@ -1,4 +1,4 @@
-# report-agent — 인터뷰에 답하면 제안서·개발설계서가 PPT·문서로 나온다
+# PlanForge — 인터뷰에 답하면 제안서·개발설계서가 PPT·문서로 나온다
 
 브라우저에서 에이전트와 **인터뷰**를 진행하면 확정 팩트가 쌓이고, 그 내용으로
 **기획서(plan)** 가 만들어지며, 승인 한 번으로 **PPTX·MD·HTML·DOCX 산출물**이
@@ -52,7 +52,7 @@ backend/                  FastAPI 백엔드 + 코어 엔진
     api/                  REST/SSE 라우터 (projects, sources, interview, plans, reviews, facts, jobs, outputs)
     agents/               인터뷰 상태머신 + LLM 계층 + 프롬프트(prompts/*.md)
     worker.py             단일 백그라운드 워커 (빌드 직렬화 — 멀티 워커 금지)
-  reportagent/            M1 코어 엔진 (CLI 진입점 `python -m reportagent`)
+  planforge/            M1 코어 엔진 (CLI 진입점 `python -m planforge`)
     plan/                 plan.md 파서·문서 필터·골격 검증
     builders/             build_ppt.py · build_doc.py · theme.py (legacy 바이트 동일 이식본)
     llm/                  OpenAI 호환 provider 추상화
@@ -65,7 +65,7 @@ frontend/                 React 19 + TypeScript (Vite)
   visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
-data/                     SQLite DB (reportagent.db, gitignored)
+data/                     SQLite DB (planforge.db, gitignored)
 docs/                     보조 문서 (token-checklist.md — 이식 원문 docs/legacy는
                           git 이력에만 보존)
 tests/                    pytest (계약 테스트 fixture 포함)
@@ -82,7 +82,7 @@ docker-compose.yml        배포 스택 (backend · frontend · ollama)
 
 ```powershell
 # 1) LLM 설정 만들기 (예시 파일을 복사해 모델 지정)
-copy backend\reportagent\config.example.json backend\reportagent\config.json
+copy backend\planforge\config.example.json backend\planforge\config.json
 #   config.json 내용 예: {"profiles": {"interview": {...}, "derive": {...}, "review": {...}}}
 
 # 2) 빌드 및 기동
@@ -124,9 +124,9 @@ python -m venv .venv
 pip install -r requirements.txt
 
 # LLM 설정 (gitignored — 배포 시점에 확정)
-copy reportagent\config.example.json reportagent\config.json
+copy planforge\config.example.json planforge\config.json
 
-# DB 스키마 생성 (기본 위치: 저장소 루트 data\reportagent.db)
+# DB 스키마 생성 (기본 위치: 저장소 루트 data\planforge.db)
 alembic upgrade head
 
 # 개발 서버 기동 (기본 http://localhost:8000)
@@ -145,7 +145,7 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 ### 4.3 LLM 설정 상세
 
-`backend/reportagent/config.json` (gitignored — 예시: `backend/reportagent/config.example.json`).
+`backend/planforge/config.json` (gitignored — 예시: `backend/planforge/config.example.json`).
 인터뷰·파생·검수·plan 재작성(revise) 각 단계(**프로필**)마다 프로바이더와 모델을
 다르게 지정할 수 있다:
 
@@ -162,7 +162,7 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 - 프로바이더는 **OpenAI 호환 단일 프로토콜**(openai SDK)만 사용한다. ollama·openai를
   base_url/키 차이만으로 소화한다. Ollama 모델은 **tool calling 지원이 필수**다.
-- `REPORTAGENT_CONFIG` 환경변수로 설정 파일 경로를 바꿀 수 있다.
+- `PLANFORGE_CONFIG` 환경변수로 설정 파일 경로를 바꿀 수 있다.
 - ollama 외 프로바이더는 `LLM_BASE_URL` env로 base_url을 전환할 수 있다.
 
 ---
@@ -233,22 +233,22 @@ LLM 변환·빌드 파이프라인을 명령줄에서 직접 돌릴 수 있다(�
 cd backend
 
 # plan 파싱·문서 필터·골격 검증 (표지·목차·마무리·내용 슬라이드 최소 1개씩)
-python -m reportagent parse <plan.md> [--doc 문서명]
+python -m planforge parse <plan.md> [--doc 문서명]
 
 # 수치 무결성 대조 — plan과 산출물의 수치·표·근거 문자열이 한 글자라도 다르면 🔴 (exit 1)
-python -m reportagent numcheck <plan.md> --slides <slides.json> [--doc 문서명]
-python -m reportagent numcheck <plan.md> --report <report.json> [--doc 문서명]
+python -m planforge numcheck <plan.md> --slides <slides.json> [--doc 문서명]
+python -m planforge numcheck <plan.md> --report <report.json> [--doc 문서명]
 
 # 빌더 원형 직접 실행
-python -m reportagent build-ppt <slides.json> [output_dir]
-python -m reportagent build-doc <report.json> <md|html|docx> [output_dir]
+python -m planforge build-ppt <slides.json> [output_dir]
+python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 # LLM 변환 + 검증 게이트 + 빌드 (make-ppt/make-doc 이식)
-python -m reportagent derive <plan.md> --workspace <dir> --kind slides|report `
+python -m planforge derive <plan.md> --workspace <dir> --kind slides|report `
     [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]
 ```
 
-LLM 설정은 웹과 동일하게 `backend/reportagent/config.json`을 읽는다
+LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 (예시: `config.example.json`, 기본 ollama — 프로필별 모델 지정 가능).
 
 ---
@@ -331,12 +331,12 @@ docker compose build && docker compose up -d
 `{"status":"ok"}`를 반환하는지 확인한다.
 
 **Q. 인터뷰에서 응답이 오지 않는다.**
-LLM 설정을 확인한다 — `backend/reportagent/config.json`이 있는지, 지정한 모델이
+LLM 설정을 확인한다 — `backend/planforge/config.json`이 있는지, 지정한 모델이
 실제로 존재하는지(ollama라면 `ollama list`), **tool calling을 지원하는 모델인지** 확인한다.
 Ollama 모델은 tool calling 미지원 시 파생물 생성·도구 호출이 불가능하다.
 
 **Q. DB를 처음부터 다시 만들고 싶다.**
-저장소 루트 `data/reportagent.db`를 지우고 `backend/`에서 `alembic upgrade head`를 다시
+저장소 루트 `data/planforge.db`를 지우고 `backend/`에서 `alembic upgrade head`를 다시
 실행한다. `workspaces/`의 파일 트리는 DB와 별개이므로 함께 지우는 것을 권장한다.
 
 **Q. Windows에서 인코딩 에러가 난다.**

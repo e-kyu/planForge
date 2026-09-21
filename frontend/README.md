@@ -1,4 +1,4 @@
-# frontend — report-agent 웹 UI
+# frontend — PlanForge 웹 UI
 
 React 19 + TypeScript + Vite 6로 만든 SPA다. **의존성 최소**가 설계 원칙(요청서 §3.1)이라
 라우터·상태관리·UI 컴포넌트 라이브러리 없이 — 자체 해시 라우터, 플레인 훅 상태,
@@ -15,7 +15,7 @@ React 19 + TypeScript + Vite 6로 만든 SPA다. **의존성 최소**가 설계 
 
 ```
 frontend/
-├── index.html                  lang="ko" · <title>report-agent</title>
+├── index.html                  lang="ko" · <title>PlanForge</title>
 ├── vite.config.ts              /api → localhost:8000 프록시 + SSE 버퍼링 방지
 ├── tsconfig.json               strict + noUncheckedIndexedAccess · noEmit
 ├── openapi.json                백엔드에서 덤프한 OpenAPI 스키마 (커밋됨 — 계약 원료)
@@ -84,7 +84,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 | `#/projects/:id` | → `#/projects/:id/interview`로 치환 (ProjectRedirect) |
 | `#/projects/:id/:tab` | 탭 — `interview · plan · outputs · review · sources` |
 
-설정 화면은 없다 — LLM 설정은 백엔드 `backend/reportagent/config.json` 소관이다.
+설정 화면은 없다 — LLM 설정은 백엔드 `backend/planforge/config.json` 소관이다.
 
 `App.tsx`는 스티키 헤더(브랜드 + `/api/health` 폴링 "API 연결됨/안 됨" 배지 +
 프로젝트 라우트에서만 `HeaderMetrics`)를 렌더한다.
@@ -123,7 +123,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 | `ProjectsPage` | 목록. 생성 모달(슬러그 `^[a-z0-9][a-z0-9-]*$`, ≤64자 — 백엔드와 동일 검증), 삭제 확인 팝업은 **프로젝트 제목을 정확히 타이핑해야 활성화**. |
 | `ProjectPage` | 셸 — 탭 순서: 소스 → 인터뷰 → 계획정의(plan.md) → 산출물 → 검수. `useTabBadges`가 마운트 1회 `Promise.allSettled`로 카운트 배지 수집(plan 배지는 `vNN`만 — D9). |
 | `SourcesPanel` | 프로젝트 소스(업로드/삭제) + 글로벌 소스(읽기 전용). `.md .txt .json .csv`, 2MB. `data-testid="source-file-input"`은 e2e 셀렉터 계약. |
-| `InterviewPanel` | 인터뷰 채팅. **모든 진행이 `run()` 한 경로** = POST → SSE 소비(D6). 페이즈: `hypothesis → awaiting_answers → fact_gate → key_message_gate → plan_review → approved/failed`. 카드: `AnswersCard`(선택지 답변) · `FactGate`(수정 가능 승인/반려) · `KeyGate`(핵심 메시지 3개) · `CompactCard`(팩트 압축). 우측 `FactSidePanel`은 조회 전용 — 팩트 확립은 게이트에서만(원칙 4 게이트 우회 금지). 세션 id는 `localStorage["ra-session-<pid>"]` 보관(서버 데이터가 권위). |
+| `InterviewPanel` | 인터뷰 채팅. **모든 진행이 `run()` 한 경로** = POST → SSE 소비(D6). 페이즈: `hypothesis → awaiting_answers → fact_gate → key_message_gate → plan_review → approved/failed`. 카드: `AnswersCard`(선택지 답변) · `FactGate`(수정 가능 승인/반려) · `KeyGate`(핵심 메시지 3개) · `CompactCard`(팩트 압축). 우측 `FactSidePanel`은 조회 전용 — 팩트 확립은 게이트에서만(원칙 4 게이트 우회 금지). 세션 id는 `localStorage["pf-session-<pid>"]` 보관(서버 데이터가 권위). |
 | `PlanPanel` | 세대 리스트 + 툴바(보기/편집/이전 세대 대비). 토글: 보기·diff 모드는 `코드\|뷰어`, 편집 모드는 `코드\|분할\|뷰어`. 저장은 항상 `POST /plans/{id}/revise`로 **새 세대 DRAFT** 생성(덮어쓰기 없음), 승인은 draft일 때만 `POST /plans/{id}/approve`. 에디터 `CmEditor` · diff `CmDiff`(CodeMirror MergeView) · 미리보기 `MarkdownPreview`. |
 | `OutputsPanel` | 승인 plan 필요. "PPT 생성(slides)" / "문서 생성(MD·HTML·DOCX)" → job 큐잉(202) → **1.5초 폴링**. 미리보기: md는 fetch 후 렌더, html은 iframe, pptx/docx는 다운로드. 채번 `문서제목_vNN.확장자` 절대 덮어쓰기 금지(원칙 5). job 목록에 유형(`derive_build/review/plan_revise`)·오류분류 표시. |
 | `ReviewPanel` | "검수 실행" → job 폴링 → 리포트 목록(🔴/🟡/⚪ 카운트) → 상세에서 **발견사항 체크박스 선택 → `POST /api/plans/{id}/revise-from-review`**로 plan 새 세대 생성(FR-4.3 SSOT 게이트). |
@@ -144,7 +144,7 @@ fetch. job 진행은 `setInterval(1500)` 폴링(`pollRef`로 정리), 헤더 메
      폰트 `"Malgun Gothic"`, 크기 4단(`--fs-title:28px ← SIZE_SLIDE_TITLE`),
      `--margin:24px ← MARGIN 0.6in`.
   2. **화면 전용 토큰**(미러 아님) — surface/shadow/space/radius/`--header-h`/`--container`.
-- **토큰 4종 세트 계약(원칙 7)**: SSOT는 `backend/reportagent/builders/theme.py`이며
+- **토큰 4종 세트 계약(원칙 7)**: SSOT는 `backend/planforge/builders/theme.py`이며
   theme.py(권위) · 빌더 리터럴 · `tests/fixtures` · `frontend/tokens.css`를 **동시
   점검·수정**해야 한다. 절차는 `docs/token-checklist.md` — 하나만 고치는 PR은 반려된다.
 - 반응형은 미디어쿼리(768/1024/800/480px 등)로 처리한다.

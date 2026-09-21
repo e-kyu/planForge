@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace as NS
 
-from reportagent.llm import ProfileConfig, get_provider
+from planforge.llm import ProfileConfig, get_provider
 
 
 def test_base_url_env_override(monkeypatch):

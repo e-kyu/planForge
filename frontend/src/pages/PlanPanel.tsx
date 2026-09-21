@@ -50,7 +50,7 @@ export default function PlanPanel({ pid }: { pid: number }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [planCollapsed, setPlanCollapsed] = useStoredBoolean("ra-plan-side-collapsed", false);
+  const [planCollapsed, setPlanCollapsed] = useStoredBoolean("pf-plan-side-collapsed", false);
   const headBtn = useRef<HTMLButtonElement>(null);
   const railBtn = useRef<HTMLButtonElement>(null);
 

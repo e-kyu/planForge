@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """검수 에이전트 — LLM 내용 검수 부분 (FR-4, review-doc.md 이식).
 
-결정론 검수(reportagent/review.py·numcheck·워커의 세대 대응)가 못 보는
+결정론 검수(planforge/review.py·numcheck·워커의 세대 대응)가 못 보는
 내용 판단(주장 강도 왜곡·창작·팩트 불일치·문체)을 LLM에 위임한다.
 
 역할 분리: LLM은 판단만 한다 — plan 수정·팩트 적립·재생성은 사용자 승인 후

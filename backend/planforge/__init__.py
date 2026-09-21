@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""report-agent 코어 엔진 (M1).
+"""PlanForge 코어 엔진 (M1).
 
 구성:
 - builders/: legacy 빌더 원형 (build_ppt.py·build_doc.py·theme.py) — 로직 무변경 이식

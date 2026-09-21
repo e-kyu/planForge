@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""reportagent CLI (M1).
+"""planforge CLI (M1).
 
 사용법 (backend/에서 실행):
-  python -m reportagent parse <plan.md> [--doc 문서명]
-  python -m reportagent numcheck <plan.md> --slides <slides.json> [--doc 문서명]
-  python -m reportagent numcheck <plan.md> --report <report.json> [--doc 문서명]
-  python -m reportagent build-ppt <slides.json> [output_dir]
-  python -m reportagent build-doc <report.json> <md|html|docx> [output_dir]
+  python -m planforge parse <plan.md> [--doc 문서명]
+  python -m planforge numcheck <plan.md> --slides <slides.json> [--doc 문서명]
+  python -m planforge numcheck <plan.md> --report <report.json> [--doc 문서명]
+  python -m planforge build-ppt <slides.json> [output_dir]
+  python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 LLM derive 단계는 M1 후반(provider 추상화 계층)에서 추가한다.
 """
@@ -80,12 +80,12 @@ def cmd_derive(args) -> int:
     from .derive import Deriver, UNCONFIRMED_MARK
     from .llm import get_provider, load_config
 
-    config_path = (args.config or os.environ.get("REPORTAGENT_CONFIG")
+    config_path = (args.config or os.environ.get("PLANFORGE_CONFIG")
                    or Path(__file__).resolve().parent / "config.json")
     if not Path(config_path).is_file():
         print(f"오류: LLM 설정 파일이 없습니다: {config_path}")
-        print("backend/reportagent/config.example.json을 config.json으로 복사해 모델을 지정하거나,")
-        print("환경변수 REPORTAGENT_CONFIG로 경로를 지정하세요.")
+        print("backend/planforge/config.example.json을 config.json으로 복사해 모델을 지정하거나,")
+        print("환경변수 PLANFORGE_CONFIG로 경로를 지정하세요.")
         return 2
     profiles = load_config(config_path)
     provider = get_provider(profiles["derive"])
@@ -131,7 +131,7 @@ def cmd_build_doc(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="reportagent", description="report-agent 코어 엔진 (M1)")
+    p = argparse.ArgumentParser(prog="planforge", description="PlanForge 코어 엔진 (M1)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sp = sub.add_parser("parse", help="plan.md 파싱·필터·골격 검증")
@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     sd.add_argument("--fmts", nargs="*", choices=["md", "html", "docx"], help="report 빌드 포맷 (기본 3종 전부)")
     sd.add_argument("--no-build", action="store_true", help="work/*.json 생성까지만 수행")
     sd.add_argument("--allow-unconfirmed", action="store_true", help="(미확정) 표기를 그대로 진행")
-    sd.add_argument("--config", help="LLM 설정 파일 경로 (기본: REPORTAGENT_CONFIG > backend/reportagent/config.json)")
+    sd.add_argument("--config", help="LLM 설정 파일 경로 (기본: PLANFORGE_CONFIG > backend/planforge/config.json)")
     sd.set_defaults(fn=cmd_derive)
 
     s1 = sub.add_parser("build-ppt", help="slides.json → PPTX (legacy 빌더 원형)")

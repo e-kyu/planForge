@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from reportagent.plan import parse_plan_file
+from planforge.plan import parse_plan_file
 
 FIX = Path(__file__).parent / "fixtures"
 PLAN = FIX / "plan.sample.md"
@@ -88,7 +88,7 @@ def test_source_string_verbatim(plan):
 
 
 def test_rejects_unknown_type():
-    from reportagent.plan import parse_plan_text
+    from planforge.plan import parse_plan_text
     text = PLAN.read_text(encoding="utf-8").replace("[유형: 표지]", "[유형: 서론]")
     with pytest.raises(Exception, match="알 수 없는 유형"):
         parse_plan_text(text)

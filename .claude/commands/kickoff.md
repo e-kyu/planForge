@@ -14,7 +14,7 @@ description: 계약 확인 후 현재 진행 위치를 파악하고 작업 계�
 
 ## 제약
 
-- 빌더(`backend/reportagent/builders/`)는 로직 변경 금지 — 경로/워크스페이스 주입만
+- 빌더(`backend/planforge/builders/`)는 로직 변경 금지 — 경로/워크스페이스 주입만
   어댑터로 처리한다.
 - LLM 호출은 `openai` SDK 기반 provider 추상화 계층으로만 한다.
 - 이식 원문(docs/legacy)은 2026-09 정리로 삭제되었다. 원문이 필요하면 git 이력에서

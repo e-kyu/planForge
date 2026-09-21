@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from reportagent.derive import Deriver, DeriveError, render_slides_text
-from reportagent.plan import filter_slides, parse_plan_file
+from planforge.derive import Deriver, DeriveError, render_slides_text
+from planforge.plan import filter_slides, parse_plan_file
 
 FIX = Path(__file__).parent / "fixtures"
 PLAN = FIX / "plan.sample.md"
@@ -147,7 +147,7 @@ CHART_PLAN = """# 제안서 기획 (차트 샘플)
 
 
 def _chart_slides():
-    from reportagent.plan import filter_slides
+    from planforge.plan import filter_slides
 
     plan = parse_plan_file(_md_to_tmp(CHART_PLAN))
     return filter_slides(plan.slides, plan.docs[0])
@@ -241,7 +241,7 @@ def test_derive_report_success_and_build(tmp_path):
 
 def test_derive_rejects_doc_not_in_plan(tmp_path):
     llm = FakeLLM([])
-    from reportagent.plan import PlanError
+    from planforge.plan import PlanError
     with pytest.raises(PlanError, match="산출 문서"):
         Deriver(llm, tmp_path).derive(PLAN, "slides", "보고서")
 
@@ -259,22 +259,22 @@ def test_render_slides_text_verbatim():
 # ---------------------------------------------------------------- provider 설정
 
 def test_load_config_profiles():
-    from reportagent.llm import load_config
-    profiles = load_config(Path(__file__).parent.parent / "backend" / "reportagent" / "config.example.json")
+    from planforge.llm import load_config
+    profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
     assert set(profiles) == {"interview", "derive", "review"}
     assert profiles["derive"].provider == "ollama"
     assert profiles["derive"].model == "gemma4:26b"
 
 
 def test_provider_requires_model():
-    from reportagent.llm import ProfileConfig, get_provider
+    from planforge.llm import ProfileConfig, get_provider
     with pytest.raises(ValueError, match="모델"):
         get_provider(ProfileConfig(provider="ollama", model=""))
 
 
 def test_config_file_missing_message(tmp_path, monkeypatch):
     """config.json이 없으면 안내와 함께 exit 2 (cmd_derive 레벨)."""
-    from reportagent import __main__ as m
+    from planforge import __main__ as m
     ns = m.argparse.Namespace(plan=str(PLAN), workspace=str(tmp_path), kind="slides",
                               doc=None, fmts=None, no_build=True, allow_unconfirmed=False,
                               config=str(tmp_path / "none.json"))

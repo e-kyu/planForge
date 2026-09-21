@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "report-agent",
+    "title": "PlanForge",
     "description": "기획 문서 생성 에이전트 웹 서비스 (M2 백엔드)",
     "version": "0.2.0"
   },

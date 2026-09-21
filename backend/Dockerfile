@@ -1,4 +1,4 @@
-# report-agent 백엔드 — API + 단일 워커(프로세스 내 asyncio) 하나의 컨테이너.
+# PlanForge 백엔드 — API + 단일 워커(프로세스 내 asyncio) 하나의 컨테이너.
 FROM python:3.12-slim
 WORKDIR /srv/backend
 

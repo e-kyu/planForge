@@ -52,7 +52,7 @@ export default function App() {
           <span className="brand-chip" aria-hidden="true">
             <Bot />
           </span>
-          <h1 className="app-title">report-agent</h1>
+          <h1 className="app-title">PlanForge</h1>
         </a>
         <span className="spacer" />
         {pid > 0 && hasTab && <HeaderMetrics pid={pid} />}

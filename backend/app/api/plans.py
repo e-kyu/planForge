@@ -14,8 +14,8 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from reportagent.plan import PlanError
-from reportagent.plan import Plan as ParsedPlan
+from planforge.plan import PlanError
+from planforge.plan import Plan as ParsedPlan
 
 from ..db import get_db
 from ..errors import http_404, http_409

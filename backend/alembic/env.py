@@ -10,7 +10,7 @@ from pathlib import Path
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# backend/를 import 경로에 추가 (app, reportagent 모두)
+# backend/를 import 경로에 추가 (app, planforge 모두)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.db import Base  # noqa: E402

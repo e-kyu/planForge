@@ -42,7 +42,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [answers, setAnswers] = useState<Record<number, { option?: number; free?: string }>>({});
-  const [factCollapsed, setFactCollapsed] = useStoredBoolean("ra-fact-side-collapsed", false);
+  const [factCollapsed, setFactCollapsed] = useStoredBoolean("pf-fact-side-collapsed", false);
   const feed = useRef<HTMLDivElement>(null);
 
   const sid = session?.id ?? null;
@@ -51,7 +51,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     // 세션 복원 — per-viewer 편의(localStorage). 서버 데이터가 권위다.
     let sidStored: number | null = null;
     try {
-      sidStored = Number(localStorage.getItem(`ra-session-${pid}`)) || null;
+      sidStored = Number(localStorage.getItem(`pf-session-${pid}`)) || null;
     } catch {
       /* 저장소 접근 불가 — 무시 */
     }
@@ -60,7 +60,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         .then((s) => setSession(s))
         .catch(() => {
           try {
-            localStorage.removeItem(`ra-session-${pid}`);
+            localStorage.removeItem(`pf-session-${pid}`);
           } catch {
             /* 무시 */
           }
@@ -95,7 +95,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     try {
       const s = await apiPost<Session>(`/api/projects/${pid}/interview/sessions`);
       try {
-        localStorage.setItem(`ra-session-${pid}`, String(s.id));
+        localStorage.setItem(`pf-session-${pid}`, String(s.id));
       } catch {
         /* 무시 */
       }

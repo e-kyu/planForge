@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from reportagent.builders import build_doc, build_ppt
+from planforge.builders import build_doc, build_ppt
 
 FIX = Path(__file__).parent / "fixtures"
 

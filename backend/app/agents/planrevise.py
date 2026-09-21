@@ -16,8 +16,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reportagent.plan import Plan as ParsedPlan
-from reportagent.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from planforge.plan import Plan as ParsedPlan
+from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
 
 from .tools import WRITE_PLAN_TOOL
 
@@ -60,7 +60,7 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
     """선택 발견사항을 반영한 plan 마크다운을 생성한다. 반환: (markdown, 파싱 결과).
 
     도구 누락 시 nudge 1회, 포맷 검증 실패 시 도구 호출 결과 프로토콜로 피드백을
-    되돌려 재시도 (최대 MAX_ATTEMPTS — reportagent/derive.py의 재변환 루프와 동일).
+    되돌려 재시도 (최대 MAX_ATTEMPTS — planforge/derive.py의 재변환 루프와 동일).
     소진 시 PlanReviseError.
     """
     system = (PROMPTS_DIR / "plan_revise.md").read_text(encoding="utf-8-sig")
@@ -73,7 +73,7 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
         """도구 호출 결과를 프로토콜대로 되돌린다 (assistant.tool_calls → tool 응답).
 
         tool 응답 없이 user 피드백만 붙이면 OpenAI 호환 릴레이가 처리하지 못한다
-        (reportagent/derive.py::Deriver._run_llm._feedback 주석 참조).
+        (planforge/derive.py::Deriver._run_llm._feedback 주석 참조).
         """
         messages.append({"role": "assistant", "content": resp_content or None,
                          "tool_calls": [{"id": f"call_{TOOL_NAME}", "type": "function",

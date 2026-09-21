@@ -15,8 +15,8 @@ from pathlib import Path
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from reportagent.derive import DeriveError, Deriver
-from reportagent.plan import PlanError, parse_plan_file
+from planforge.derive import DeriveError, Deriver
+from planforge.plan import PlanError, parse_plan_file
 
 from .agents.planrevise import PlanReviseError, run_plan_revise, validate_plan_markdown
 from .models import (
@@ -152,10 +152,10 @@ def _derive_build(ctx: JobContext, session: Session, job: Job) -> dict:
     # 결정론 빌드 — 원자적 실행 (D7). 빌더 로직은 건드리지 않는다.
     if kind == "slides":
         def run_builder(tmp: Path):
-            from reportagent.builders import build_ppt
+            from planforge.builders import build_ppt
             build_ppt.build(str(res.work_path), str(tmp))
     else:
-        from reportagent.builders import build_doc
+        from planforge.builders import build_doc
         def run_builder(tmp: Path):
             for fmt in (fmts or ("md", "html", "docx")):
                 build_doc.build(str(res.work_path), fmt, str(tmp))
@@ -208,9 +208,9 @@ def _review(ctx: JobContext, session: Session, job: Job) -> dict:
     """검수: 결정론(구조·수치·태그·팩트·세대) + LLM 내용 검수 → ReviewReport 1건."""
     import json as _json
 
-    from reportagent.numcheck import check_report, check_slides
-    from reportagent.plan import filter_slides, parse_plan_file
-    from reportagent.review import check_doc_tags, check_facts
+    from planforge.numcheck import check_report, check_slides
+    from planforge.plan import filter_slides, parse_plan_file
+    from planforge.review import check_doc_tags, check_facts
 
     payload = job.payload
     project = session.get(Project, job.project_id)

@@ -1,4 +1,4 @@
-# report-agent 프론트엔드 — Vite 빌드 후 nginx로 서빙 + /api 프록시.
+# PlanForge 프론트엔드 — Vite 빌드 후 nginx로 서빙 + /api 프록시.
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./

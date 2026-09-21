@@ -1,5 +1,5 @@
 /*
- * 디자인 토큰 — backend/reportagent/builders/theme.py의 CSS 변수 렌더.
+ * 디자인 토큰 — backend/planforge/builders/theme.py의 CSS 변수 렌더.
  *
  * 원칙 7 (디자인 토큰 4종 세트): 권위는 theme.py다. theme.py 토큰 변경 시
  * 이 파일의 대응 값을 반드시 함께 고친다 (문서·토큰·렌더러·샘플 + 화면).

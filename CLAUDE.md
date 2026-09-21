@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# report-agent 개발 규칙
+# PlanForge 개발 규칙
 
 이 저장소는 Claude Code 기반 기획 문서 생성 에이전트(docs/legacy, 원문은 git 이력에만
 존재)를 Claude Code 없이 동작하는 웹 서비스로 이식한 프로젝트다.
@@ -36,7 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   실행 → 결정론 빌드·채번 → 검수(`ReviewReport`).
 - **SSOT의 실제 구현**: plan 본문의 원본은 DB `Plan.markdown`이다. `workspace.py`의
   `write_plan_mirror`가 워크스페이스에 기록하는 `plan.md`는 Deriver·빌더가 파일로 읽는
-  미러일 뿐. 파생 경로: Plan 레코드 → 미러 → Deriver(`reportagent/derive.py`) → 원자적
+  미러일 뿐. 파생 경로: Plan 레코드 → 미러 → Deriver(`planforge/derive.py`) → 원자적
   빌드(`atomic_build`) → 채번 등록(Build 행).
 - **데이터 체인 (추적성)**: `Project → InterviewSession → Fact → Plan(세대) →
   Derivative → Build → ReviewReport`. 모든 산출물은 자신의 plan 세대를 역참조한다.
@@ -46,23 +46,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   BEGIN IMMEDIATE 기반 재설계 전까지 도입하지 않는다. 시작 시 `requeue_stale_running`이
   이전 프로세스의 running 잔재를 재큐잉한다.
 - **LLM 계층**: `app/agents/llm.py LLMRegistry`가 프로필(interview/derive/review)별
-  provider·모델을 `REPORTAGENT_CONFIG`(기본 `backend/reportagent/config.json`, gitignored —
+  provider·모델을 `PLANFORGE_CONFIG`(기본 `backend/planforge/config.json`, gitignored —
   예시 `config.example.json`)에서 읽는다. provider는 openai SDK 기반 OpenAI 호환 단일
   프로토콜. 테스트는 `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로
   fake LLM을 주입한다.
 - **프롬프트 위치**: 인터뷰·검수·압축은 `backend/app/agents/prompts/*.md`, 파생물 변환은
-  `backend/reportagent/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는 런타임
+  `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는 런타임
   LLM 프롬프트다.
 
 ## 개발 규칙
 
 - 상태: **M1~M4 코드 완료 (2026-09-19)**. 남은 것: 브라우저 e2e 완주.
-- 빌더 `backend/reportagent/builders/{build_ppt,build_doc,theme}.py`는 legacy scripts의
+- 빌더 `backend/planforge/builders/{build_ppt,build_doc,theme}.py`는 legacy scripts의
   바이트 동일 이식본 — **로직 변경 금지**, 경로/워크스페이스 주입만 어댑터로 처리.
 - LLM 호출은 `openai` SDK 기반 provider 추상화 계층으로만 한다. anthropic SDK 사용 금지.
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
   legacy `_sanitize_title` 규칙 유지.
-- 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/reportagent/config.json`
+- 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/planforge/config.json`
   등 ignored 경로가 섞이지 않았는지 확인.
 
 ## 테스트
@@ -82,8 +82,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 명령어
 
 - 슬래시: `/kickoff`(세션 진입점) · `/contract`(계약 테스트) · `/numcheck`(수치 무결성)
-- CLI (backend/에서): `python -m reportagent parse|numcheck|build-ppt|build-doc|derive ...`
-- DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/reportagent.db`.
+- CLI (backend/에서): `python -m planforge parse|numcheck|build-ppt|build-doc|derive ...`
+- DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/planforge.db`.
   스키마 변경은 `alembic revision`으로 마이그레이션 추가(개발용 `init_db`는 alembic 대체로만).
 - 서버: `uvicorn app.main:app --reload` (backend/) · `npm run dev` (frontend/, /api 프록시)
 - 타입 갱신: backend/ `python scripts/export_openapi.py` → frontend/ `npm run gen:types`
