@@ -1,8 +1,8 @@
 {
   "profiles": {
-    "interview": { "provider": "ollama", "model": "gemma4:26b" },
-    "derive": { "provider": "ollama", "model": "gemma4:26b" },
-    "review": { "provider": "ollama", "model": "gemma4:26b" },
-    "plan_revise": { "provider": "ollama", "model": "gemma4:26b" }
+    "interview": { "provider": "ollama", "model": "glm-5.3-flash:cloud" },
+    "derive": { "provider": "ollama", "model": "glm-5.3-flash:cloud" },
+    "review": { "provider": "ollama", "model": "glm-5.3-flash:cloud" },
+    "plan_revise": { "provider": "ollama", "model": "glm-5.3-flash:cloud" }
   }
 }
