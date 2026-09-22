@@ -32,7 +32,7 @@ export default function App() {
 
   let body: ReactNode;
   if (route === "/" || route.startsWith("/projects")) {
-    const tab = (tabParam && TAB_KEYS.has(tabParam) ? tabParam : "interview") as ProjectTab;
+    const tab = (tabParam && TAB_KEYS.has(tabParam) ? tabParam : "sources") as ProjectTab;
     body = pid > 0 && hasTab ? (
       <ProjectPage pid={pid} tab={tab} />
     ) : pid > 0 ? (
@@ -67,7 +67,7 @@ export default function App() {
 
 function ProjectRedirect({ pid }: { pid: number }) {
   useEffect(() => {
-    window.location.replace(`#/projects/${pid}/interview`);
+    window.location.replace(`#/projects/${pid}/sources`);
   }, [pid]);
   return null;
 }

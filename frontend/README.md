@@ -81,7 +81,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 | 라우트 | 화면 |
 |---|---|
 | `#/` | 프로젝트 목록 |
-| `#/projects/:id` | → `#/projects/:id/interview`로 치환 (ProjectRedirect) |
+| `#/projects/:id` | → `#/projects/:id/sources`로 치환 (ProjectRedirect) |
 | `#/projects/:id/:tab` | 탭 — `interview · plan · outputs · review · sources` |
 
 설정 화면은 없다 — LLM 설정은 백엔드 `backend/planforge/config.json` 소관이다.
