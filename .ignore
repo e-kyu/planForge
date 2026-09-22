@@ -1,0 +1,23 @@
+# Claude Code 파일 검색(Grep) 제외 목록 — ripgrep .ignore 규식
+# untracked 런타임/산출물 경로(workspaces/, data/, node_modules/ 등)는 .gitignore가
+# 이미 처리하므로, 여기엔 "커밋된 파일 중 콘텐츠 검색에 불필요한 것"만 둔다.
+# LLM API 키 등 읽기 자체를 차단하려면 .claude/settings.json의 permissions.deny 사용.
+
+# 파생물/락파일 — 원본에서 재생성되며 콘텐츠 검색 가치 없음
+frontend/package-lock.json
+frontend/openapi.json
+
+# 바이너리/미디어 — 내용 검색 무의미
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.webp
+*.pdf
+*.zip
+*.mp4
+*.webm
+*.woff
+*.woff2
+*.ttf

@@ -22,6 +22,17 @@
       "PowerShell(git log:*)",
       "PowerShell(git add:*)",
       "PowerShell(git commit:*)"
+    ],
+    "deny": [
+      "Read(./.env*)",
+      "Read(./backend/planforge/config.json)",
+      "Read(./data/**)",
+      "Read(./**/*.db)",
+      "Read(./**/*.db-wal)",
+      "Read(./**/*.db-shm)",
+      "Edit(./.env*)",
+      "Edit(./backend/planforge/config.json)",
+      "Edit(./data/**)"
     ]
   },
   "hooks": {
