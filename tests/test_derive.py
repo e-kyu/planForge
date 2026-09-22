@@ -256,6 +256,18 @@ def test_render_slides_text_verbatim():
     assert "interview-log [2026-09-09] 효과 수치 정책 (샘플)" in text  # 근거 무변경
 
 
+def test_render_slides_text_design_plan_verbatim():
+    """설계 결정 샘플 — 결정표·(미확정)·구성 표기가 derive LLM 입력에 그대로 나온다."""
+    design = FIX / "plan.design.sample.md"
+    plan = parse_plan_file(design)
+    slides = filter_slides(plan.slides, "개발설계서")
+    text = render_slides_text(plan, slides, "개발설계서")
+    assert "  - 언어 | Python 3.12 | 팀 경험·라이브러리 풍부 | 확정" in text   # 결정표 원문
+    assert "  - 캐시 | Redis | 대안 인메모리 폴백은 성능 미달 | (미확정)" in text
+    assert "  - 사용자 계층 | 웹 UI, 인터뷰 채팅 화면" in text                 # 구성 표기 무변경
+    assert "설계 결정(아키텍처·스택·규약)의 확정" in text                      # 목적 무변경
+
+
 # ---------------------------------------------------------------- provider 설정
 
 def test_load_config_profiles():
@@ -263,7 +275,7 @@ def test_load_config_profiles():
     profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
     assert set(profiles) == {"interview", "derive", "review"}
     assert profiles["derive"].provider == "ollama"
-    assert profiles["derive"].model == "gemma4:26b"
+    assert profiles["derive"].model == "glm-5.3-flash:cloud"  # config.example.json 샘플 모델과 동기
 
 
 def test_provider_requires_model():

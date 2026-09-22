@@ -61,3 +61,22 @@ def test_single_doc_plan_defaults():
     plan.slides = [Slide(no=1, type="cover", title="t")]
     assert filter_slides(plan.slides, "제안서") == plan.slides
     assert filter_slides(plan.slides, "개발설계서") == plan.slides  # 태그 없음 = 전체 문서 포함
+
+
+# ------------------------------------------------------- 개발설계서 설계 결정 샘플
+
+@pytest.fixture(scope="module")
+def design_plan():
+    return parse_plan_file(FIX / "plan.design.sample.md")
+
+
+def test_design_plan_filter_and_skeleton(design_plan):
+    """설계 결정 슬라이드(결정표·구성·제약·비목표)는 개발설계서 필터에만 나온다 (원칙 6)."""
+    proposal = filter_slides(design_plan.slides, "제안서")
+    design = filter_slides(design_plan.slides, "개발설계서")
+    assert [s.no for s in proposal] == [1, 3, 5, 6, 10]
+    assert [s.no for s in design] == [2, 4, 5, 6, 7, 8, 9, 11]
+    assert {s.no for s in design if s.type == "table"} == {7, 8}   # 설계 결정표
+    assert not ({7, 8, 9} & {s.no for s in proposal})              # 제안서 필터에는 없다
+    for slides in (proposal, design):
+        validate_skeleton(slides)  # 양 문서 골격 통과 (원칙 8) — 예외 없음
