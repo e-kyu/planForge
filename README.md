@@ -4,9 +4,6 @@
 **기획서(plan)** 가 만들어지며, 승인 한 번으로 **PPTX·MD·HTML·DOCX 산출물**이
 결정론 빌더에 의해 채번 생성되는 기획 문서 생성 웹 서비스다.
 
-원래 Claude Code 위에서 동작하던 에이전트(`/plan-doc`, `/make-ppt`, `/make-doc`,
-`/review-doc`)를 **Claude Code 없이 브라우저에서 동작하도록** 이식한 프로젝트다.
-
 ```
 [브라우저]  프로젝트 목록 · 인터뷰 채팅(선택지 카드) · plan 뷰어/에디터 · 산출물 갤러리 · 검수 리포트
      │ REST + SSE
@@ -54,7 +51,7 @@ backend/                  FastAPI 백엔드 + 코어 엔진
     worker.py             단일 백그라운드 워커 (빌드 직렬화 — 멀티 워커 금지)
   planforge/            M1 코어 엔진 (CLI 진입점 `python -m planforge`)
     plan/                 plan.md 파서·문서 필터·골격 검증
-    builders/             build_ppt.py · build_doc.py · theme.py (legacy 바이트 동일 이식본)
+    builders/             build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
     llm/                  OpenAI 호환 provider 추상화
     derive.py, review.py, numcheck.py
   alembic/                DB 마이그레이션
@@ -66,11 +63,10 @@ frontend/                 React 19 + TypeScript (Vite)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
-docs/                     보조 문서 (token-checklist.md — 이식 원문 docs/legacy는
-                          git 이력에만 보존)
+docs/                     보조 문서 (token-checklist.md)
 tests/                    pytest (계약 테스트 fixture 포함)
-AGENT-DEV-REQUEST.md      개발 요청서 (기능 요구사항·수용 기준의 원전)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개)
+quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
 docker-compose.yml        배포 스택 (backend · frontend · ollama)
 ```
 
@@ -243,7 +239,7 @@ python -m planforge numcheck <plan.md> --report <report.json> [--doc 문서명]
 python -m planforge build-ppt <slides.json> [output_dir]
 python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
-# LLM 변환 + 검증 게이트 + 빌드 (make-ppt/make-doc 이식)
+# LLM 변환 + 검증 게이트 + 빌드
 python -m planforge derive <plan.md> --workspace <dir> --kind slides|report `
     [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]
 ```
@@ -279,10 +275,10 @@ LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 # 저장소 루트에서 (conftest.py가 backend를 import 경로에 추가)
 pytest
 
-# 빌더 회귀(계약 테스트) — tests/fixtures/*.sample.json이 legacy 산출물과 동일성을 잠근다
-pytest tests/ -k contract   # 또는 슬래시 커맨드 /contract
+# 빌더 회귀(계약 테스트) — tests/fixtures/*.sample.json이 빌더 산출물의 동일성을 잠근다
+pytest tests/ -k contract
 
-# 수치 무결성 대조 검증 (슬래시 커맨드 /numcheck)
+# 수치 무결성 대조 검증
 pytest tests/test_numcheck.py
 ```
 

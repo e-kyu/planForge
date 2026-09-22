@@ -1,6 +1,6 @@
 # frontend — PlanForge 웹 UI
 
-React 19 + TypeScript + Vite 6로 만든 SPA다. **의존성 최소**가 설계 원칙(요청서 §3.1)이라
+React 19 + TypeScript + Vite 6로 만든 SPA다. **의존성 최소**가 설계 원칙이라
 라우터·상태관리·UI 컴포넌트 라이브러리 없이 — 자체 해시 라우터, 플레인 훅 상태,
 플레인 CSS 8파일로 구성되어 있다. 아이콘은 `lucide-react`만 허용된다.
 
@@ -91,7 +91,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 
 ## API 클라이언트 & 타입 계약 (`src/api/`)
 
-계약 잠금 파이프라인(요청서 §3.1) — 백엔드 API 스키마가 바뀌면 반드시 2단계 재생성:
+계약 잠금 파이프라인 — 백엔드 API 스키마가 바뀌면 반드시 2단계 재생성:
 
 ```
 ① backend/ 에서  python scripts/export_openapi.py   →  frontend/openapi.json 덤프
@@ -107,7 +107,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 
 ### SSE (인터뷰 턴)
 
-- **EventSource 미사용** — EventSource는 GET만 지원하지만 인터뷰 턴 계약(설계 D6)은
+- **EventSource 미사용** — EventSource는 GET만 지원하지만 인터뷰 턴 계약은
   "POST의 응답이 곧 SSE 스트림"이므로 `fetch` + `ReadableStream`을 직접 파싱한다
   (`client.ts`의 `apiSSE` / `parseSSE` — `\n\n` 프레임에서 `event:`/`data:` 분해).
 - 이벤트: `token`(스트리밍 텍스트 누적) · `error` · 카드/상태 이벤트. 카드 이벤트는
@@ -121,9 +121,9 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 | 패널 | 내용 |
 |---|---|
 | `ProjectsPage` | 목록. 생성 모달(슬러그 `^[a-z0-9][a-z0-9-]*$`, ≤64자 — 백엔드와 동일 검증), 삭제 확인 팝업은 **프로젝트 제목을 정확히 타이핑해야 활성화**. |
-| `ProjectPage` | 셸 — 탭 순서: 소스 → 인터뷰 → 계획정의(plan.md) → 산출물 → 검수. `useTabBadges`가 마운트 1회 `Promise.allSettled`로 카운트 배지 수집(plan 배지는 `vNN`만 — D9). |
+| `ProjectPage` | 셸 — 탭 순서: 소스 → 인터뷰 → 계획정의(plan.md) → 산출물 → 검수. `useTabBadges`가 마운트 1회 `Promise.allSettled`로 카운트 배지 수집(plan 배지는 `vNN`만). |
 | `SourcesPanel` | 프로젝트 소스(업로드/삭제) + 글로벌 소스(읽기 전용). `.md .txt .json .csv`, 2MB. `data-testid="source-file-input"`은 e2e 셀렉터 계약. |
-| `InterviewPanel` | 인터뷰 채팅. **모든 진행이 `run()` 한 경로** = POST → SSE 소비(D6). 페이즈: `hypothesis → awaiting_answers → fact_gate → key_message_gate → plan_review → approved/failed`. 카드: `AnswersCard`(선택지 답변) · `FactGate`(수정 가능 승인/반려) · `KeyGate`(핵심 메시지 3개) · `CompactCard`(팩트 압축). 우측 `FactSidePanel`은 조회 전용 — 팩트 확립은 게이트에서만(원칙 4 게이트 우회 금지). 세션 id는 `localStorage["pf-session-<pid>"]` 보관(서버 데이터가 권위). |
+| `InterviewPanel` | 인터뷰 채팅. **모든 진행이 `run()` 한 경로** = POST → SSE 소비. 페이즈: `hypothesis → awaiting_answers → fact_gate → key_message_gate → plan_review → approved/failed`. 카드: `AnswersCard`(선택지 답변) · `FactGate`(수정 가능 승인/반려) · `KeyGate`(핵심 메시지 3개) · `CompactCard`(팩트 압축). 우측 `FactSidePanel`은 조회 전용 — 팩트 확립은 게이트에서만(원칙 4 게이트 우회 금지). 세션 id는 `localStorage["pf-session-<pid>"]` 보관(서버 데이터가 권위). |
 | `PlanPanel` | 세대 리스트 + 툴바(보기/편집/이전 세대 대비). 토글: 보기·diff 모드는 `코드\|뷰어`, 편집 모드는 `코드\|분할\|뷰어`. 저장은 항상 `POST /plans/{id}/revise`로 **새 세대 DRAFT** 생성(덮어쓰기 없음), 승인은 draft일 때만 `POST /plans/{id}/approve`. 에디터 `CmEditor` · diff `CmDiff`(CodeMirror MergeView) · 미리보기 `MarkdownPreview`. |
 | `OutputsPanel` | 승인 plan 필요. "PPT 생성(slides)" / "문서 생성(MD·HTML·DOCX)" → job 큐잉(202) → **1.5초 폴링**. 미리보기: md는 fetch 후 렌더, html은 iframe, pptx/docx는 다운로드. 채번 `문서제목_vNN.확장자` 절대 덮어쓰기 금지(원칙 5). job 목록에 유형(`derive_build/review/plan_revise`)·오류분류 표시. |
 | `ReviewPanel` | "검수 실행" → job 폴링 → 리포트 목록(🔴/🟡/⚪ 카운트) → 상세에서 **발견사항 체크박스 선택 → `POST /api/plans/{id}/revise-from-review`**로 plan 새 세대 생성(FR-4.3 SSOT 게이트). |
@@ -182,14 +182,14 @@ LLM 호출 없음(인터뷰 세션만 생성, kick 안 함). 홈 + 특정 프로
   해시 라우팅용 SPA fallback(`try_files $uri /index.html`)을 담당한다.
 - **e2e 셀렉터 계약**: 일부 요소는 스모크 스크립트와 암묵 계약이 있다 —
   소스 업로드 `data-testid="source-file-input"`, 헤더 메트릭(`HeaderMetrics`)은
-  의도적으로 div만 렌더해 `button:has-text('승인')` 셀렉터 오염을 막는다(D9).
+  의도적으로 div만 렌더해 `button:has-text('승인')` 셀렉터 오염을 막는다.
   이 셀렉터를 건드리는 UI 변경은 스모크를 깬다.
 
 ## 개발 시 주의사항
 
 - API 스키마를 바꿨다면 **2단계 타입 재생성**(`export_openapi.py` → `gen:types`)을
   반드시 돌린다 — `types.gen.ts`를 손으로 고치지 않는다.
-- 인터뷰 턴 추가/변경 시 **POST=SSE 계약(D6)** 을 유지한다(새 EventSource GET 금지).
+- 인터뷰 턴 추가/변경 시 **POST=SSE 계약**을 유지한다(새 EventSource GET 금지).
 - plan 데이터의 유일 원본은 백엔드 DB(`plans.markdown`)다. 프론트는 plan을 고치면
   항상 revise API로 새 세대를 만들고, 직접 덮어쓰는 경로를 만들지 않는다(SSOT).
 - 디자인 토큰 변경은 `docs/token-checklist.md` 절차(4종 세트 동시 수정)를 따른다.

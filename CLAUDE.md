@@ -24,8 +24,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. **무손실 채번**: 산출물명 `<문서 제목>_vNN.<ext>`, 확장자별 독립 시퀀스, 절대 덮어쓰기
    금지(동시성 포함 — 빌드는 DB 작업 큐로 직렬화).
 6. **다중 문서 태그**: `[문서: 제안서+개발설계서]` 태그로 문서별 필터링, 문서별 목차 재채번.
-7. **디자인 토큰 3종 세트**: 색·폰트·여백 토큰 변경 시 **토큰(theme.py)·렌더러(빌더)·
-   프론트 미러(tokens.css)** 를 반드시 동시 수정 (절차: `docs/token-checklist.md`).
+7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 **토큰(theme.py)·렌더러(빌더)·
+   계약 fixture(tests/fixtures/*.sample.json)·프론트 미러(tokens.css)** 를 반드시 동시
+   점검·수정 — 좌표 규격 변경이면 fixture 갱신 (절차: `docs/token-checklist.md`).
    하나만 고치는 PR은 리뷰에서 반려.
 8. **골격 검증**: 파생물 생성 전 표지·목차·마무리·내용 슬라이드 각 1개 이상 검증, 미달 시 중단.
 
@@ -50,9 +51,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   예시 `config.example.json`)에서 읽는다. provider는 openai SDK 기반 OpenAI 호환 단일
   프로토콜. 테스트는 `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로
   fake LLM을 주입한다.
-- **프롬프트 위치**: 인터뷰·검수·압축은 `backend/app/agents/prompts/*.md`, 파생물 변환은
-  `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는 런타임
-  LLM 프롬프트다.
+- **프롬프트 위치**: 인터뷰·검수·압축·plan 재작성은 `backend/app/agents/prompts/*.md`,
+  파생물 변환은 `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는
+  런타임 LLM 프롬프트다.
+- **프론트엔드**: React 19 + TypeScript(Vite), 자체 CSS. `src/pages/`에 ProjectsPage·
+  ProjectPage와 탭 패널 5종(소스·인터뷰·plan·산출물·검수), `components/`에 CodeMirror
+  에디터·마크다운 미리보기. API 타입 `src/api/types.gen.ts`는 `npm run gen:types`로
+  갱신하는 자동 생성물이다.
 
 ## 개발 규칙
 
@@ -64,6 +69,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   legacy `_sanitize_title` 규칙 유지.
 - 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/planforge/config.json`
   등 ignored 경로가 섞이지 않았는지 확인.
+- 도구 설정: 저장소 `.ignore`(ripgrep)가 `frontend/openapi.json`·`package-lock.json`·
+  이미지 바이너리를 Grep/Glob 콘텐츠 검색에서 제외한다. `.claude/settings.json`은
+  `backend/planforge/config.json`·`data/**`·`.env*`의 Read/Edit를 deny한다(키·DB 보호).
 
 ## 테스트
 
@@ -81,6 +89,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 명령어
 
+- 가상환경: `backend/.venv` (`.vscode/settings.json`이 인터프리터로 지정).
 - 슬래시: `/kickoff`(세션 진입점) · `/contract`(계약 테스트) · `/numcheck`(수치 무결성)
 - CLI (backend/에서): `python -m planforge parse|numcheck|build-ppt|build-doc|derive ...`
 - DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/planforge.db`.

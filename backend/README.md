@@ -1,7 +1,7 @@
 # backend — PlanForge 백엔드 + M1 코어 엔진
 
-FastAPI 웹 백엔드(`app/`)와 Claude Code 없이 동작하는 기획 문서 생성 코어 엔진
-(`planforge/`)이 함께 있는 패키지다. 사용자 관점의 전체 흐름(인터뷰 → plan 승인 →
+FastAPI 웹 백엔드(`app/`)와 기획 문서 생성 코어 엔진(`planforge/`)이 함께 있는
+패키지다. 사용자 관점의 전체 흐름(인터뷰 → plan 승인 →
 빌드 → 검수)과 설치·실행 방법은 저장소 루트 [README.md](../README.md), 개발 계약
 (설계 원칙 8개)은 [CLAUDE.md](../CLAUDE.md)를 참고한다.
 
@@ -48,7 +48,7 @@ backend/
 │   ├── review.py                 결정론 검수 (문서 태그·팩트 대조)
 │   ├── plan/                     model.py · parser.py · filter.py (문서 필터·골격 검증)
 │   ├── builders/                 build_ppt.py · build_doc.py · theme.py
-│   │                             (legacy scripts의 바이트 동일 이식본 — 로직 변경 금지)
+│   │                             (계약 테스트로 고정 — 로직 변경 금지)
 │   ├── llm/                      provider.py (OpenAI 호환 단일 프로토콜)
 │   │   └── prompts/              derive_slides.md · derive_report.md
 │   ├── config.json               LLM 프로필 설정 (gitignored)
@@ -262,9 +262,8 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 ### `builders/` — 결정론 빌더 (로직 변경 금지)
 
-legacy `scripts/build_*.py`의 **바이트 동일 이식본**이다. 로직 변경은 계약 테스트
-(`/contract`, `tests/test_contract_builders.py`)가 잠그고 있다. 경로/워크스페이스
-주입만 어댑터로 처리한다.
+빌더 로직은 계약 테스트(`tests/test_contract_builders.py`)가 고정하고 있다 —
+**로직 변경 금지**. 경로/워크스페이스 주입만 어댑터로 처리한다.
 
 - `build_ppt.py`: slides.json → PPTX(python-pptx). 템플릿 해석 순서:
   `meta.template` > `<프로젝트>/assets/template.pptx` > `templates/template.pptx`,
@@ -395,7 +394,7 @@ npm run gen:types                    # openapi-typescript로 TS 타입 생성
 
 ## 개발 시 주의사항
 
-- **빌더 로직 변경 금지** — `planforge/builders/*`는 legacy의 바이트 동일 이식본.
+- **빌더 로직 변경 금지** — `planforge/builders/*`는 계약 테스트가 고정한 결정론 빌더다.
   경로/워크스페이스 주입만 어댑터로 처리.
 - **LLM은 콘텐츠 변환만** — 파일 조립·좌표 배치·채번은 결정론 코드. LLM이 pptx/docx
   바이너리를 만드는 코드는 금지.
