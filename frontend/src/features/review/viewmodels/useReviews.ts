@@ -32,6 +32,17 @@ export function useReviews(pid: number) {
 
   const jobs = jobsQ.data ?? [];
   const busy = pending || hasActive(jobs);
+  const active = hasActive(jobs);
+
+  // 활성 → 비활성 전환(검수·반영 잡 완료) 시 리포트·plan 갱신 — 원본 폴링 완료 경로 동작 보존
+  const prevActiveRef = useRef(false);
+  useEffect(() => {
+    if (prevActiveRef.current && !active) {
+      void qc.invalidateQueries({ queryKey: ["reviews", pid] });
+      void qc.invalidateQueries({ queryKey: ["plans", pid] });
+    }
+    prevActiveRef.current = active;
+  }, [active, qc, pid]);
 
   async function refresh() {
     await Promise.all([

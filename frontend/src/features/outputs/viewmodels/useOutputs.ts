@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Build, Job } from "../../../api/client";
 import { enqueueDerivative, fetchBuilds, fetchJobs, fetchOutputText, fetchPlans } from "../models/outputsApi";
@@ -6,7 +6,8 @@ import { errMsg } from "../../../shared/lib/errMsg";
 
 /* 산출물 갤러리 (FR-3.4/3.5, FR-5) — 갤러리·작업 큐·미리보기 데이터.
  * 활성 job(queued/running)이 있는 동안 jobs 쿼리를 1.5초 간격으로 폴링하고,
- * 큐가 비워지면(완료) 갤러리 데이터를 함께 갱신한다 (refetchInterval이 pollRef를 대체한다). */
+ * 큐가 비워지면(완료) 갤러리·plan 쿼리를 무효화해 갱신한다 — 원본 폴링의 완료 경로
+ * (마지막 load()에서 갤러리까지 재조회)에 해당한다. */
 
 const hasActive = (jobs: Job[] | undefined) =>
   Boolean(jobs?.some((j) => j.status === "queued" || j.status === "running"));
@@ -29,6 +30,17 @@ export function useOutputs(pid: number) {
 
   const jobs = jobsQ.data ?? [];
   const queueBusy = pending || hasActive(jobs);
+  const active = hasActive(jobs);
+
+  // 활성 → 비활성 전환(잡 완료) 시 갤러리·plan 갱신 — 원본 폴링 완료 경로 동작 보존
+  const prevActiveRef = useRef(false);
+  useEffect(() => {
+    if (prevActiveRef.current && !active) {
+      void qc.invalidateQueries({ queryKey: ["builds", pid] });
+      void qc.invalidateQueries({ queryKey: ["plans", pid] });
+    }
+    prevActiveRef.current = active;
+  }, [active, qc, pid]);
 
   async function refresh() {
     await Promise.all([
