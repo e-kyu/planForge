@@ -8,7 +8,7 @@ from sqlalchemy import ForeignKey, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db import Base
-from app.shared.types import JSONVariant, UTCDateTime, StrEnum, _enum
+from app.shared.types import JSONVariant, UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class JobType(StrEnum):
@@ -33,7 +33,7 @@ class JobErrorClass(StrEnum):
     INTERNAL = "internal"
 
 
-class Job(Base):
+class Job(UpdatedAtMixin, Base):
     __tablename__ = "jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

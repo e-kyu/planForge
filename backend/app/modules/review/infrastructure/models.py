@@ -8,10 +8,10 @@ from sqlalchemy import Boolean, ForeignKey, Integer, Text, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db import Base
-from app.shared.types import JSONVariant, UTCDateTime
+from app.shared.types import JSONVariant, UTCDateTime, UpdatedAtMixin
 
 
-class ReviewReport(Base):
+class ReviewReport(UpdatedAtMixin, Base):
     """findings는 numcheck.Finding + LLM 발견사항을 통합한 리스트
     [{code, severity, where, message, suggestion?}]. 심각도: red(사실 오류·수치
     불일치) / yellow(표현·구조) / white(선택). 수정은 plan 세대 교체(revise→approve)

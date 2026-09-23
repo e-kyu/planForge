@@ -13,7 +13,7 @@ from sqlalchemy import ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db import Base
-from app.shared.types import JSONVariant, UTCDateTime, StrEnum, _enum
+from app.shared.types import JSONVariant, UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class DerivativeKind(StrEnum):
@@ -21,7 +21,7 @@ class DerivativeKind(StrEnum):
     REPORT = "report"
 
 
-class Derivative(Base):
+class Derivative(UpdatedAtMixin, Base):
     __tablename__ = "derivatives"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -37,7 +37,7 @@ class Derivative(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
 
-class Build(Base):
+class Build(UpdatedAtMixin, Base):
     __tablename__ = "builds"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

@@ -16,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db import Base
-from app.shared.types import JSONVariant, UTCDateTime, StrEnum, _enum
+from app.shared.types import JSONVariant, UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class PlanStatus(StrEnum):
@@ -31,7 +31,7 @@ class PlanOrigin(StrEnum):
     REVIEW = "review"
 
 
-class Plan(Base):
+class Plan(UpdatedAtMixin, Base):
     __tablename__ = "plans"
     __table_args__ = (UniqueConstraint("project_id", "version_no", name="uq_project_planver"),)
 

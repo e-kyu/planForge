@@ -8,7 +8,7 @@ from sqlalchemy import Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.db import Base
-from app.shared.types import UTCDateTime, StrEnum, _enum
+from app.shared.types import UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class ProjectStatus(StrEnum):
@@ -16,7 +16,7 @@ class ProjectStatus(StrEnum):
     ARCHIVED = "archived"
 
 
-class Project(Base):
+class Project(UpdatedAtMixin, Base):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

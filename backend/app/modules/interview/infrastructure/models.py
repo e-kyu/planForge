@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.shared.db import Base
-from app.shared.types import JSONVariant, UTCDateTime, StrEnum, _enum
+from app.shared.types import JSONVariant, UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class SessionPhase(StrEnum):
@@ -58,7 +58,7 @@ class MessageKind(StrEnum):
     TOOL_CALL = "tool_call"
 
 
-class InterviewSession(Base):
+class InterviewSession(UpdatedAtMixin, Base):
     __tablename__ = "interview_sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -88,7 +88,7 @@ class InterviewSession(Base):
     )
 
 
-class InterviewMessage(Base):
+class InterviewMessage(UpdatedAtMixin, Base):
     __tablename__ = "interview_messages"
     __table_args__ = (UniqueConstraint("session_id", "seq", name="uq_session_seq"),)
 

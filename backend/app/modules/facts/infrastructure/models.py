@@ -8,7 +8,7 @@ from sqlalchemy import Date, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.db import Base
-from app.shared.types import UTCDateTime, StrEnum, _enum
+from app.shared.types import UTCDateTime, StrEnum, UpdatedAtMixin, _enum
 
 
 class FactStatus(StrEnum):
@@ -22,7 +22,7 @@ class FactOrigin(StrEnum):
     MANUAL = "manual"
 
 
-class Fact(Base):
+class Fact(UpdatedAtMixin, Base):
     __tablename__ = "facts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
