@@ -108,8 +108,13 @@ def compact_interview_log(ws: Path, active_lines: list[str],
 
 # ---------------------------------------------------------------- 소스 파일 (FR-2.1, §5 업로드 검증)
 
-SOURCE_EXTS = (".md", ".txt", ".json", ".csv")  # read_sources_context와 동일 화이트리스트
+SOURCE_EXTS = (".md", ".txt", ".json", ".csv")  # 인터뷰 주입(read_sources_context)·업로드 공용 텍스트 화이트리스트
 MAX_SOURCE_BYTES = 2 * 1024 * 1024  # 2MB — 인터뷰 컨텍스트 주입용 텍스트 소스의 상한
+# 주입 절단 상한 — 시스템 프롬프트에 매 턴 전체 재주입되므로 모델 컨텍스트 예산(128K 기준
+# 소스 40-60K 토큰, 한국어 보수적으로 1자≈1토큰)과 세션당 최대 64회 LLM 호출 비용을 함께
+# 고려한 값. 파일당: 중형 업로드 문서 통주입 여유. 전체: 다중 소스에서 프롬프트 폭주 방지.
+MAX_SOURCE_FILE_CHARS = 16_000
+MAX_SOURCE_TOTAL_CHARS = 48_000
 FORBIDDEN_FILENAME_CHARS = '<>:"/\\|?*'  # Windows 금지 문자 (legacy _sanitize_title 규약 계열)
 
 
@@ -148,22 +153,40 @@ def validate_source_file(name: str, data: bytes) -> str:
     return cleaned
 
 
-def read_sources_context(sources_dirs: list[Path], max_chars: int = 8000) -> str:
-    """인터뷰 소스 컨텍스트 수집 (FR-2.1). 텍스트 파일만, 파일별 크기 상한."""
+def read_sources_context(sources_dirs: list[Path],
+                         max_chars: int = MAX_SOURCE_FILE_CHARS,
+                         total_chars: int = MAX_SOURCE_TOTAL_CHARS) -> str:
+    """인터뷰 소스 컨텍스트 수집 (FR-2.1). 텍스트 파일만, 파일별·전체 크기 상한.
+
+    기존 정렬 순서(디렉토리 순 → 이름순)를 유지한 greedy 배분 — 파일 상한과 전체 예산
+    중 작은 쪽까지만 주입한다. 절단 시 마커를 붙여 LLM이 미완 소스를 온전한 것으로
+    오판하지 않게 한다.
+    """
     parts: list[str] = []
+    skipped: list[str] = []
+    remaining = total_chars
     for d in sources_dirs:
         if not d.is_dir():
             continue
         for f in sorted(d.iterdir()):
             if not f.is_file():
                 continue
-            if f.suffix.lower() not in (".md", ".txt", ".json", ".csv"):
+            if f.suffix.lower() not in SOURCE_EXTS:
+                continue
+            if remaining <= 0:
+                skipped.append(f.name)
                 continue
             try:
-                text = f.read_text(encoding="utf-8-sig")[:max_chars]
+                text = f.read_text(encoding="utf-8-sig")
             except (UnicodeDecodeError, OSError):
                 continue
+            budget = min(max_chars, remaining)
+            if len(text) > budget:
+                text = text[:budget] + f"\n...(절단: 주입 상한 {budget:,}자 초과)"
+            remaining -= len(text)
             parts.append(f"### 소스: {f.name}\n{text}")
+    if skipped:
+        parts.append(f"(전체 상한 도달로 미주입: {', '.join(skipped)})")
     return "\n\n".join(parts)
 
 
