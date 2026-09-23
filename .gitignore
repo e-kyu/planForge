@@ -1,8 +1,9 @@
 # 런타임 워크스페이스/산출물 — DB 메타와 워크스페이스에만 존재, 커밋하지 않음
 workspaces/
 output/
-# 글로벌 소스 (인터뷰 소스 확인용 — compose에서 bind mount)
-sources/
+# 글로벌 소스 (인터뷰 소스 확인용 — compose에서 bind mount). 기본 추천 문서만 커밋 관리
+sources/*
+!sources/default_architecture_guidelines.md
 
 # Python
 __pycache__/
