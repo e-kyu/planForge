@@ -108,7 +108,7 @@ export default function ProjectsPage() {
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
                   placeholder="new-proposal"
-                  pattern="^[a-z0-9][a-z0-9-]*$"
+                  pattern="^[a-z0-9][a-z0-9\-]*$"
                   autoFocus
                   required
                 />
