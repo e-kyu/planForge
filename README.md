@@ -298,6 +298,10 @@ docker compose build && docker compose up -d
 
 - DB 스키마 변경: `backend/`에서 `alembic revision`으로 마이그레이션 추가 → 배포 시 컨테이너 CMD가
   `alembic upgrade head`를 기동 시 자동 실행한다(개발용 `init_db`는 alembic 대체로만 사용).
+- **롤백**: 이전 이미지 태그로 재배포(`docker compose`에서 이전 태그 지정). DB는 `alembic downgrade -1`
+  한 단계만 허용 — 최근 마이그레이션(`updated_at`)은 nullable 추가 컬럼이라 구 버전 코드와 공존 가능.
+  롤백 기준: 핵심 시나리오(프로젝트 생성 → 인터뷰 완주 → plan 승인 → 파생물 생성 → 검수) 실패 또는
+  5xx 오류율 임계 초과 — 자세한 절차는 `docs/architecture-decisions.md` 참조.
 - DB는 SQLite 단일 방언(호스트 볼륨 `data/`). WAL + foreign_keys=ON은 연결 리스너가 설정한다.
 - 디자인 토큰(색·폰트·여백) 변경 절차: `docs/token-checklist.md` —
   theme.py(기준점) 수정 → tokens.css 미러 수정 → 빌더 리터럴 점검 → 좌표 규격 변경 시
