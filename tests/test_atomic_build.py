@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from app.workspace import atomic_build, parse_build_filename
+from app.shared.workspace import atomic_build, parse_build_filename
 from fakes import correct_report_payload
 
 

@@ -48,7 +48,7 @@ def test_patch_project_archive(client, db_env):
 # ---------------------------------------------------------------- 삭제 (FR-1 확장)
 
 def _session_factory(client):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     return make_session_factory(client.app.state.settings.database_url)
 
@@ -56,11 +56,16 @@ def _session_factory(client):
 def _seed_children(client):
     """추적성 사슬 전체를 적립한다: 세션→메시지, 팩트, plan, 파생물, 빌드, 검수, job(done)."""
     from sqlalchemy import select, func
-    from app.models import (
-        Build, Derivative, DerivativeKind, Fact, InterviewMessage,
-        InterviewSession, Job, JobStatus, JobType, MessageKind, MessageRole,
-        Plan, ReviewReport,
+    from app.modules.derivatives.infrastructure.models import (
+        Build, Derivative, DerivativeKind,
     )
+    from app.modules.facts.infrastructure.models import Fact
+    from app.modules.interview.infrastructure.models import (
+        InterviewMessage, InterviewSession, MessageKind, MessageRole,
+    )
+    from app.modules.jobs.infrastructure.models import Job, JobStatus, JobType
+    from app.modules.plans.infrastructure.models import Plan
+    from app.modules.review.infrastructure.models import ReviewReport
 
     sf = _session_factory(client)
     with sf() as s:
@@ -108,7 +113,7 @@ def test_delete_project_cascades_and_removes_workspace(client, db_env):
 
 def test_delete_project_blocked_by_active_job(client, db_env):
     client.post("/api/projects", json={"slug": "busy", "title": "실행 중"})
-    from app.models import Job, JobStatus, JobType
+    from app.modules.jobs.infrastructure.models import Job, JobStatus, JobType
 
     with _session_factory(client)() as s:
         s.add(Job(project_id=1, type=JobType.REVIEW, status=JobStatus.QUEUED,

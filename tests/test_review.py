@@ -102,8 +102,8 @@ def test_facts_unconfirmed_resolvable_is_yellow():
 # ---------------------------------------------------------------- review 잡 + API
 
 def _approved_plan(app, project_id: int) -> int:
-    from app.models import Plan, PlanOrigin, PlanStatus
-    from app.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
 
     with make_session_factory(app.state.settings.database_url)() as s:
         plan = Plan(project_id=project_id, version_no=1,
@@ -115,9 +115,9 @@ def _approved_plan(app, project_id: int) -> int:
 
 
 def _run_queue(app, llm, profile="derive"):
-    from app.config import get_settings
-    from app.db import make_session_factory
-    from app.worker import JobContext, claim_next_job, run_job
+    from app.shared.config import get_settings
+    from app.shared.db import make_session_factory
+    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
 
     ctx = JobContext(
         session_factory=make_session_factory(app.state.settings.database_url),
@@ -147,7 +147,7 @@ def test_review_requires_derivatives(client, app):
 
 
 def test_review_job_end_to_end(client, app):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     client.post("/api/projects", json={"slug": "rev-full", "title": "x"})
     plan_id = _approved_plan(app, 1)
@@ -188,8 +188,8 @@ def test_review_detects_injected_numeric_distortion(client, app):
     """수용 기준 (요청서 §7-3): 파생물에 수치 왜곡을 주입하면 검수가 🔴로 탐지한다."""
     import copy
 
-    from app.db import make_session_factory
-    from app.models import Derivative, DerivativeKind
+    from app.shared.db import make_session_factory
+    from app.modules.derivatives.infrastructure.models import Derivative, DerivativeKind
 
     client.post("/api/projects", json={"slug": "rev-distort", "title": "x"})
     _approved_plan(app, 1)
@@ -221,8 +221,8 @@ def test_review_detects_injected_numeric_distortion(client, app):
 
 def test_review_reports_stale_generation(client, app):
     """이전 세대 빌드가 남아 있으면 red로 보고한다 (FR-4.1 세대 대응성)."""
-    from app.db import make_session_factory
-    from app.models import Build, Derivative, DerivativeKind
+    from app.shared.db import make_session_factory
+    from app.modules.derivatives.infrastructure.models import Build, Derivative, DerivativeKind
 
     client.post("/api/projects", json={"slug": "rev-gen", "title": "x"})
     plan_id = _approved_plan(app, 1)
@@ -232,7 +232,7 @@ def test_review_reports_stale_generation(client, app):
     assert client.get(f"/api/jobs/{r.json()['id']}").json()["status"] == "done"
 
     # plan 세대 교체 — 새 승인 plan을 만들어 build를 '이전 세대'로 만든다
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
     with make_session_factory(app.state.settings.database_url)() as s:
         plan2 = Plan(project_id=1, version_no=2,
                      markdown=plan_sample_markdown(), docs=["제안서"],

@@ -196,9 +196,9 @@ def test_interview_to_build_end_to_end(sclient, sapp, fake_llm, db_env):
     job_id = r.json()["id"]
 
     # 단일 워커 직렬화는 run_job 직접 호출로 결정론 검증 (worker 루프는 비활성)
-    from app.config import get_settings
-    from app.db import make_session_factory
-    from app.worker import JobContext, claim_next_job, run_job
+    from app.shared.config import get_settings
+    from app.shared.db import make_session_factory
+    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
 
     derive_llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
     ctx = JobContext(

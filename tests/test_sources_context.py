@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.workspace import read_sources_context
+from app.shared.workspace import read_sources_context
 
 
 def _write(d: Path, name: str, text: str) -> None:

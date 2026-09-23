@@ -25,8 +25,8 @@ def _make_project(client, slug: str) -> int:
 
 
 def _review_report(app, project_id: int, plan_id: int, findings: list[dict]) -> int:
-    from app.db import make_session_factory
-    from app.models import ReviewReport
+    from app.shared.db import make_session_factory
+    from app.modules.review.infrastructure.models import ReviewReport
 
     with make_session_factory(app.state.settings.database_url)() as s:
         rep = ReviewReport(
@@ -52,8 +52,8 @@ def test_revise_from_review_contract_exposes_suggestion(client, app):
 
 
 def test_revise_from_review_gates(client, app):
-    from app.db import make_session_factory
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     pid = _make_project(client, "prv-gate")
     # plan 404
@@ -113,8 +113,8 @@ def test_revise_from_review_happy_path(client, app, db_env):
     assert job["result"]["version_no"] == 2 and job["result"]["applied_count"] == 1
 
     # 새 세대: DRAFT, origin=review / base plan 무변경
-    from app.db import make_session_factory
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     with make_session_factory(app.state.settings.database_url)() as s:
         rows = {p.id: p for p in s.query(Plan).all()}
