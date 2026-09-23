@@ -1,16 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle, type LucideIcon } from "lucide-react";
-import {
-  apiGet,
-  apiPost,
-  ApiError,
-  type Job,
-  type Plan,
-  type Review,
-  type ReviewFinding,
-} from "../api/client";
-import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../components/ui";
-import { navigate } from "../lib/hashRoute";
+import type { Review, ReviewFinding } from "../../../api/client";
+import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../../../shared/components/ui";
+import { navigate } from "../../../shared/lib/hashRoute";
+import { useReviewApply, useReviews } from "../viewmodels/useReviews";
 
 const SEV_ICON: Record<string, LucideIcon> = { red: XCircle, yellow: AlertTriangle, white: Info };
 const SEV_LABEL: Record<string, string> = { red: "필수", yellow: "권고", white: "선택" };
@@ -18,98 +11,8 @@ const SEV_ORDER: Record<string, number> = { red: 0, yellow: 1, white: 2 };
 
 /** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3). */
 export default function ReviewPanel({ pid }: { pid: number }) {
-  const [reports, setReports] = useState<Review[] | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { reports, plans, jobs, error, notice, busy, reviseDone, enqueue } = useReviews(pid);
   const [sel, setSel] = useState<Review | null>(null);
-  const [reviseDone, setReviseDone] = useState(false);
-  const pollRef = useRef<number | null>(null);
-  const reviseSeenRef = useRef<Set<number>>(new Set());
-
-  const load = useCallback(async () => {
-    try {
-      const [rs, ps, js] = await Promise.all([
-        apiGet<Review[]>(`/api/projects/${pid}/reviews`),
-        apiGet<Plan[]>(`/api/projects/${pid}/plans`),
-        apiGet<Job[]>(`/api/projects/${pid}/jobs`),
-      ]);
-      setReports(rs);
-      setPlans(ps);
-      setJobs(js);
-      return js;
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-      return null;
-    }
-  }, [pid]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // 반영(revise) 잡 완료/실패 1회 통지 — 검수 잡과 같은 폴링 사이클을 쓴다
-  useEffect(() => {
-    for (const j of jobs) {
-      if (j.type !== "plan_revise" || reviseSeenRef.current.has(j.id)) continue;
-      if (j.status === "done") {
-        reviseSeenRef.current.add(j.id);
-        const res = (j.result ?? {}) as { version_no?: number };
-        setNotice(`plan v${res.version_no ?? "?"} 생성 (초안) — plan 탭에서 diff로 검토한 뒤 승인하세요.`);
-        setError(null);
-        setReviseDone(true);
-      } else if (j.status === "failed") {
-        reviseSeenRef.current.add(j.id);
-        setError(`plan 반영 실패: ${(j.error ?? "원인 불명").split("\n")[0]}`);
-      }
-    }
-  }, [jobs]);
-
-  // 검수·반영 잡 완료 감지 폴링 — OutputsPanel과 동일한 패턴
-  useEffect(() => {
-    const active = jobs.some(
-      (j) =>
-        (j.type === "review" || j.type === "plan_revise") &&
-        (j.status === "queued" || j.status === "running"),
-    );
-    if (!active) {
-      // OutputsPanel과 동일 — busy 해제는 pollRef 조건 없이 항상 실행
-      // (완료 경로는 cleanup이 pollRef를 null로 만들어 조건부면 busy가 고착된다).
-      setBusy(false);
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-        void load().then(() => undefined);
-      }
-      return;
-    }
-    if (pollRef.current === null) {
-      setBusy(true);
-      pollRef.current = window.setInterval(() => void load(), 1500);
-    }
-    return () => {
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [jobs, load]);
-
-  async function enqueue() {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const job = await apiPost<Job>(`/api/projects/${pid}/reviews`);
-      setNotice(`검수 작업 큐 진입 (#${job.id}) — 워커가 결정론+LLM 검수를 실행합니다.`);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-      setBusy(false);
-    }
-  }
 
   if (reports === null) return <Empty>불러오는 중…</Empty>;
 
@@ -133,7 +36,7 @@ export default function ReviewPanel({ pid }: { pid: number }) {
           <Button onClick={() => navigate(`/projects/${pid}/plan`)}>plan 탭으로 이동</Button>
         )}
         {approvedPlan ? (
-          <Button onClick={() => void enqueue()} disabled={busy}>
+          <Button onClick={enqueue} disabled={busy}>
             검수 실행
           </Button>
         ) : (
@@ -200,12 +103,10 @@ function ReviewDetail({ r }: { r: Review }) {
   const findings = (r.findings as ReviewFinding[])
     .map((f, idx) => ({ f, idx }))
     .sort((a, b) => (SEV_ORDER[a.f.severity] ?? 9) - (SEV_ORDER[b.f.severity] ?? 9));
+  const { busy, err, notice, apply } = useReviewApply(r.plan_id, r.id);
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(findings.map((x) => x.idx)),
   );
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   function toggle(idx: number) {
     setSelected((prev) => {
@@ -216,23 +117,6 @@ function ReviewDetail({ r }: { r: Review }) {
     });
   }
 
-  async function apply() {
-    setBusy(true);
-    setErr(null);
-    setNotice(null);
-    try {
-      const job = await apiPost<Job>(`/api/plans/${r.plan_id}/revise-from-review`, {
-        review_id: r.id,
-        finding_indices: [...selected].sort((a, b) => a - b),
-      });
-      setNotice(`plan 반영 작업 큐 진입 (#${job.id}) — 워커가 LLM plan 수정을 실행합니다.`);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="card">
       <div className="panel-head">
@@ -241,7 +125,10 @@ function ReviewDetail({ r }: { r: Review }) {
         </h4>
         {findings.length > 0 && (
           <div className="panel-actions">
-            <Button onClick={() => void apply()} disabled={busy || selected.size === 0}>
+            <Button
+              onClick={() => void apply([...selected].sort((a, b) => a - b))}
+              disabled={busy || selected.size === 0}
+            >
               선택 항목 plan에 반영 (새 세대)
             </Button>
           </div>

@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Bot } from "lucide-react";
-import { apiGet } from "./api/client";
-import { routeParam, useHashRoute } from "./lib/hashRoute";
-import HeaderMetrics from "./components/HeaderMetrics";
-import ProjectsPage from "./pages/ProjectsPage";
-import ProjectPage, { type ProjectTab } from "./pages/ProjectPage";
+import { routeParam, useHashRoute } from "./shared/lib/hashRoute";
+import { useApiHealth } from "./shared/lib/useApiHealth";
+import HeaderMetrics from "./features/project/views/HeaderMetrics";
+import ProjectsPage from "./features/projects/views/ProjectsPage";
+import ProjectPage, { type ProjectTab } from "./features/project/views/ProjectPage";
 
 const TAB_KEYS = new Set(["interview", "plan", "outputs", "review", "sources"]);
 
@@ -13,17 +13,7 @@ const TAB_KEYS = new Set(["interview", "plan", "outputs", "review", "sources"]);
  *  #/projects/:id/:tab    → 프로젝트 셸 (FR-5) */
 export default function App() {
   const route = useHashRoute();
-  const [health, setHealth] = useState<"ok" | "down" | "checking">("checking");
-
-  useEffect(() => {
-    let alive = true;
-    apiGet<{ status: string }>("/api/health")
-      .then((h) => alive && setHealth(h.status === "ok" ? "ok" : "down"))
-      .catch(() => alive && setHealth("down"));
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const health = useApiHealth();
 
   // 헤더 메트릭은 프로젝트 라우트에서만 (설계 D1 — pid 파싱은 라우팅과 동일 규칙)
   const pid = route.startsWith("/projects") ? Number(routeParam(route, 2)) : 0;

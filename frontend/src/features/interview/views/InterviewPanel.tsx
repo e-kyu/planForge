@@ -1,18 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Bot, Database, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { useStoredBoolean } from "../lib/viewPrefs";
-import {
-  apiGet,
-  apiPost,
-  apiSSE,
-  ApiError,
-  type CompactApplyResult,
-  type CompactPreview,
-  type Fact,
-  type Message,
-  type Session,
-} from "../api/client";
-import { Banner, Button, Empty } from "../components/ui";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Bot } from "lucide-react";
+import type { Message } from "../../../api/client";
+import { Banner, Button, Empty } from "../../../shared/components/ui";
+import { useInterview } from "../viewmodels/useInterview";
+import { CompactCard } from "./CompactCard";
+import { FactSidePanel } from "./FactSidePanel";
+import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
 
 /* 도구 스키마(agents/tools.py)와 대응하는 카드 데이터 형태 */
 type QuestionCard = {
@@ -32,107 +25,38 @@ const PHASE_LABEL: Record<string, string> = {
   failed: "실패",
 };
 
-/** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드.
- *  POST(답변/게이트 제출)의 응답이 곧 SSE 스트림이므로(D6) 모든 진행을 run() 한 경로로 소비한다. */
+/** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
+ *  서버 상태·SSE 턴 머신은 useInterview, 압축 제안은 useCompact, 팩트 목록은 useFactsPanel이 보유한다. */
 export default function InterviewPanel({ pid }: { pid: number }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [streaming, setStreaming] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    sid,
+    session,
+    messages,
+    restoring,
+    streaming,
+    busy,
+    error,
+    setError,
+    start,
+    run,
+  } = useInterview(pid);
   const [draft, setDraft] = useState("");
   const [answers, setAnswers] = useState<Record<number, { option?: number; free?: string }>>({});
   const [factCollapsed, setFactCollapsed] = useStoredBoolean("pf-fact-side-collapsed", false);
   const feed = useRef<HTMLDivElement>(null);
 
-  const sid = session?.id ?? null;
-
-  useEffect(() => {
-    // 세션 복원 — per-viewer 편의(localStorage). 서버 데이터가 권위다.
-    let sidStored: number | null = null;
-    try {
-      sidStored = Number(localStorage.getItem(`pf-session-${pid}`)) || null;
-    } catch {
-      /* 저장소 접근 불가 — 무시 */
-    }
-    if (sidStored) {
-      apiGet<Session>(`/api/interview/sessions/${sidStored}`)
-        .then((s) => setSession(s))
-        .catch(() => {
-          try {
-            localStorage.removeItem(`pf-session-${pid}`);
-          } catch {
-            /* 무시 */
-          }
-          setSession(null);
-        });
-    }
-  }, [pid]);
-
-  useEffect(() => {
-    if (sid) void reload(sid);
-  }, [sid]);
-
   useEffect(() => {
     feed.current?.scrollTo({ top: feed.current.scrollHeight });
   }, [messages, streaming]);
 
-  async function reload(id: number) {
-    try {
-      const [s, msgs] = await Promise.all([
-        apiGet<Session>(`/api/interview/sessions/${id}`),
-        apiGet<Message[]>(`/api/interview/sessions/${id}/messages`),
-      ]);
-      setSession(s);
-      setMessages(msgs);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }
-
-  async function createSession() {
-    setError(null);
-    try {
-      const s = await apiPost<Session>(`/api/projects/${pid}/interview/sessions`);
-      try {
-        localStorage.setItem(`pf-session-${pid}`, String(s.id));
-      } catch {
-        /* 무시 */
-      }
-      setSession(s);
-      setMessages([]);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }
-
-  /** POST → SSE 소비 공용 경로. 종료(done) 후 세션·이력을 다시 당겨온다. */
-  async function run(path: string, body: unknown) {
-    if (!sid || busy) return;
-    setBusy(true);
-    setStreaming("");
-    setError(null);
-    try {
-      await apiSSE(path, body, (ev) => {
-        if (ev.name === "token") {
-          setStreaming((prev) => prev + String(ev.payload.text ?? ""));
-        } else if (ev.name === "error") {
-          setError(String(ev.payload.message ?? ev.payload.code));
-        }
-        // 카드/상태 이벤트는 done 후 전체 리로드로 정리한다 (이력이 권위)
-      });
-      await reload(sid);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setStreaming("");
-      setBusy(false);
+  /** 턴 제출 래퍼 — 시작됐으면 입력(답변·초안)을 비운다 (원본 run() finally 동작). */
+  async function turn(path: string, body: unknown) {
+    const started = await run(path, body);
+    if (started) {
       setAnswers({});
       setDraft("");
     }
   }
-
-  const active = session?.status === "active";
 
   async function submitAnswers() {
     if (!session) return;
@@ -148,7 +72,15 @@ export default function InterviewPanel({ pid }: { pid: number }) {
       setError("답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)");
       return;
     }
-    await run(`/api/interview/sessions/${sid}/answers`, { answers: items });
+    await turn(`/api/interview/sessions/${sid}/answers`, { answers: items });
+  }
+
+  if (restoring) {
+    return (
+      <section>
+        <Empty>인터뷰 세션 복원 중…</Empty>
+      </section>
+    );
   }
 
   if (session === null) {
@@ -157,7 +89,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         <Empty>
           아직 인터뷰 세션이 없습니다.
           <div className="center-actions">
-            <Button onClick={() => void createSession()}>인터뷰 세션 만들기</Button>
+            <Button onClick={start}>인터뷰 세션 만들기</Button>
           </div>
         </Empty>
         {error && <Banner kind="error">{error}</Banner>}
@@ -178,7 +110,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         <span className="badge">라운드 {session.round_no}</span>
         <span className="badge">{PHASE_LABEL[phase] ?? phase}</span>
         <span className="spacer" />
-        <Button variant="ghost" onClick={() => void createSession()} disabled={busy}>
+        <Button variant="ghost" onClick={start} disabled={busy}>
           새 세션
         </Button>
       </div>
@@ -222,7 +154,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
             facts={session.pending_facts as FactCard[]}
             busy={busy}
             onConfirm={(approve, edits) =>
-              void run(`/api/interview/sessions/${sid}/facts/confirm`, { approve, edits })
+              void turn(`/api/interview/sessions/${sid}/facts/confirm`, { approve, edits })
             }
           />
         )}
@@ -232,12 +164,12 @@ export default function InterviewPanel({ pid }: { pid: number }) {
             items={session.pending_key_messages as string[]}
             busy={busy}
             onConfirm={(approve, feedback) =>
-              void run(`/api/interview/sessions/${sid}/key-messages`, { approve, feedback })
+              void turn(`/api/interview/sessions/${sid}/key-messages`, { approve, feedback })
             }
           />
         )}
 
-        <CompactCard pid={pid} refreshKey={messages.length} />
+        <CompactCard pid={pid} />
 
         <div className={isKick ? "chat-input chat-input-kick" : "chat-input"}>
           <textarea
@@ -248,23 +180,23 @@ export default function InterviewPanel({ pid }: { pid: number }) {
                 : "자유 텍스트로 보충·정정·잡담 (Enter 전송, Shift+Enter 줄바꿈)"
             }
             rows={2}
-            disabled={busy || !active}
+            disabled={busy || session.status !== "active"}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                if (draft.trim() && !busy) void run(`/api/interview/sessions/${sid}/turn`, { message: draft });
+                if (draft.trim() && !busy) void turn(`/api/interview/sessions/${sid}/turn`, { message: draft });
               }
             }}
           />
           {phase === "hypothesis" && messages.length === 0 ? (
-            <Button onClick={() => void run(`/api/interview/sessions/${sid}/kick`, {})} disabled={busy}>
+            <Button onClick={() => void turn(`/api/interview/sessions/${sid}/kick`, {})} disabled={busy}>
               인터뷰 시작 (가설 제시)
             </Button>
           ) : (
             <Button
-              disabled={busy || !active || !draft.trim()}
-              onClick={() => void run(`/api/interview/sessions/${sid}/turn`, { message: draft })}
+              disabled={busy || session.status !== "active" || !draft.trim()}
+              onClick={() => void turn(`/api/interview/sessions/${sid}/turn`, { message: draft })}
             >
               보내기
             </Button>
@@ -275,7 +207,6 @@ export default function InterviewPanel({ pid }: { pid: number }) {
 
       <FactSidePanel
         pid={pid}
-        refreshKey={messages.length}
         collapsed={factCollapsed}
         onToggle={() => setFactCollapsed(!factCollapsed)}
       />
@@ -348,165 +279,6 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         return null; // state/tool_call/tool — LLM 내부 기록은 채팅에 노출하지 않는다
     }
   }
-}
-
-const FACT_FILTERS = [
-  { id: "all", label: "전체" },
-  { id: "active", label: "확립" },
-  { id: "unconfirmed", label: "미확정" },
-  { id: "archived", label: "아카이브" },
-] as const;
-type FactFilter = (typeof FACT_FILTERS)[number]["id"];
-
-const ORIGIN_LABEL: Record<string, string> = {
-  interview: "인터뷰",
-  review: "검수",
-  manual: "수동",
-};
-
-/** 팩트 저장소 사이드 패널 — 조회 전용 (설계 D4).
- *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다(원칙 4 게이트 우회 금지).
- *  미확정 필터는 백엔드 UNCONFIRMED 컨벤션("(미확정" 접두 마커)과 동일한 클라이언트 판별(설계 D5). */
-function FactSidePanel({
-  pid,
-  refreshKey,
-  collapsed,
-  onToggle,
-}: {
-  pid: number;
-  refreshKey: number;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const [facts, setFacts] = useState<Fact[] | null>(null);
-  const [filter, setFilter] = useState<FactFilter>("all");
-  const [error, setError] = useState<string | null>(null);
-  const headBtn = useRef<HTMLButtonElement>(null);
-  const railBtn = useRef<HTMLButtonElement>(null);
-
-  function toggle() {
-    onToggle();
-    // 토글 버튼이 숨겨지므로 반대편 버튼으로 포커스 이동 (접근성)
-    requestAnimationFrame(() => (collapsed ? headBtn.current : railBtn.current)?.focus());
-  }
-
-  const load = useCallback(async () => {
-    try {
-      setFacts(await apiGet<Fact[]>(`/api/projects/${pid}/facts`));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }, [pid]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshKey]);
-
-  const isUnconfirmed = (f: Fact) => f.content.includes("(미확정");
-  const shown = (facts ?? []).filter((f) =>
-    filter === "all"
-      ? true
-      : filter === "active"
-        ? f.status === "active" && !isUnconfirmed(f)
-        : filter === "unconfirmed"
-          ? f.status === "active" && isUnconfirmed(f)
-          : f.status === "archived",
-  );
-  const statusOf = (f: Fact): "ok" | "warn" | "arch" =>
-    f.status === "archived" ? "arch" : isUnconfirmed(f) ? "warn" : "ok";
-  const STATUS_TEXT = { ok: "확립", warn: "미확정", arch: "아카이브" } as const;
-
-  return (
-    <aside className="fact-side" id="fact-side">
-      <div className="fact-side-head">
-        <h4>
-          <Database aria-hidden="true" />
-          팩트 저장소
-        </h4>
-        <div className="fact-side-head-tools">
-          <span className="fact-count">{facts === null ? "…" : `${facts.length}건`}</span>
-          <button
-            type="button"
-            ref={headBtn}
-            className="fact-fold"
-            onClick={toggle}
-            aria-expanded={!collapsed}
-            aria-controls="fact-side"
-            aria-label="팩트 저장소 접기"
-            title="팩트 저장소 접기"
-          >
-            <PanelRightClose aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <div className="fact-filter" role="tablist" aria-label="팩트 상태 필터">
-        {FACT_FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            className={`fact-filter-btn ${filter === f.id ? "fact-filter-active" : ""}`}
-            onClick={() => setFilter(f.id)}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {error && <Banner kind="error">{error}</Banner>}
-
-      <div className="fact-side-list">
-        {shown.length === 0 ? (
-          <p className="hint">
-            {filter === "all" ? "아직 팩트가 없습니다 — 인터뷰를 진행하면 적립됩니다." : "해당 상태의 팩트가 없습니다."}
-          </p>
-        ) : (
-          shown.map((f) => {
-            const st = statusOf(f);
-            return (
-              <div key={f.id} className="fact-card">
-                <div className="fact-card-head">
-                  <span className={`fact-chip fact-chip-${f.origin}`}>
-                    {ORIGIN_LABEL[f.origin] ?? f.origin}
-                  </span>
-                  <span className={`fact-status fact-status-${st}`}>{STATUS_TEXT[st]}</span>
-                </div>
-                <p className="fact-card-body">{f.content}</p>
-                <div className="fact-meta">
-                  {f.source ? <span className="fact-src">출처: {f.source}</span> : <span className="fact-src">출처 없음</span>}
-                  <span className="spacer" />
-                  <span>{f.date}</span>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <p className="fact-side-note">
-        팩트 확정(승인·적립)은 인터뷰의 [팩트 확인] 단계에서만 수행됩니다 — 게이트 우회 기록은 허용되지 않습니다.
-      </p>
-
-      <div className="fact-rail">
-        <button
-          type="button"
-          ref={railBtn}
-          className="fact-rail-btn"
-          onClick={toggle}
-          aria-expanded={!collapsed}
-          aria-controls="fact-side"
-          aria-label="팩트 저장소 펼치기"
-          title="팩트 저장소 펼치기"
-        >
-          <PanelRightOpen aria-hidden="true" />
-        </button>
-        <span className="fact-rail-label" aria-hidden="true">
-          팩트
-        </span>
-      </div>
-    </aside>
-  );
 }
 
 function Bubble(props: { side: "left" | "right"; text: string }) {
@@ -646,115 +418,6 @@ function FactGate(props: {
           반려 (다시 제시)
         </Button>
       </div>
-    </div>
-  );
-}
-
-/** 팩트 압축 (FR-6.1, compact-log 이식) — LLM 통합 제안 → 승인 → 아카이브 적용.
- *  refreshKey(대화 진행)가 바뀔 때마다 팩트를 다시 당겨온다 — 인터뷰 중 적립된 팩트 반영. */
-function CompactCard({ pid, refreshKey }: { pid: number; refreshKey: number }) {
-  const [facts, setFacts] = useState<Fact[] | null>(null);
-  const [preview, setPreview] = useState<CompactPreview | null>(null);
-  const [result, setResult] = useState<CompactApplyResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      setFacts(await apiGet<Fact[]>(`/api/projects/${pid}/facts?status=active`));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }, [pid]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshKey]);
-
-  async function propose() {
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      setPreview(await apiPost<CompactPreview>(`/api/projects/${pid}/facts/compact`));
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function apply() {
-    if (!preview) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await apiPost<CompactApplyResult>(`/api/projects/${pid}/facts/compact/apply`, {
-        groups: preview.groups,
-      });
-      setResult(r);
-      setPreview(null);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const byId = new Map((facts ?? []).map((f) => [f.id, f]));
-  return (
-    <div className="card chat-card">
-      <div className="chat-card-title">확립 팩트 ({facts?.length ?? "…"}건)</div>
-      {error && <Banner kind="error">{error}</Banner>}
-      {result && (
-        <Banner kind="ok">
-          압축 완료 — {result.archived.length}건 아카이브, 활성 {result.active_remaining}건.
-          {result.warnings.length > 0 ? ` (${result.warnings.join(" / ")})` : ""}
-        </Banner>
-      )}
-      {preview ? (
-        <>
-          {preview.warning && <Banner kind="error">{preview.warning}</Banner>}
-          {preview.summary && <p className="hint">{preview.summary}</p>}
-          {preview.groups.length === 0 ? (
-            <p className="hint">통합 대상 중복이 없습니다 — 팩트는 변경되지 않았습니다.</p>
-          ) : (
-            <ul className="compact-list">
-              {preview.groups.map((g, i) => (
-                <li key={i}>
-                  <span className="hint">{g.reason || g.topic}</span>
-                  <ul className="compact-list">
-                    <li>✅ 유지: #{g.keep_id} {byId.get(g.keep_id)?.content ?? `#${g.keep_id}`}</li>
-                    {g.archive_ids.map((aid) => (
-                      <li key={aid}>📦 아카이브: #{aid} {byId.get(aid)?.content ?? `#${aid}`}</li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="center-actions">
-            {preview.groups.length > 0 && (
-              <Button onClick={() => void apply()} disabled={busy || !preview.ok}>
-                승인 · 아카이브
-              </Button>
-            )}
-            <Button variant="ghost" onClick={() => setPreview(null)} disabled={busy}>
-              닫기
-            </Button>
-          </div>
-        </>
-      ) : (
-        <div className="center-actions">
-          <Button onClick={() => void propose()} disabled={busy || (facts?.length ?? 0) < 2}>
-            팩트 압축 (통합 + 아카이브)
-          </Button>
-          <span className="hint">
-            중복된 이전 팩트를 아카이브로 밀어내고 최종 확정값만 활성에 남깁니다 (FR-6.1).
-          </span>
-        </div>
-      )}
     </div>
   );
 }

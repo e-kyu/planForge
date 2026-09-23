@@ -1,15 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Download, Layout } from "lucide-react";
-import {
-  apiGet,
-  apiPost,
-  ApiError,
-  type Build,
-  type Job,
-  type Plan,
-} from "../api/client";
-import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../components/ui";
-import { MarkdownPreview } from "../components/MarkdownPreview";
+import type { Job } from "../../../api/client";
+import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
+import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
+import { useOutputs } from "../viewmodels/useOutputs";
 
 const EXT_LABEL: Record<string, string> = {
   pptx: "PPTX",
@@ -44,101 +38,25 @@ const ERROR_CLASS_LABEL: Record<string, string> = {
 
 /** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드). */
 export default function OutputsPanel({ pid }: { pid: number }) {
-  const [builds, setBuilds] = useState<Build[] | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [sel, setSel] = useState<Build | null>(null);
-  const [selPreview, setSelPreview] = useState<string | null>(null);
-  const pollRef = useRef<number | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const [bs, ps, js] = await Promise.all([
-        apiGet<Build[]>(`/api/projects/${pid}/outputs`),
-        apiGet<Plan[]>(`/api/projects/${pid}/plans`),
-        apiGet<Job[]>(`/api/projects/${pid}/jobs`),
-      ]);
-      setBuilds(bs);
-      setPlans(ps);
-      setJobs(js);
-      return js;
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-      return null;
-    }
-  }, [pid]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // 활성 job이 있으면 폴링 — 완료(queued/running 소멸) 시 갤러리 갱신
-  useEffect(() => {
-    const active = jobs.some((j) => j.status === "queued" || j.status === "running");
-    if (!active) {
-      // 완료 경로는 cleanup이 먼저 돌아 pollRef를 null로 만들므로, busy 해제는
-      // pollRef 조건 없이 항상 실행해야 한다 — 조건부였더니 job 완료 후 busy가
-      // true로 고착되어 생성 버튼이 영구 disabled 되는 버그 (e2e 5단계 사망 원인).
-      setBusy(false);
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-        void load().then(() => undefined);
-      }
-      return;
-    }
-    if (pollRef.current === null) {
-      setBusy(true);
-      pollRef.current = window.setInterval(() => void load(), 1500);
-    }
-    return () => {
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [jobs, load]);
-
-  async function enqueue(kind: "slides" | "report", doc: string | undefined, fmts?: string[]) {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const job = await apiPost<Job>(`/api/projects/${pid}/derivatives`, {
-        kind,
-        doc,
-        fmts,
-      });
-      setNotice(`작업 큐 진입 (#${job.id}) — 워커가 직렬 처리합니다.`);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-      setBusy(false);
-    }
-  }
-
-  const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
-  const docs = (approvedPlan?.docs ?? []) as string[];
+  const {
+    builds,
+    plans,
+    jobs,
+    error,
+    notice,
+    busy,
+    enqueue,
+    preview,
+    sel,
+    selPreview,
+    closePreview,
+  } = useOutputs(pid);
   const [docSel, setDocSel] = useState<string>("");
-
-  async function preview(b: Build) {
-    setSel(b);
-    setSelPreview(null);
-    if (b.ext === "md") {
-      try {
-        const res = await fetch(`/api/projects/${pid}/outputs/${b.id}/download`);
-        setSelPreview(await res.text());
-      } catch {
-        setSelPreview("(미리보기를 읽지 못했습니다)");
-      }
-    }
-  }
 
   if (builds === null) return <Empty>불러오는 중…</Empty>;
 
+  const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
+  const docs = (approvedPlan?.docs ?? []) as string[];
   const failedJobs = jobs.filter((j) => j.status === "failed");
   const recentJobs = [...jobs].reverse().slice(0, 5);
 
@@ -161,10 +79,10 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                 ))}
               </select>
             )}
-            <Button onClick={() => void enqueue("slides", docSel || undefined)} disabled={busy}>
+            <Button onClick={() => enqueue("slides", docSel || undefined)} disabled={busy}>
               PPT 생성 (슬라이드)
             </Button>
-            <Button onClick={() => void enqueue("report", docSel || undefined)} disabled={busy}>
+            <Button onClick={() => enqueue("report", docSel || undefined)} disabled={busy}>
               문서 생성 (MD·HTML·DOCX)
             </Button>
           </>
@@ -219,7 +137,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
             <h4>
               미리보기 — {sel.doc_kind} {EXT_LABEL[sel.ext]} {fmtVersion(sel.version_no)}
             </h4>
-            <Button variant="ghost" onClick={() => setSel(null)}>
+            <Button variant="ghost" onClick={closePreview}>
               닫기
             </Button>
           </div>

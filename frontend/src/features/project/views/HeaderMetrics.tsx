@@ -1,66 +1,12 @@
-import { useEffect, useState } from "react";
 import { CheckCircle2, FileCode, ShieldCheck } from "lucide-react";
-import { apiGet } from "../api/client";
-import type { Plan, Review } from "../api/client";
+import { useHeaderMetrics } from "../viewmodels/useProjectShell";
 
 type PillTone = "neutral" | "ok" | "warn" | "danger";
 
-type Metrics = {
-  planVersion: string | null;
-  planStatus: string | null;
-  activeFacts: number | null;
-  red: number | null;
-  yellow: number | null;
-};
-
-const EMPTY: Metrics = {
-  planVersion: null,
-  planStatus: null,
-  activeFacts: null,
-  red: null,
-  yellow: null,
-};
-
-/** 헤더 메트릭 필 — 프로젝트 라우트에서만 렌더 (설계 D1).
+/** 헤더 메트릭 필 — 프로젝트 라우트에서만 렌더 (설계 D1). 데이터는 useHeaderMetrics(10초 폴링).
  *  버튼이 아닌 div만 렌더한다 (e2e `button:has-text('승인')` 오염 방지). */
 export default function HeaderMetrics(props: { pid: number }) {
-  const [m, setM] = useState<Metrics>(EMPTY);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const next: Metrics = { ...EMPTY };
-      const [plans, facts, reviews] = await Promise.allSettled([
-        apiGet<Plan[]>(`/api/projects/${props.pid}/plans`),
-        apiGet<{ status: string }[]>(`/api/projects/${props.pid}/facts`),
-        apiGet<Review[]>(`/api/projects/${props.pid}/reviews`),
-      ]);
-      if (plans.status === "fulfilled") {
-        const latest = plans.value.at(-1);
-        if (latest) {
-          next.planVersion = `v${latest.version_no}`;
-          next.planStatus = latest.status;
-        }
-      }
-      if (facts.status === "fulfilled") {
-        next.activeFacts = facts.value.filter((f) => f.status === "active").length;
-      }
-      if (reviews.status === "fulfilled") {
-        const latest = reviews.value.at(-1);
-        if (latest) {
-          next.red = latest.red_count;
-          next.yellow = latest.yellow_count;
-        }
-      }
-      if (alive) setM(next);
-    };
-    load();
-    const t = setInterval(load, 10_000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [props.pid]);
+  const m = useHeaderMetrics(props.pid);
 
   const planStatusLabel =
     m.planStatus === "approved"

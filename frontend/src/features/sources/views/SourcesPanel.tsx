@@ -1,15 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { FileCode, Trash2, Upload } from "lucide-react";
-import {
-  apiDelete,
-  apiGet,
-  apiUpload,
-  ApiError,
-  type SourceFile,
-} from "../api/client";
-import { Banner, Empty, PageHeader, fmtBytes } from "../components/ui";
-
-const MAX_MB = 2;
+import type { SourceFile } from "../../../api/client";
+import { Banner, Empty, PageHeader, fmtBytes } from "../../../shared/components/ui";
+import { MAX_MB, useSources } from "../viewmodels/useSources";
 
 const fmtEpoch = (sec: number) => {
   const d = new Date(sec * 1000); // st_mtime — float epoch 초
@@ -20,58 +12,9 @@ const fmtEpoch = (sec: number) => {
 /** 포맷 배지 — API에 type 필드가 없어 확장자에서 도출 (설계 D6). */
 const extOf = (name: string) => name.split(".").pop()?.toUpperCase() ?? "";
 
-/** 소스 관리 (FR-2.1) — 인터뷰 시작 전 확인하는 소스 문서.
- *  프로젝트 sources/는 업로드·삭제 가능, 글로벌 sources/는 읽기 전용. */
+/** 소스 관리 (FR-2.1) — 인터뷰 시작 전 확인하는 소스 문서 (표현 전용 View). */
 export default function SourcesPanel({ pid }: { pid: number }) {
-  const [files, setFiles] = useState<SourceFile[] | null>(null);
-  const [globalFiles, setGlobalFiles] = useState<SourceFile[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
-
-  async function load() {
-    try {
-      const [own, glob] = await Promise.all([
-        apiGet<SourceFile[]>(`/api/projects/${pid}/sources`),
-        apiGet<SourceFile[]>("/api/sources"),
-      ]);
-      setFiles(own);
-      setGlobalFiles(glob);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }
-  useEffect(() => {
-    void load();
-  }, [pid]);
-
-  async function upload(fileList: FileList | null) {
-    if (!fileList || fileList.length === 0) return;
-    setError(null);
-    try {
-      for (const f of Array.from(fileList)) {
-        if (f.size > MAX_MB * 1024 * 1024) {
-          throw new Error(`${f.name}: ${MAX_MB}MB 초과`);
-        }
-        await apiUpload<SourceFile>(`/api/projects/${pid}/sources`, f);
-      }
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      if (fileInput.current) fileInput.current.value = "";
-    }
-  }
-
-  async function remove(name: string) {
-    setError(null);
-    try {
-      await apiDelete(`/api/projects/${pid}/sources/${encodeURIComponent(name)}`);
-      await load();
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : String(e));
-    }
-  }
+  const { files, globalFiles, error, upload, remove, fileInput } = useSources(pid);
 
   const table = (fs: SourceFile[], dir: "project" | "global") => (
     <div className="table-wrap">
@@ -104,7 +47,7 @@ export default function SourcesPanel({ pid }: { pid: number }) {
                   <button
                     type="button"
                     className="row-del"
-                    onClick={() => void remove(s.name)}
+                    onClick={() => remove(s.name)}
                     aria-label={`${s.name} 삭제`}
                     title="삭제"
                   >
@@ -136,7 +79,7 @@ export default function SourcesPanel({ pid }: { pid: number }) {
             type="file"
             accept=".md,.txt,.json,.csv"
             multiple
-            onChange={(e) => void upload(e.target.files)}
+            onChange={(e) => upload(e.target.files)}
             data-testid="source-file-input"
           />
         </label>
