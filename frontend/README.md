@@ -156,8 +156,9 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 
 ## 스모크 스크립트
 
-- **브라우저 e2e는 아직 완주되지 않았다** (개발 상태 — 남은 과정). 풀 시나리오 스모크는
-  실제 LLM을 호출하는 수동 검증으로 별도 완주 예정이며, 현재 저장소에는 스크립트가 없다.
+- **브라우저 e2e 스모크** — 양쪽 dev 서버(backend 8000 + frontend 5173) 기동 후
+  `node e2e-smoke.mjs`. 실제 LLM을 호출하는 **수동 검증 스크립트(커밋 대상 아님)**,
+  스크린샷은 `.e2e-shots/`에 쌓인다. 풀 시나리오 e2e 완주는 남은 과정이다.
 - `visual-smoke.mjs` — 리스타일 확인 (커밋됨, 임시). LLM 호출 없음(인터뷰 세션만
   생성, kick 안 함). 홈 + 특정 프로젝트(pid 하드코딩)의 5탭을 fullPage 캡처해
   `.e2e-shots/restyle/`에 저장한다. 본 e2e 전 빠른 눈확인용.

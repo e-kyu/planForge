@@ -32,7 +32,8 @@ backend/
 │   │   ├── jobs/                 작업 큐 + 단일 워커 (application/worker.py)
 │   │   ├── facts/                팩트 목록·수동 추가·수정·압축 (application/compact.py)
 │   │   ├── interview/            인터뷰 에이전트 + SSE 턴
-│   │   │                         (application/agent.py 상태머신 · domain/events.py SSE 이벤트
+│   │   │                         (application/agent.py 상태머신 + turn_graph.py langgraph
+│   │   │                          턴 루프 · domain/events.py SSE 이벤트
 │   │   │                          · infrastructure/transcript.py seq 채번·이력 · prompts/interview.md)
 │   │   └── review/               결정론 검수 + LLM 내용 검수 (application/{run_review,review_agent}.py)
 │   ├── agents/tools.py           인터뷰 도구 5종 OpenAI function 스키마 + 서버측 검증
@@ -51,7 +52,8 @@ backend/
 │   ├── plan/                     model.py · parser.py · filter.py (문서 필터·골격 검증)
 │   ├── builders/                 build_ppt.py · build_doc.py · theme.py
 │   │                             (계약 테스트로 고정 — 로직 변경 금지)
-│   ├── llm/                      provider.py (OpenAI 호환 단일 프로토콜)
+│   ├── llm/                      provider.py (langchain-openai ChatOpenAI — OpenAI 호환
+│   │   │                         단일 프로토콜) · loops.py (공용 tool-loop 그래프)
 │   │   └── prompts/              derive_slides.md · derive_report.md
 │   ├── config.json               LLM 프로필 설정 (gitignored)
 │   └── config.example.json       예시 설정
@@ -183,6 +185,9 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
 - `application/agent.py`: `InterviewAgent.run_turn`이 한 POST = 한 턴. 상수
   `MAX_TOOL_TURNS=8`, `MAX_ROUNDS=8`, `PLAN_FIX_ATTEMPTS=3`. system prompt에
   `prompts/interview.md` + 소스/팩트 컨텍스트를 주입한다.
+- `application/turn_graph.py`: 턴 루프의 langgraph StateGraph 오케스트레이션
+  (편차 10). 턴 1건 = 그래프 1회 invoke, checkpointer 없음(세션 상태는 DB가 SSOT).
+  도구 판정·게이트·검증·커밋은 서버 코드 권한 — 프리셋 에이전트 미채택.
 - `domain/events.py`: SSE 이벤트 팩토리 (token/done/state/notice/error).
 - `infrastructure/transcript.py`: 세션별 seq 채번 + append_message (SSE 커서 겸 이력).
 - `app/agents/tools.py`: 인터뷰 도구 5종(`ask_questions`·`save_facts`·
@@ -190,8 +195,9 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
   서버측 검증 — 라운드당 최대 4문항, 핵심 메시지는 정확히 3개.
 - `facts/application/compact.py` · `plans/application/planrevise.py` ·
   `review/application/review_agent.py`: LLM은 판단/보고만 하고, 적용·검증은 결정론
-  코드가 담당하는 역할 분리. plan 마크다운 검증의 단일 권위는
-  `planrevise.validate_plan_markdown`(`plans/presentation/api.py`가 위임).
+  코드가 담당하는 역할 분리. 도구 루프(nudge·검증 재시도)는 공용 tool-loop 그래프
+  `planforge/llm/loops.py::run_tool_loop`로 표준화(편차 11). plan 마크다운 검증의
+  단일 권위는 `planrevise.validate_plan_markdown`(`plans/presentation/api.py`가 위임).
 
 ### LLM 프롬프트 위치
 
@@ -272,7 +278,7 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 - LLM은 `write_slides_json` / `write_report_json` 도구를 각 1회 호출해 콘텐츠 변환만 한다.
 - 결정론 게이트: 문서 필터 → 골격 검증 → 스키마 검증(`build_ppt.validate` /
   `build_doc.validate`) → numcheck. 수치 무결성 red가 나면 피드백을 담아 재시도
-  (`MAX_ATTEMPTS=3`).
+  (`MAX_ATTEMPTS=3`) — 재시도 루프는 공용 tool-loop 그래프(`llm/loops.py`, 편차 11).
 - `_snap_literals`로 차트 수치를 plan 표기대로 복원한다. 추측 수치는
   `UNCONFIRMED_MARK="(미확정"`으로 표기된다.
 
@@ -302,11 +308,16 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
   토큰 변경 시 4종 세트(theme.py·빌더 리터럴·fixture·frontend `tokens.css`)를
   동시 점검해야 한다 — 절차는 `docs/token-checklist.md`.
 
-### `llm/` — provider 추상화
+### `llm/` — provider 추상화 + tool 루프 오케스트레이션
 
-- `provider.py`: **OpenAI 호환 단일 프로토콜**만 지원(openai SDK). anthropic SDK
-  사용 금지. ollama·openai를 base_url/키 차이만으로 소화한다(ollama는 더미 키 `ollama`).
-- `PROFILES=("interview","derive","review")` + `plan_revise`. 프로필별
+- `provider.py`: **OpenAI 호환 단일 프로토콜**만 지원(`langchain-openai` ChatOpenAI
+  기반 — 편차 10). anthropic SDK 사용 금지. ollama·openai를 base_url/키 차이만으로
+  소화한다(ollama는 더미 키 `ollama`). 자동 재시도 금지 계약 — `max_retries=0`.
+- `loops.py`: 공용 tool-loop 그래프(`run_tool_loop`) — derive 재변환·plan_revise·
+  review·compact가 공유하는 "호출 → nudge / tool 피드백 재시도 / 통과" 패턴을
+  StateGraph로 표준화(편차 11). 판정·피드백 문구는 caller의 `validate` 클로저
+  (결정론)가 담당한다.
+- `PROFILES=("interview","derive","review","plan_revise")`. 프로필별
   `provider/model/base_url/api_key_env`.
 - base_url 우선순위: config `base_url` > `LLM_BASE_URL` env > provider 기본값
   (ollama `http://localhost:11434/v1`, openai API 기본).
@@ -363,8 +374,10 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 | `PYTHONUTF8=1` | Dockerfile · compose | Windows에서 필수 |
 | `TEST_DATABASE_URL` | `tests/conftest.py` | 테스트 DB 격리 오버라이드 |
 
-`.env`/dotenv 지원은 없다 — 설정은 순수 OS 환경변수로만 들어오며(개발 셸 또는
-docker-compose `environment`), 요구사항은 `requirements.txt`의 floor-pin(`>=`)만 있다.
+`.env`/dotenv 지원은 없다 — 설정은 순수 OS 환경변수로만 들어온다(개발 셸 또는
+docker-compose `environment`). `requirements.txt`는 일반 의존성은 floor-pin(`>=`),
+LLM 트랜스포트(langchain-core/openai/langgraph)는 exact-pin(`==`)으로 고정한다
+(편차 10 — 전송 계층 교체는 별도 결정으로 기록).
 
 ## 실행
 
@@ -423,7 +436,8 @@ npm run gen:types                    # openapi-typescript로 TS 타입 생성
   경로/워크스페이스 주입만 어댑터로 처리.
 - **LLM은 콘텐츠 변환만** — 파일 조립·좌표 배치·채번은 결정론 코드. LLM이 pptx/docx
   바이너리를 만드는 코드는 금지.
-- **anthropic SDK 금지** — LLM 호출은 openai SDK 기반 provider 추상화 계층으로만.
+- **anthropic SDK 금지** — LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider
+  어댑터 계층으로만 한다(`chat_fn`/`stream_fn` dict 계약 유지).
 - **멀티 워커 금지** — 빌더의 모듈 전역 상태 때문에 병렬 실행은 사양 위반이다.
 - **커밋 전 `git status`** — `workspaces/`·`sources/`·`data/`·`config.json` 등
   ignored 경로가 섞이지 않았는지 확인.
