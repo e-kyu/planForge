@@ -50,7 +50,7 @@
   "compounds": [
     {
       "name": "전체 스택 (backend + frontend)",
-      "configurations": ["Backend: uvicorn (--reload)", "Frontend: Vite (dev)"],
+      "configurations": ["Backend: uvicorn (디버그)", "Frontend: Vite (dev)"],
       "stopAll": true
     }
   ]
