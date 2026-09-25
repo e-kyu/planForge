@@ -21,12 +21,12 @@ from sqlalchemy.orm import Session as DBSession
 
 from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
 
-from app.agents.tools import BLOCKING_TOOLS, INTERVIEW_TOOLS, ToolError, validate_tool_args
+from app.agents.tools import ToolError, validate_tool_args
 from app.modules.facts.facade import append_facts, list_active_facts
 from app.modules.plans.facade import PlanOrigin, create_generation
 from app.shared.workspace import read_sources_context, write_interview_log_mirror, write_plan_mirror
 
-from ..domain.events import Event, done_event, error_event, notice_event, state_event, token_event
+from ..domain.events import Event, done_event, error_event, notice_event, state_event
 from ..infrastructure.models import (
     InterviewMessage,
     MessageKind,
@@ -151,57 +151,19 @@ class InterviewAgent:
         return events
 
     def _loop(self, messages: list[dict], events: _EventSink) -> list[Event]:
-        nudges = 0
-        plan_fixes = 0
-        for _ in range(MAX_TOOL_TURNS):
-            text_parts: list[str] = []
-            tool_calls: list[dict] = []
-            for ev in self.stream_fn(messages, tools=INTERVIEW_TOOLS):
-                if ev["type"] == "text":
-                    text_parts.append(ev["delta"])
-                    events.add(token_event(ev["delta"]))
-                elif ev["type"] == "tool_call":
-                    tool_calls.append({"name": ev["name"], "arguments": ev["arguments"]})
-            text = "".join(text_parts)
-            if text.strip():
-                self._append(MessageRole.ASSISTANT, MessageKind.TEXT, content=text)
+        """턴 루프 — LangGraph로 오케스트레이션 (turn_graph.py, 편차 10).
 
-            # 스트리밍 폴백(D9): tool-call이 나와야 할 턴에 안 나오면 비스트리밍 1회 재시도
-            if not tool_calls and not self._dispatch_from_content(events, text):
-                if text.strip() and nudges == 0:
-                    nudges += 1
-                    messages = messages + [
-                        {"role": "assistant", "content": text},
-                        {"role": "user", "content":
-                         "도구(ask_questions·save_facts·confirm_key_messages·update_checklist·write_plan)를 호출해 진행하라. 도구 호출 외 출력 금지."},
-                    ]
-                    continue
-                raise TurnError("LLM이 도구 호출 없이 응답을 마쳤습니다")
-
-            blocking = [tc for tc in tool_calls if tc["name"] in BLOCKING_TOOLS]
-            non_blocking = [tc for tc in tool_calls if tc["name"] not in BLOCKING_TOOLS]
-            for tc in non_blocking:
-                result = self._dispatch(tc, events)
-                self._persist_tool_exchange(tc, result)
-                messages = messages + self._tool_messages(tc, result)
-            if not blocking:
-                continue  # 비차단 도구만 있으면 같은 턴에서 루프 지속
-            tc = blocking[0]
-            if tc["name"] == "write_plan" and plan_fixes >= PLAN_FIX_ATTEMPTS:
-                raise TurnError("plan 검증 재시도 한도 초과")
-            result = self._dispatch(tc, events)
-            self._persist_tool_exchange(tc, result)
-            messages = messages + self._tool_messages(tc, result)
-            if isinstance(result, str) and result.startswith("ERROR:"):
-                # 검증 실패 피드백 → 루프 지속 (재호출 유도)
-                if tc["name"] == "write_plan":
-                    plan_fixes += 1
-                continue
-            return events  # blocking 도구로 턴 종료
-        raise TurnError(f"턴 내 도구 루프 한도({MAX_TOOL_TURNS}) 초과")
-
-    def _dispatch_from_content(self, events, text: str) -> bool:
-        return False  # 텍스트만으로 진행하지 않는다 — 도구 호출이 유일한 진행 경로
+        도구 디스패치·이력 영속·이벤트 방출은 이 클래스의 메서드를 그대로 쓰며,
+        노드/라우팅은 기존 루프의 순서를 그대로 재현한다.
+        """
+        from .turn_graph import build_turn_graph  # 지연 import — 순환 참조 방지
+        graph = build_turn_graph(self, events)
+        graph.invoke(
+            {"messages": messages, "text": "", "tool_calls": [], "nudges": 0,
+             "plan_fixes": 0, "turns": 0},
+            {"recursion_limit": MAX_TOOL_TURNS * 3 + 8},
+        )
+        return events
 
     def _persist_tool_exchange(self, tc: dict, result) -> None:
         """도구 교환을 이력에 영속 — 다음 턴의 _history 재구성 원료."""

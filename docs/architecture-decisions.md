@@ -50,6 +50,42 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
    `types.gen.ts`는 재생성 불필요. 단, 계약 파일 갱신 시에는 시스템 python(fastapi 0.115.x 계열)으로
    export한다 — venv의 신버전 라이브러리는 UploadFile/ValidationError 렌더링이 달라져 diff가 발생한다
    (환경 고정 요건, 위 "계약 export 환경" 참조).
+10. **LLM 트랜스포트: openai SDK 직접 사용 → langchain-openai 어댑터** (2026-09-25, `new-arc-langgraph`)
+    - 대상 계약: `planforge/llm/provider.py` 상단 명세(AGENT-DEV-REQUEST.md §3.1)를 **의도적으로 변경**한다.
+      유지되는 하위 계약: OpenAI 호환 단일 프로토콜(ollama/openai를 base_url·키 차이만으로 소화),
+      anthropic SDK 금지, 프로필(interview/derive/review/plan_revise)별 모델 지정, API 키는 서버
+      환경변수로만 관리.
+    - 변경: `OpenAICompatProvider` 내부를 `langchain-openai ChatOpenAI` 호출로 교체.
+      `chat_fn`/`stream_fn` 계약(OpenAI 프로토콜 dict ↔ provider 이벤트 dict)은 불변 — dict↔LangChain
+      메시지 변환은 provider 내부에만 존재하고, 호출 사이트·테스트 fake(`FakeLLM`/`FakeStreamLLM`)
+      는 전혀 바뀌지 않는다. `max_retries=0`으로 자동 재시도 금지 계약을 유지한다.
+    - 근거: (1) 인터뷰 도구 루프를 langgraph StateGraph로 표준화(`turn_graph.py`) (2) 스트리밍·도구
+      델타 누적·타임아웃 구현 재사용 (3) provider 확장 지점이 langchain 생태계로 열림.
+    - 미채택: `create_react_agent` 등 langgraph 프리셋 — 도구 판정·게이트·검증·커밋은 서버 코드
+      권한(설계 원칙 2). 그래프는 턴 1건당 1회 invoke, checkpointer 없음(세션 상태는 DB가 SSOT).
+    - D-11·편차 2 재확인: `LLMRegistry` 팩토리와 `create_app(llm_overrides=...)`/
+      `JobContext(llm_overrides=...)` 주입 지점 불변, 위에 추상화 레이어 추가 없음.
+    - 동반 수정: `PROFILES`에 `plan_revise` 누락 버그(`load_config`이 드랍 → review 폴백) 해소.
+
+11. **LLM 도구 루프 표준화: 수제 루프 4곳 → LangGraph 공용 tool-loop 그래프** (2026-09-25, `new-arc-langgraph`)
+    - 편차 10에서 인터뷰 턴 루프만 StateGraph로 표준화하고 derive를 "비변경"으로 명시했으나,
+      검사 결과 남은 LLM 루프 4곳이 동일 패턴 — "chat_fn 호출 → 도구 누락이면 nudge /
+      검증 실패면 tool 피드백 쌍으로 재시도 / 통과면 결과" — 으로 수제 구현돼 있어 이 결정으로 갱신한다.
+    - 변경: `planforge/llm/loops.py::run_tool_loop`(공용 StateGraph 팩토리)로 표준화.
+      대상: `planforge/derive.py::Deriver._run_llm`(스키마·numcheck 재시도, ≤3),
+      `plans/application/planrevise.py::run_plan_revise`(포맷 재시도, ≤3),
+      `review/application/review_agent.py::run_llm_review`(nudge, ≤2),
+      `facts/application/compact.py::run_llm_compact`(nudge, ≤2).
+    - 그래프는 제어 흐름만 표준화 — 판정·피드백 문구는 caller의 `validate` 클로저
+      (결정론 코드)가 담당한다. LLM/코드 역할 분리(원칙 2)·프리셋 에이전트 미채택은
+      편차 10과 동일 근거. `create_react_agent` 미채택, checkpointer 없음.
+    - 불변: `run_*`/`derive()` 시그니처·반환값, 오류 메시지·피드백 문구, 메시지 조립
+      순서(테스트 `llm.calls[N][-1]` 고정), attempts 의미(총 chat_fn 호출 횟수 —
+      도구 누락 nudge도 1 attempt 소비), 도구 피드백 프로토콜(assistant.tool_calls →
+      tool 쌍 — ollama cloud 무응답 사고 대응, 이식 유지), fake·`chat_fn` dict 계약.
+    - 배치: `planforge/llm/` — provider가 이미 langchain-openai를 쓰므로 엔진이
+      langgraph를 갖는 것과 일관. CLI(`python -m planforge derive`)도 동일 경로,
+      app 모듈의 planforge import는 app→planforge 단방향 위반이 아니다.
 
 ## 토큰 효율 (적용 목적의 정량화)
 

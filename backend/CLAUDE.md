@@ -41,9 +41,14 @@
 
 ## LLM 계층
 
-- `app/shared/llm.py LLMRegistry` — 프로필(interview/derive/review)별 provider·모델을
+- `app/shared/llm.py LLMRegistry` — 프로필(interview/derive/review/plan_revise)별 provider·모델을
   `PLANFORGE_CONFIG`(기본 `planforge/config.json`, gitignored)에서 읽음.
-- provider는 openai SDK 기반 OpenAI 호환 단일 프로토콜. **anthropic SDK 사용 금지.**
+- provider는 `langchain-openai` ChatOpenAI 기반 OpenAI 호환 단일 프로토콜 (편차 10 —
+  `planforge/llm/provider.py`; chat_fn/stream_fn dict 계약 불변). **anthropic SDK 사용 금지.**
+- 인터뷰 턴 루프는 langgraph StateGraph (`app/modules/interview/application/turn_graph.py`),
+  도구 루프(derive 재변환·plan_revise·review·compact)는 공용 StateGraph
+  (`planforge/llm/loops.py run_tool_loop` — 편차 11) — 도구 판정·게이트·검증·커밋은
+  서버 코드 권한, 프리셋 에이전트 미채택.
 - 테스트 주입: `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`.
 
 ## 실행·명령
