@@ -26,7 +26,7 @@ from app.modules.facts.facade import append_facts, list_active_facts
 from app.modules.plans.facade import PlanOrigin, create_generation
 from app.shared.workspace import read_sources_context, write_interview_log_mirror, write_plan_mirror
 
-from ..domain.events import Event, done_event, error_event, notice_event, state_event
+from ..domain.events import Event, done_event, error_event, notice_event, progress_event, state_event
 from ..infrastructure.models import (
     InterviewMessage,
     MessageKind,
@@ -132,6 +132,9 @@ class InterviewAgent:
         emit이 주어지면 이벤트가 만들어지는 즉시 흘러나간다 (SSE 실시간 스트리밍).
         """
         events = _EventSink(emit)
+        # 첫 토큰 전 지연 대부분이 컨텍스트 조립(read_sources_context 등)이라 state_event
+        # (조립 끝난 뒤 방출)보다 앞서 진행을 알린다 — emit-only라 이력을 오염하지 않는다.
+        events.add(progress_event("context"))
         self._append(MessageRole.USER, MessageKind.TEXT, content=user_message)
         messages = [{"role": "system", "content": self._system_prompt()}]
         messages += self._history()

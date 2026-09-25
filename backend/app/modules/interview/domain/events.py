@@ -15,7 +15,7 @@ from ..infrastructure.models import MessageKind, MessageRole
 class Event:
     """SSE 이벤트 — name/payload는 동시에 interview_messages 행이 된다."""
 
-    name: str  # token|questions|facts|key_messages|plan_draft|state|notice|error|done
+    name: str  # token|questions|facts|key_messages|plan_draft|state|notice|error|done|progress
     payload: dict
     role: MessageRole = MessageRole.EVENT
     kind: MessageKind = MessageKind.TEXT
@@ -38,6 +38,15 @@ def state_event(phase: str, round_no: int, checklist: list | None) -> Event:
     return Event(name="state", payload={"phase": phase, "round_no": round_no,
                                         "checklist": checklist or []},
                  kind=MessageKind.STATE)
+
+
+def progress_event(step: str) -> Event:
+    """턴 내부 진행 알림 (context|llm|tool) — emit-only · 미영속.
+
+    수명이 턴 안에서 끝나는 휘발 UI 상태라 interview_messages에 쌓지 않는다
+    (리플레이 오염·seq 커서 소비 방지). 세션 페이즈 전파는 state_event가 담당.
+    """
+    return Event(name="progress", payload={"step": step})
 
 
 def notice_event(text: str, level: str = "info") -> Event:

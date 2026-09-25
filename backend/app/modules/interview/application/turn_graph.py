@@ -19,7 +19,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.tools import BLOCKING_TOOLS, INTERVIEW_TOOLS
 
 from ..infrastructure.models import MessageKind, MessageRole
-from ..domain.events import token_event
+from ..domain.events import progress_event, token_event
 from .agent import MAX_TOOL_TURNS, PLAN_FIX_ATTEMPTS, TurnError
 
 NUDGE_TEXT = ("도구(ask_questions·save_facts·confirm_key_messages·update_checklist·write_plan)를 "
@@ -43,6 +43,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
     """에이전트 1개에 바인딩된 턴 그래프를 컴파일한다."""
 
     def call_llm(state: TurnState) -> dict:
+        events.add(progress_event("llm"))  # 첫 토큰 전 TTFB·재라운드 갭 커버 (emit-only)
         text_parts: list[str] = []
         tool_calls: list[dict] = []
         for ev in agent.stream_fn(state["messages"], tools=INTERVIEW_TOOLS):
@@ -73,6 +74,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
         ], "nudges": state["nudges"] + 1}
 
     def dispatch_non_blocking(state: TurnState) -> dict:
+        events.add(progress_event("tool"))
         messages = list(state["messages"])
         for tc in state["tool_calls"]:
             if tc["name"] in BLOCKING_TOOLS:
@@ -88,6 +90,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
         return {"messages": messages, "next": "dispatch_blocking"}
 
     def dispatch_blocking(state: TurnState) -> dict:
+        events.add(progress_event("tool"))
         tc = next(tc for tc in state["tool_calls"] if tc["name"] in BLOCKING_TOOLS)
         if tc["name"] == "write_plan" and state["plan_fixes"] >= plan_fix_attempts:
             raise TurnError("plan 검증 재시도 한도 초과")

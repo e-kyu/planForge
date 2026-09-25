@@ -87,6 +87,21 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       langgraph를 갖는 것과 일관. CLI(`python -m planforge derive`)도 동일 경로,
       app 모듈의 planforge import는 app→planforge 단방향 위반이 아니다.
 
+12. **interview `progress` 이벤트: emit-only(미영속) — 턴 내부 진행과 세션 페이즈(state)의 의미 분리** (2026-09-25, `new-arc-langgraph`)
+    - 배경: POST /kick 이후 첫 토큰까지의 지연(컨텍스트 조립·LLM TTFB·도구 라운드 갭) 동안
+      채팅창에 진행 표시가 없다. 기존 `state` 이벤트는 컨텍스트 조립이 끝난 뒤 방출되어
+      가장 긴 구간을 커버하지 못하고, 페이로드는 세션 페이즈라 턴 내부 진행 표현이 불가하다.
+    - 결정: `domain/events.py::progress_event(step: context|llm|tool)` — `run_turn` 시작(컨텍스트
+      조립 직전), `turn_graph`의 `call_llm`/dispatch 노드 시작에서 방출. 문구 매핑은 프론트
+      (`InterviewPanel.tsx PROGRESS_LABEL`) 소유.
+    - emit-only(미영속) 근거: progress는 수명이 턴 안에서 끝나는 휘발 UI 상태. 영속 시
+      GET /messages 리플레이에 "…하는 중" 행이 쌓여 이력이 오염되고 seq 커서(after=seq)를
+      소비한다. 기존 `state_event` 방출(agent.py)도 실제로는 emit-only 패턴 — 이를 확장한 것.
+      events.py의 "모든 이벤트 영속" docstring은 이벤트별 수동 `_append`가 원칙임을 전제한다.
+    - 불변: state/token/카드 이벤트의 기존 방출 순서·페이로드, `MessageKind` enum(신규 kind 없음),
+      OpenAPI 계약(SSE는 스키마 밖이라 `types.gen.ts` 재생성 불필요), 턴 루프 그래프 구조
+      (노드·엣지 추가 없음 — 기존 노드 안에 emit 1줄씩).
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

@@ -25,6 +25,25 @@ const PHASE_LABEL: Record<string, string> = {
   failed: "실패",
 };
 
+/** progress 이벤트 step → 대기 문구 (백엔드 progress_event의 emit-only 진행 알림).
+ *  llm 단계는 턴 시작 시점 세션 페이즈별로 문구를 구체화한다. */
+const PROGRESS_LABEL: Record<string, string> = {
+  context: "소스 문서와 팩트를 정리하는 중…",
+  tool: "도구 실행 결과를 반영하는 중…",
+};
+
+const LLM_LABEL: Record<string, string> = {
+  hypothesis: "가설과 질문을 준비하는 중…",
+  awaiting_answers: "답변을 정리하는 중…",
+  fact_gate: "팩트 적립을 준비하는 중…",
+  key_message_gate: "핵심 메시지를 확정하는 중…",
+};
+
+function progressLabel(status: string, phase: string): string {
+  if (status === "llm") return LLM_LABEL[phase] ?? "응답을 생성하는 중…";
+  return PROGRESS_LABEL[status] ?? status;
+}
+
 /** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
  *  서버 상태·SSE 턴 머신은 useInterview, 압축 제안은 useCompact, 팩트 목록은 useFactsPanel이 보유한다. */
 export default function InterviewPanel({ pid }: { pid: number }) {
@@ -34,6 +53,8 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     messages,
     restoring,
     streaming,
+    status,
+    active,
     busy,
     error,
     setError,
@@ -47,7 +68,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
 
   useEffect(() => {
     feed.current?.scrollTo({ top: feed.current.scrollHeight });
-  }, [messages, streaming]);
+  }, [messages, streaming, status, active]);
 
   /** 턴 제출 래퍼 — 시작됐으면 입력(답변·초안)을 비운다 (원본 run() finally 동작). */
   async function turn(path: string, body: unknown) {
@@ -118,9 +139,21 @@ export default function InterviewPanel({ pid }: { pid: number }) {
 
       <div className="chat-feed" ref={feed}>
         {messages.map(renderMessage)}
-        {streaming && (
+        {streaming && active && (
           <div className="chat-row">
             <div className="bubble bubble-assistant streaming">{streaming}</div>
+          </div>
+        )}
+        {busy && status && !active && (
+          <div className="chat-row">
+            <div className="bubble bubble-assistant bubble-typing">
+              {progressLabel(status, phase)}
+              <span className="typing-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            </div>
           </div>
         )}
       </div>
