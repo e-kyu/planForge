@@ -1,8 +1,10 @@
 # frontend — PlanForge 웹 UI
 
 React 19 + TypeScript + Vite 6로 만든 SPA다. **의존성 최소**가 설계 원칙이라
-라우터·상태관리·UI 컴포넌트 라이브러리 없이 — 자체 해시 라우터, 플레인 훅 상태,
+라우터·UI 컴포넌트 라이브러리 없이 — 자체 해시 라우터, 서버 상태는 TanStack Query,
 플레인 CSS 8파일로 구성되어 있다. 아이콘은 `lucide-react`만 허용된다.
+구조는 **feature-MVVM**(`src/features/<화면>/{models,viewmodels,views}`)이며
+**View에서 fetch·서버 데이터 로직 금지 — 반드시 viewmodel 훅 경유**다.
 
 사용자 관점 사용법은 루트 [README.md §5](../README.md#5-웹-ui-사용-방법-단계별),
 설치·기동은 [§4](../README.md#4-개발-환경-설정-수동-실행)를 참고한다.
@@ -22,32 +24,28 @@ frontend/
 ├── package.json
 ├── Dockerfile                  node:22-alpine 빌드 → nginx:1.27-alpine 서빙
 ├── nginx.conf                  배포판 /api 프록시(proxy_buffering off) + SPA fallback
-├── e2e-smoke.mjs               브라우저 e2e 수동 스모크 (실제 LLM · 커밋 대상 아님)
 ├── visual-smoke.mjs            리스타일 스크린샷 스모크 (LLM 호출 없음)
 └── src/
-    ├── main.tsx                엔트리 — CSS 8개 import 순서 고정 + <App/>
+    ├── main.tsx                엔트리 — QueryClientProvider + CSS 8개 import 순서 고정 + <App/>
     ├── App.tsx                 앱 셸: 스티키 헤더 + 해시 라우팅 분기 + 탭 키
     ├── api/
     │   ├── client.ts           REST 래퍼 + SSE 파서 + 계약 타입 재수출
     │   └── types.gen.ts        openapi-typescript 생성물 (자동 생성 — 직접 수정 금지)
-    ├── components/
-    │   ├── ui.tsx              Button/Banner/Loading/Empty/PageHeader + fmtBytes/fmtDateTime
-    │   ├── CmEditor.tsx        CodeMirror 6 래퍼 (CmEditor · CmDiff)
-    │   ├── MarkdownPreview.tsx marked → DOMPurify 소독 미리보기
-    │   └── HeaderMetrics.tsx   헤더 메트릭 필 (plan SSOT/확립 팩트/최근 검수)
-    ├── lib/
-    │   └── hashRoute.ts        의존성 없는 해시 라우터 (useHashRoute/navigate/routeParam)
-    ├── pages/
-    │   ├── ProjectsPage.tsx    프로젝트 목록 + 생성·삭제 모달
-    │   ├── ProjectPage.tsx     프로젝트 셸 — 5탭 + 배지
-    │   ├── SourcesPanel.tsx    소스 문서 업로드/삭제
-    │   ├── InterviewPanel.tsx  인터뷰 채팅 + SSE + 게이트 (최대 파일)
-    │   ├── PlanPanel.tsx       plan.md 뷰어/편집/diff/승인
-    │   ├── OutputsPanel.tsx    파생물 갤러리 + job 폴링
-    │   └── ReviewPanel.tsx     검수 리포트 + plan 반영
-    └── styles/
-        ├── tokens.css          theme.py 미러 디자인 토큰 (+ 화면 전용 토큰)
-        └── base/app/pages/chat/plan/outputs/review.css
+    ├── features/               화면별 feature 7종 — 각각 models/ · viewmodels/ · views/
+    │   ├── projects/           ProjectsPage — 프로젝트 목록 + 생성·삭제 모달
+    │   ├── project/            ProjectPage — 프로젝트 셸(5탭) + HeaderMetrics
+    │   ├── sources/            SourcesPanel — 소스 업로드/삭제
+    │   ├── interview/          InterviewPanel — 인터뷰 채팅 + SSE + 게이트 (최대 feature)
+    │   │                       (+ CompactCard · FactSidePanel, useCompact · useFactsPanel)
+    │   ├── plan/               PlanPanel — plan.md 뷰어/편집/diff/승인
+    │   ├── outputs/            OutputsPanel — 파생물 갤러리 + job 폴링
+    │   └── review/             ReviewPanel — 검수 리포트 + plan 반영
+    └── shared/
+        ├── components/         ui.tsx(Button/Banner/Loading/Empty/PageHeader) ·
+        │                       CmEditor.tsx(CmEditor · CmDiff) · MarkdownPreview.tsx
+        ├── lib/                hashRoute.ts(해시 라우터) · errMsg.ts(에러 문자열 변환)
+        │                       · useApiHealth.ts · viewPrefs.ts
+        └── styles/             tokens.css(theme.py 미러) + base/app/pages/chat/plan/outputs/review.css
 ```
 
 ## 스크립트
@@ -65,7 +63,8 @@ lint 설정은 없다. 타입 안전성은 `tsc --noEmit`(build에 포함)이 �
 
 | 패키지 | 역할 |
 |---|---|
-| `react` / `react-dom` ^19 | UI (리액트 외 라이브러리 상태관리·라우팅 전무) |
+| `react` / `react-dom` ^19 | UI (라우터·UI 컴포넌트 라이브러리 전무) |
+| `@tanstack/react-query` ^5 | 서버 상태 — 모든 viewmodel 훅의 `useQuery`/`useMutation` |
 | `codemirror` ^6 (+`state`/`view`/`lang-markdown`/`merge`) | plan.md 에디터(CmEditor)와 diff(CmDiff — MergeView) |
 | `marked` ^15 | 마크다운 → HTML |
 | `dompurify` ^3.2 | 미리보기 HTML XSS 소독 |
@@ -112,11 +111,11 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
   (`client.ts`의 `apiSSE` / `parseSSE` — `\n\n` 프레임에서 `event:`/`data:` 분해).
 - 이벤트: `token`(스트리밍 텍스트 누적) · `error` · 카드/상태 이벤트. 카드 이벤트는
   done 후 세션·메시지 전체 리로드로 정리한다("이력이 권위" — 서버 데이터가 SSOT).
-- 백엔드 대응물은 `backend/app/events.py`의 `Event(name, payload)`.
+- 백엔드 대응물은 `backend/app/modules/interview/domain/events.py`의 `Event(name, payload)`.
 - 프록시도 스트림을 통과해야 하므로 `vite.config.ts`가 응답에
   `x-accel-buffering: no`를 강제하고, 배포 nginx도 `proxy_buffering off`를 유지한다.
 
-## 패널 가이드 (`src/pages/`)
+## 패널 가이드 (`src/features/`)
 
 | 패널 | 내용 |
 |---|---|
@@ -130,9 +129,15 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 
 ### 상태 관리 · 폴링
 
-react-query·zustand·redux 전무 — 전부 로컬 훅 상태(`useState`/`useEffect`/`useRef`)와
-fetch. job 진행은 `setInterval(1500)` 폴링(`pollRef`로 정리), 헤더 메트릭은 10초 폴링,
-탭 배지는 마운트 1회다.
+서버 상태는 **TanStack Query** — 각 feature의 viewmodel 훅이 `useQuery`/`useMutation`을
+감싸고, View는 훅 경유로만 데이터에 접근한다(가이드 §4.3). 전역 기본은
+`main.tsx`에서 재시도 없음·포커스 리페치 없음(원본 동작 유지).
+
+- job 진행 폴링: jobs 쿼리가 `refetchInterval`로 활성 job(queued/running)이 있을 때만
+  1.5초 간격 폴링하고, 큐가 비워지면 갤러리·plan 쿼리를 `invalidateQueries`로 갱신한다
+  (예: `features/outputs/viewmodels/useOutputs.ts`).
+- 헤더 메트릭은 10초 폴링, 탭 배지는 마운트 1회.
+- 로컬 UI 상태(선택 항목·모달 등)는 여전히 `useState`/`useEffect`/`useRef` 훅 상태다.
 
 ## 스타일링 & 디자인 토큰
 
@@ -151,24 +156,11 @@ fetch. job 진행은 `setInterval(1500)` 폴링(`pollRef`로 정리), 헤더 메
 
 ## 스모크 스크립트
 
-### `e2e-smoke.mjs` — 브라우저 e2e (수동, 커밋 대상 아님)
-
-전제: backend(:8000) + frontend dev(:5173) 기동 + **실제 LLM**. playwright chromium
-으로 풀 시나리오를 돌린다(소요 수 분 — kick 300s · 답변 600s · 빌드 1,200s 대기).
-
-```
-① 프로젝트 생성(고유 슬러그) → ② 소스 업로드 → ③ 인터뷰 kick → 게이트 루프(최대 8회)
-→ ④ plan 승인 → ⑤ 산출물 PPT+문서 생성(갤러리 ≥4행 대기) → ⑥ 검수 실행 → 발견사항 조회
-```
-
-- 콘솔/페이지 에러를 수집하고 하나라도 있으면 exit 2.
-- 스크린샷은 저장소 루트 `.e2e-shots/`에 쌓인다(gitignore 대상 — 커밋 금지).
-- 이 파일 자체도 `.gitignore`에 명시되어 있다 — 로컬 수동 검증용.
-
-### `visual-smoke.mjs` — 리스타일 확인 (커밋됨, 임시)
-
-LLM 호출 없음(인터뷰 세션만 생성, kick 안 함). 홈 + 특정 프로젝트(pid 하드코딩)의
-5탭을 fullPage 캡처해 `.e2e-shots/restyle/`에 저장한다. 본 e2e 전 빠른 눈확인용.
+- **브라우저 e2e는 아직 완주되지 않았다** (개발 상태 — 남은 과정). 풀 시나리오 스모크는
+  실제 LLM을 호출하는 수동 검증으로 별도 완주 예정이며, 현재 저장소에는 스크립트가 없다.
+- `visual-smoke.mjs` — 리스타일 확인 (커밋됨, 임시). LLM 호출 없음(인터뷰 세션만
+  생성, kick 안 함). 홈 + 특정 프로젝트(pid 하드코딩)의 5탭을 fullPage 캡처해
+  `.e2e-shots/restyle/`에 저장한다. 본 e2e 전 빠른 눈확인용.
 
 ## 기타 개발 정보
 
@@ -180,10 +172,10 @@ LLM 호출 없음(인터뷰 세션만 생성, kick 안 함). 홈 + 특정 프로
 - **Docker**: `Dockerfile`은 node:22-alpine에서 빌드 후 nginx:1.27-alpine으로 서빙.
   `nginx.conf`가 `/api/` → `http://backend:8000`(버퍼링 off, read timeout 3600s)과
   해시 라우팅용 SPA fallback(`try_files $uri /index.html`)을 담당한다.
-- **e2e 셀렉터 계약**: 일부 요소는 스모크 스크립트와 암묵 계약이 있다 —
+- **e2e 셀렉터 계약**: 일부 요소는 예정된 브라우저 e2e와 암묵 계약이 있다 —
   소스 업로드 `data-testid="source-file-input"`, 헤더 메트릭(`HeaderMetrics`)은
   의도적으로 div만 렌더해 `button:has-text('승인')` 셀렉터 오염을 막는다.
-  이 셀렉터를 건드리는 UI 변경은 스모크를 깬다.
+  이 셀렉터를 건드리는 UI 변경은 e2e를 깬다.
 
 ## 개발 시 주의사항
 

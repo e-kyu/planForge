@@ -44,28 +44,30 @@
 ## 2. 저장소 구조
 
 ```
-backend/                  FastAPI 백엔드 + 코어 엔진
-  app/                    웹 백엔드 (API·DB·워커·인터뷰 에이전트)
-    api/                  REST/SSE 라우터 (projects, sources, interview, plans, reviews, facts, jobs, outputs)
-    agents/               인터뷰 상태머신 + LLM 계층 + 프롬프트(prompts/*.md)
-    worker.py             단일 백그라운드 워커 (빌드 직렬화 — 멀티 워커 금지)
+backend/                  FastAPI 백엔드 + 코어 엔진 (모듈러 모놀리식)
+  app/                    웹 백엔드
+    api.py                라우터 집계 — 각 모듈 presentation/api.py를 기존 계약 순서대로 포함
+    modules/              도메인 모듈 8종 (projects·sources·plans·derivatives·jobs·facts·interview·review)
+      └ <모듈>/           facade.py · presentation/(api·schemas) · application/ · infrastructure/models.py
+    shared/               모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
+    agents/tools.py       인터뷰 도구 OpenAI function 스키마 + 서버측 검증
   planforge/            M1 코어 엔진 (CLI 진입점 `python -m planforge`)
     plan/                 plan.md 파서·문서 필터·골격 검증
     builders/             build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
     llm/                  OpenAI 호환 provider 추상화
     derive.py, review.py, numcheck.py
   alembic/                DB 마이그레이션
-frontend/                 React 19 + TypeScript (Vite)
-  src/pages/              ProjectsPage · ProjectPage + 탭 패널 5종
-                          (소스·인터뷰·plan·산출물·검수, components/에 CodeMirror 에디터)
-  e2e-smoke.mjs           브라우저 e2e 수동 스모크 스크립트 (실제 LLM 사용)
-  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용)
+frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
+  src/features/           화면별 feature 7종 (projects·project·sources·interview·plan·outputs·review)
+    └ <feature>/          models/(API 호출) · viewmodels/(상태·로직 훅) · views/(표현 전용)
+  src/shared/             components/(CodeMirror 에디터·마크다운 미리보기·공통 UI) · lib/ · styles/
+  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용 — 브라우저 e2e는 별도 완주 예정)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
-docs/                     보조 문서 (token-checklist.md)
+docs/                     보조 문서 (architecture-decisions.md · token-checklist.md)
 tests/                    pytest (계약 테스트 fixture 포함)
-CLAUDE.md                 개발 세션 계약 (설계 원칙 8개)
+CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
 docker-compose.yml        배포 스택 (backend · frontend · ollama)
 ```
