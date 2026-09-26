@@ -85,9 +85,45 @@ def test_doc_tags_bad_renumber_is_yellow():
 
 def test_facts_missing_numeric_is_red():
     plan = parse_plan_text(MULTIDOC_PLAN)
-    out = check_facts(plan, [{"content": "4분기 목표 매출 15.0억 원 (출처: 사업계획서)",
+    out = check_facts(plan, [{"content": "목표 매출은 17.5억 원 (출처: 사업계획서)",
                               "source": "사업계획서", "date": "2026-09-18"}])
-    assert any(f.severity == "red" and "15.0" in f.message for f in out)
+    reds = [f for f in out if f.code == "fact-mismatch"]
+    assert any(f.severity == "red" and "'17.5'" in f.message for f in reds)
+    # 조치 안내(suggestion)가 함께 전달된다 — ReviewPanel의 ↳ 행과 plan revise 컨텍스트 소비
+    assert all(f.suggestion for f in reds)
+
+
+def test_facts_missing_numeric_message_includes_context():
+    # 누락 수치마다 원문 문맥 조각("5개월"·"3명")과 팩트 전문·출처가 표시된다
+    plan = parse_plan_text(MULTIDOC_PLAN)
+    out = check_facts(plan, [{"content": "신규 시스템 도입 기간은 5개월, 대상 인원은 3명",
+                              "source": "휴율 인터뷰 #2", "date": "2026-09-18"}])
+    reds = [f for f in out if f.code == "fact-mismatch"]
+    assert len(reds) == 1
+    msg = reds[0].message
+    assert "'5'" in msg and "'3'" in msg
+    assert "5개월" in msg and "3명" in msg
+    assert "팩트: 신규 시스템 도입 기간은 5개월, 대상 인원은 3명" in msg
+    assert "(출처: 휴율 인터뷰 #2)" in msg
+
+
+def test_facts_missing_numeric_after_60_chars_is_shown():
+    # 누락 수치가 본문 60자 이후에 있어도 메시지에 살아있다 (옛 60자 잘림 회귀 방지)
+    plan = parse_plan_text(MULTIDOC_PLAN)
+    content = "가" * 70 + "도입 기간은 5개월"
+    out = check_facts(plan, [{"content": content, "source": "", "date": "2026-09-18"}])
+    reds = [f for f in out if f.code == "fact-mismatch"]
+    assert any(f.severity == "red" and "'5'" in f.message and "5개월" in f.message
+               for f in reds)
+
+
+def test_facts_missing_numeric_empty_source_omitted():
+    # source가 빈 팩트는 빈 괄호 없이 출처 표기를 생략한다
+    plan = parse_plan_text(MULTIDOC_PLAN)
+    out = check_facts(plan, [{"content": "도입 기간은 5개월", "source": "",
+                              "date": "2026-09-18"}])
+    reds = [f for f in out if f.code == "fact-mismatch"]
+    assert len(reds) == 1 and "출처" not in reds[0].message
 
 
 def test_facts_unconfirmed_resolvable_is_yellow():
@@ -96,7 +132,10 @@ def test_facts_unconfirmed_resolvable_is_yellow():
     plan.slides[6].message = "(미확정) 매출 12.4억 원 규모"
     out = check_facts(plan, [{"content": "3분기 매출 12.4억 원 (출처: 사내 집계)",
                               "source": "사내 집계", "date": "2026-09-18"}])
-    assert any(f.code == "unconfirmed-resolvable" for f in out)
+    yellows = [f for f in out if f.code == "unconfirmed-resolvable"]
+    assert yellows
+    # 팩트 본문이 잘리지 않고 전문이 표시된다
+    assert "12.4억 원" in yellows[0].message
 
 
 # ---------------------------------------------------------------- review 잡 + API
