@@ -17,6 +17,17 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 
+def _dt(v) -> object | None:
+    """raw sqlite 조회 값(문자열 또는 datetime) → datetime. naive면 UTC로 간주."""
+    import datetime as dt_mod
+
+    if v is None:
+        return None
+    if isinstance(v, dt_mod.datetime):
+        return v
+    return dt_mod.datetime.fromisoformat(v)
+
+
 def main() -> None:
     from sqlalchemy import create_engine, text
 
@@ -26,9 +37,10 @@ def main() -> None:
     )
     engine = create_engine(url)
 
-    rows = engine.execute(text(
-        "SELECT id, type, status, attempts, created_at, started_at, finished_at, result "
-        "FROM jobs ORDER BY id")).mappings().all()
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT id, type, status, attempts, created_at, started_at, finished_at, result "
+            "FROM jobs ORDER BY id")).mappings().all()
     if not rows:
         print("잡이 없다.")
         return
@@ -39,10 +51,11 @@ def main() -> None:
           f"{'대기s':>7} {'실행s':>7}  attempts(result)")
     for r in rows:
         wait = run = None
-        if r["started_at"] and r["created_at"]:
-            wait = (r["started_at"] - r["created_at"]).total_seconds()
-        if r["finished_at"] and r["started_at"]:
-            run = (r["finished_at"] - r["started_at"]).total_seconds()
+        created, started, finished = _dt(r["created_at"]), _dt(r["started_at"]), _dt(r["finished_at"])
+        if started and created:
+            wait = (started - created).total_seconds()
+        if finished and started:
+            run = (finished - started).total_seconds()
         att = r["attempts"] or 0
         r_att = ""
         if r["result"]:
