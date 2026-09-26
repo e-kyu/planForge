@@ -6,6 +6,7 @@ SSOT(원칙 1): DB plan 행을 plan.md 미러로 갱신한 뒤 Deriver가 파일
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from planforge.derive import Deriver
@@ -40,7 +41,12 @@ def run_derive_build(ctx, session, job) -> dict:
 
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
     deriver = Deriver(registry.chat_fn("derive"), ws)
+    # 단계별 경계 로그 — 잡 시간을 LLM 변환 vs 결정론 빌드로 분해해 관측한다.
+    t_llm = time.monotonic()
+    print(f"[derive] job #{job.id} LLM 변환 시작 (kind={kind}, doc={doc})", flush=True)
     res = deriver.derive(plan_mirror, kind, doc)
+    print(f"[derive] job #{job.id} LLM 변환 완료 "
+          f"({time.monotonic() - t_llm:.0f}s, attempts={res.attempts})", flush=True)
     # Deriver가 기본 문서를 해석했다 (doc=None → plan.docs[0])
     resolved_doc = doc or parse_plan_file(plan_mirror).docs[0]
 
@@ -69,7 +75,10 @@ def run_derive_build(ctx, session, job) -> dict:
             for fmt in (fmts or ("md", "html", "docx")):
                 build_doc.build(str(res.work_path), fmt, str(tmp))
 
+    t_build = time.monotonic()
     made = atomic_build(ws, run_builder)
+    print(f"[derive] job #{job.id} 결정론 빌드 완료 "
+          f"({time.monotonic() - t_build:.0f}s, 파일 {len(made)}건)", flush=True)
 
     builds = []
     for f in made:

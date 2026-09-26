@@ -148,8 +148,13 @@ async def worker_loop(ctx: JobContext, poll_seconds: float = 1.0) -> None:
             await asyncio.sleep(poll_seconds)
             continue
         # 진행 관측용 로그 — '고착인지 느린 실행인지'를 밖에서 판별 가능하게 한다.
+        # 큐 대기(created_at→started_at)가 체감 지연의 상당 부분일 수 있어 함께 기록한다.
         t0 = time.monotonic()
-        print(f"[worker] job #{job.id} {job.type} 실행 (attempt {job.attempts})", flush=True)
+        waited = job.started_at and job.created_at and (
+            (job.started_at - job.created_at).total_seconds())
+        wait_note = f", 대기 {waited:.0f}s" if waited is not None else ""
+        print(f"[worker] job #{job.id} {job.type} 실행 (attempt {job.attempts}{wait_note})",
+              flush=True)
         # 빌더·LLM은 블로킹 — 스레드로. 실행은 절대 병렬로 만들지 않는다.
         await anyio.to_thread.run_sync(run_job, ctx, job)
         print(f"[worker] job #{job.id} 종료 ({time.monotonic() - t0:.0f}s)", flush=True)

@@ -17,6 +17,7 @@ OpenAI 호환 릴레이가 요청을 처리하지 못한다(ollama cloud 사고,
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -41,7 +42,14 @@ def build_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
     caller가 도메인 오류(DeriveError 등)나 ok=False로 변환한다."""
 
     def call_llm(state: ToolLoopState) -> dict:
+        # 진행 관측용 로그 — attempt별 소요 시간과 컨텍스트 크기. 재시도마다 이전 응답의
+        # 전체 JSON이 messages에 누적되므로 컨텍스트가 커지는 것도 여기서 보인다.
+        t0 = time.monotonic()
         resp = chat_fn(state["messages"], tools=tools)
+        elapsed = time.monotonic() - t0
+        ctx_chars = sum(len(json.dumps(m, ensure_ascii=False)) for m in state["messages"])
+        print(f"[tool-loop] attempt {state['attempts'] + 1}/{max_attempts} chat_fn 완료 "
+              f"({elapsed:.0f}s, 컨텍스트 {ctx_chars:,}자)", flush=True)
         call = next((tc for tc in resp.get("tool_calls", []) if tc["name"] == tool_name),
                     None)
         if call is None:
@@ -70,6 +78,8 @@ def build_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
         if outcome == "ok":
             return {"ok": True, "result": value}
         # 재시도 — assistant.tool_calls → tool 결과 쌍 (프로토콜 계약, 위 모듈 docstring)
+        print(f"[tool-loop] 검증 실패 — 재시도 (attempts {state['attempts']}/{max_attempts})",
+              flush=True)
         args_json = json.dumps(args, ensure_ascii=False)
         return {"messages": state["messages"] + [
                     {"role": "assistant", "content": state["resp_content"] or None,

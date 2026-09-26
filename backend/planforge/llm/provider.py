@@ -131,9 +131,21 @@ class OpenAICompatProvider:
         """
         lc_msgs = _to_lc_messages(messages)
         llm = self._llm.bind_tools(tools, tool_choice="auto") if tools else self._llm
-        deadline = time.monotonic() + STREAM_DEADLINE
+        t_start = time.monotonic()
+        deadline = t_start + STREAM_DEADLINE
         pending: dict[int, dict] = {}  # tool_call index → {name, arguments}
         inner = llm.stream(lc_msgs)
+        first_token_at: float | None = None  # 유효 델타(텍스트/툴콜 인자) 1차 도착 시각
+
+        def _mark_first_token() -> None:
+            nonlocal first_token_at
+            if first_token_at is None:
+                first_token_at = time.monotonic()
+                ttfb = first_token_at - t_start
+                if ttfb > 30.0:
+                    print(f"[llm] {self.model} 첫 토큰 지연 {ttfb:.0f}s — 생성 전 정체",
+                          flush=True)
+
         try:
             for chunk in inner:
                 if time.monotonic() > deadline:
@@ -141,6 +153,7 @@ class OpenAICompatProvider:
                         f"LLM 호출이 {STREAM_DEADLINE:.0f}초를 넘었다 — 스트림이 정체됐다 "
                         "(keepalive 트리클은 read timeout으로 잡히지 않는다)")
                 for part in _text_deltas(chunk):
+                    _mark_first_token()
                     yield {"type": "text", "delta": part}
                 for tc in chunk.tool_call_chunks or []:
                     idx = tc.get("index")
@@ -151,8 +164,16 @@ class OpenAICompatProvider:
                         slot["name"] += tc["name"]
                     if tc.get("args"):
                         slot["arguments"] += tc["args"]
+                        _mark_first_token()
         finally:
             inner.close()  # 정체 연결을 즉시 닫는다 — 프로세스가 소켓을 붙잡지 않게
+        if first_token_at is not None:
+            print(f"[llm] {self.model} 스트림 완료 "
+                  f"(총 {time.monotonic() - t_start:.0f}s, "
+                  f"첫 토큰까지 {first_token_at - t_start:.0f}s)", flush=True)
+        else:
+            print(f"[llm] {self.model} 스트림 종료 — 유효 출력 없음 "
+                  f"({time.monotonic() - t_start:.0f}s)", flush=True)
         # 스트림 종료 후 완성된 도구 호출을 순서대로 방출
         for idx in sorted(pending):
             slot = pending[idx]
