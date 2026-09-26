@@ -130,14 +130,24 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                     {fmtBytes(b.size_bytes)} · {fmtDateTime(b.created_at)} · plan v{b.plan_id}
                   </span>
                 </button>
+                {/* md/html은 열기(새 탭, inline) + 다운로드(download 속성) 2버튼, pptx/docx는 다운로드 1버튼 */}
+                {(b.ext === "md" || b.ext === "html") && (
+                  <a
+                    className="btn btn-ghost"
+                    href={`/api/projects/${pid}/outputs/${b.id}/download`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    열기
+                  </a>
+                )}
                 <a
                   className="btn btn-ghost"
                   href={`/api/projects/${pid}/outputs/${b.id}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  download
                 >
                   <Download aria-hidden="true" />
-                  {b.ext === "pptx" || b.ext === "docx" ? "다운로드" : "열기"}
+                  다운로드
                 </a>
               </li>
             ))}
