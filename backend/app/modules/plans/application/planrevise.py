@@ -10,6 +10,10 @@
 LLM/코드 역할 분리:
 - LLM: 발견사항 반영한 plan 마크다운 생성 (write_plan 도구 1회).
 - 코드(결정론): 포맷·골격 검증, 변경 없음 판정, 새 세대 채번·미러 기록.
+
+무변경 판정도 루프 validate(결정론)가 담당한다 — 원문 복사 응답은 포맷 실패와 동일하게
+tool 피드백으로 재시도를 돌리고, 소진 시 PlanReviseError. job의 무변경 판정
+(plan_revise_job.py)은 이중 방어로 남는다.
 """
 from __future__ import annotations
 
@@ -59,8 +63,8 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
                     summary: str = "") -> tuple[str, ParsedPlan]:
     """선택 발견사항을 반영한 plan 마크다운을 생성한다. 반환: (markdown, 파싱 결과).
 
-    도구 누락 시 nudge, 포맷 검증 실패 시 도구 호출 결과 프로토콜로 피드백을
-    되돌려 재시도 (최대 MAX_ATTEMPTS) — LangGraph tool 루프 (편차 11,
+    도구 누락 시 nudge, 포맷 검증 실패·원문 무변경 시 도구 호출 결과 프로토콜로
+    피드백을 되돌려 재시도 (최대 MAX_ATTEMPTS) — LangGraph tool 루프 (편차 11,
     planforge/llm/loops.py::run_tool_loop, derive.py의 재변환 루프와 동일 패턴).
     소진 시 PlanReviseError.
     """
@@ -80,6 +84,10 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
             last_error = e
             return ("retry", "plan 포맷 검증 실패 — 아래 오류를 해소해 write_plan 도구를 다시 "
                              f"호출하라:\n{e}")
+        if md == (base_markdown or "").strip():
+            last_error = PlanError("LLM 결과에 변경이 없습니다 — 발견사항이 반영되지 않았습니다")
+            return ("retry", "plan 원문과 동일한 마크다운입니다 — 반영 대상 발견사항을 실제로 "
+                             "반영해 write_plan 도구를 다시 호출하라 (원문 복사 금지).")
         return ("ok", (md, parsed))
 
     final = run_tool_loop(chat_fn, [WRITE_PLAN_TOOL], TOOL_NAME,
@@ -89,5 +97,5 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
                           validate=validate, messages=messages)
     if final["result"] is None:
         raise PlanReviseError(
-            f"plan 포맷 검증 실패가 {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")
+            f"plan 반영 실패 — {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")
     return final["result"]
