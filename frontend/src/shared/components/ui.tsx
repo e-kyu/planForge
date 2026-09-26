@@ -27,10 +27,22 @@ export function Button(props: {
   );
 }
 
-export function Banner(props: { kind?: "error" | "info" | "ok"; children: ReactNode }) {
+export function Banner(props: {
+  kind?: "error" | "info" | "ok";
+  children: ReactNode;
+  onDismiss?: () => void;
+}) {
   return (
-    <div className={`banner banner-${props.kind ?? "info"}`} role="status">
+    <div
+      className={`banner banner-${props.kind ?? "info"} ${props.onDismiss ? "banner-dismiss" : ""}`}
+      role="status"
+    >
       {props.children}
+      {props.onDismiss && (
+        <button type="button" className="banner-close" aria-label="배너 닫기" onClick={props.onDismiss}>
+          ×
+        </button>
+      )}
     </div>
   );
 }

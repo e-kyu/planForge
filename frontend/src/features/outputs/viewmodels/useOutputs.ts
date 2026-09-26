@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Build, Job } from "../../../api/client";
 import { enqueueDerivative, fetchBuilds, fetchJobs, fetchOutputText, fetchPlans } from "../models/outputsApi";
+import { latestFailed } from "../../../shared/lib/jobs";
 import { errMsg } from "../../../shared/lib/errMsg";
 
 /* 산출물 갤러리 (FR-3.4/3.5, FR-5) — 갤러리·작업 큐·미리보기 데이터.
@@ -29,6 +30,8 @@ export function useOutputs(pid: number) {
   const [selPreview, setSelPreview] = useState<string | null>(null);
 
   const jobs = jobsQ.data ?? [];
+  // 실패 배너는 이력이 아니라 마지막 상태 기준 — 타입별 최신 job이 실패일 때만 노출
+  const failedLatest = useMemo(() => latestFailed(jobs), [jobs]);
   const queueBusy = pending || hasActive(jobs);
   const active = hasActive(jobs);
 
@@ -92,6 +95,7 @@ export function useOutputs(pid: number) {
     builds: buildsQ.data ?? null,
     plans: plansQ.data ?? [],
     jobs,
+    failedLatest,
     error,
     notice,
     busy: queueBusy,

@@ -93,17 +93,17 @@ export default function ReviewPanel({ pid }: { pid: number }) {
         </div>
       )}
 
-      {sel && <ReviewDetail key={sel.id} r={sel} />}
+      {sel && <ReviewDetail key={sel.id} r={sel} pid={pid} />}
     </section>
   );
 }
 
-function ReviewDetail({ r }: { r: Review }) {
+function ReviewDetail({ r, pid }: { r: Review; pid: number }) {
   // 반영 API는 r.findings의 원본 인덱스를 받으므로 정렬 전에 인덱스를 붙인다
   const findings = (r.findings as ReviewFinding[])
     .map((f, idx) => ({ f, idx }))
     .sort((a, b) => (SEV_ORDER[a.f.severity] ?? 9) - (SEV_ORDER[b.f.severity] ?? 9));
-  const { busy, err, notice, apply } = useReviewApply(r.plan_id, r.id);
+  const { busy, err, notice, apply } = useReviewApply(r.plan_id, r.id, pid);
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(findings.map((x) => x.idx)),
   );

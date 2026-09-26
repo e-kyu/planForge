@@ -39,6 +39,30 @@
   box-shadow: var(--shadow-xs);
 }
 
+/* dismiss(×) 버튼이 있는 배너 — 기존 토큰만 사용 (새 토큰 없음) */
+.banner-dismiss {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.banner-dismiss > :first-child {
+  flex: 1;
+}
+.banner-close {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  font-size: 1.1em;
+  line-height: 1;
+  padding: 0 2px;
+}
+.banner-close:hover {
+  opacity: 1;
+}
+
 .banner-error {
   background: #fdf1ef;
   border-color: rgba(192, 57, 43, 0.3);

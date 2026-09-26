@@ -42,6 +42,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     builds,
     plans,
     jobs,
+    failedLatest,
     error,
     notice,
     busy,
@@ -52,12 +53,14 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     closePreview,
   } = useOutputs(pid);
   const [docSel, setDocSel] = useState<string>("");
+  // 배너 dismiss — 닫은 job id를 기억해 새 실패가 오면 배너가 다시 나타난다
+  const [failedDismissId, setFailedDismissId] = useState<number | null>(null);
 
   if (builds === null) return <Empty>불러오는 중…</Empty>;
 
   const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
   const docs = (approvedPlan?.docs ?? []) as string[];
-  const failedJobs = jobs.filter((j) => j.status === "failed");
+  const visibleFailed = failedLatest.filter((j) => j.id !== failedDismissId);
   const recentJobs = [...jobs].reverse().slice(0, 5);
 
   return (
@@ -101,9 +104,9 @@ export default function OutputsPanel({ pid }: { pid: number }) {
       {notice && <Banner kind="info">{notice}</Banner>}
       {busy && <Banner kind="info">빌드 처리 중… (큐 직렬 처리)</Banner>}
 
-      {failedJobs.length > 0 && (
-        <Banner kind="error">
-          실패한 작업 {failedJobs.length}건 — {jobDetail(failedJobs[failedJobs.length - 1]!)}
+      {visibleFailed.length > 0 && (
+        <Banner kind="error" onDismiss={() => setFailedDismissId(visibleFailed[visibleFailed.length - 1]!.id)}>
+          실패한 작업 {visibleFailed.length}건 — {jobDetail(visibleFailed[visibleFailed.length - 1]!)}
         </Banner>
       )}
 
