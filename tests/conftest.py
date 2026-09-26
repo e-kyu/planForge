@@ -23,9 +23,9 @@ def db_env(monkeypatch, tmp_path):
 
 @pytest.fixture()
 def test_engine(db_env):
-    from app import models  # noqa: F401 — Base.metadata에 테이블 등록 필수 (drop/create 전)
-    from app import db as app_db
-    from app.db import Base, make_engine
+    import app.modules  # noqa: F401 — Base.metadata에 모든 모듈 테이블 등록 필수 (drop/create 전)
+    from app.shared import db as app_db
+    from app.shared.db import Base, make_engine
 
     engine = make_engine(os.environ["DATABASE_URL"])
     Base.metadata.drop_all(engine)

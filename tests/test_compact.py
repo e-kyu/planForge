@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fakes import FakeLLM, tool_call
 
-from app.agents.compact import build_context, run_llm_compact
+from app.modules.facts.application.compact import build_context, run_llm_compact
 
 PROPOSAL = {
     "summary": "매출 항목 3건이 중복된다",

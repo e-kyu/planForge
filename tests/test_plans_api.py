@@ -11,8 +11,8 @@ def _make_project(client) -> int:
 
 
 def _insert_plan(app, project_id: int, version_no: int = 1, status: str = "draft") -> int:
-    from app.db import make_session_factory
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     with make_session_factory(app.state.settings.database_url)() as s:
         plan = Plan(project_id=project_id, version_no=version_no,

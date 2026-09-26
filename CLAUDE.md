@@ -32,10 +32,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 아키텍처 요점
 
-- **파이프라인**: 프로젝트 생성 → 소스 등록 → 인터뷰 세션(상태머신 `backend/app/agents/interview.py`
-  + SSE 턴) → 팩트 적립 → plan 세대 생성 → 승인(approve) → derive/review job → 단일 워커
-  실행 → 결정론 빌드·채번 → 검수(`ReviewReport`).
-- **SSOT의 실제 구현**: plan 본문의 원본은 DB `Plan.markdown`이다. `workspace.py`의
+**구조**: 가이드(`sources/default_architecture_guidelines.md`) 적용 — 백엔드 모듈러 모놀리식
+(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/architecture-decisions.md`.
+**모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
+`facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 모듈·feature를 템플릿으로 복제.
+
+- **파이프라인**: 프로젝트 생성 → 소스 등록 → 인터뷰 세션(상태머신
+  `backend/app/modules/interview/application/agent.py` + SSE 턴) → 팩트 적립 → plan 세대 생성 →
+  승인(approve) → derive/review job → 단일 워커 실행 → 결정론 빌드·채번 → 검수(`ReviewReport`).
+- **SSOT의 실제 구현**: plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의
   `write_plan_mirror`가 워크스페이스에 기록하는 `plan.md`는 Deriver·빌더가 파일로 읽는
   미러일 뿐. 파생 경로: Plan 레코드 → 미러 → Deriver(`planforge/derive.py`) → 원자적
   빌드(`atomic_build`) → 채번 등록(Build 행).
@@ -46,17 +51,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   스레드 직렬). 빌더가 스레드 안전하지 않으므로 **병렬 실행 금지** — 멀티 워커는
   BEGIN IMMEDIATE 기반 재설계 전까지 도입하지 않는다. 시작 시 `requeue_stale_running`이
   이전 프로세스의 running 잔재를 재큐잉한다.
-- **LLM 계층**: `app/agents/llm.py LLMRegistry`가 프로필(interview/derive/review)별
+- **LLM 계층**: `app/shared/llm.py LLMRegistry`가 프로필(interview/derive/review/plan_revise)별
   provider·모델을 `PLANFORGE_CONFIG`(기본 `backend/planforge/config.json`, gitignored —
-  예시 `config.example.json`)에서 읽는다. provider는 openai SDK 기반 OpenAI 호환 단일
-  프로토콜. 테스트는 `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로
-  fake LLM을 주입한다.
-- **프롬프트 위치**: 인터뷰·검수·압축·plan 재작성은 `backend/app/agents/prompts/*.md`,
-  파생물 변환은 `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는
+  예시 `config.example.json`)에서 읽는다. provider는 `langchain-openai ChatOpenAI`
+  기반 OpenAI 호환 단일 프로토콜(아키텍처 결정 편차 10 — chat_fn/stream_fn dict 계약은 불변).
+  인터뷰 턴 루프는 langgraph StateGraph(`interview/application/turn_graph.py`), 도구 루프
+  (derive 재변환·plan_revise·review·compact)는 공용 StateGraph
+  (`planforge/llm/loops.py run_tool_loop` — 편차 11). 테스트는
+  `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로 fake LLM을 주입한다.
+- **프롬프트 위치**: 모듈별 `backend/app/modules/<모듈>/application/prompts/*.md`
+  (interview·facts/compact·plans/plan_revise·review), 파생물 변환은
+  `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는
   런타임 LLM 프롬프트다.
-- **프론트엔드**: React 19 + TypeScript(Vite), 자체 CSS. `src/pages/`에 ProjectsPage·
-  ProjectPage와 탭 패널 5종(소스·인터뷰·plan·산출물·검수), `components/`에 CodeMirror
-  에디터·마크다운 미리보기. API 타입 `src/api/types.gen.ts`는 `npm run gen:types`로
+- **프론트엔드**: React 19 + TypeScript(Vite), 자체 CSS + TanStack Query. `src/features/`
+  에 화면별 feature 7종 — 각 `models/`(API 호출)·`viewmodels/`(상태·로직 훅)·`views/`
+  (표현 전용 컴포넌트). `shared/components/`에 CodeMirror 에디터·마크다운 미리보기·공통 UI,
+  `shared/lib/`에 라우터·에러 문자열 변환. **View에 fetch·서버 데이터 로직 금지 —
+  viewmodel 훅 경유(가이드 §4.3)**. API 타입 `src/api/types.gen.ts`는 `npm run gen:types`로
   갱신하는 자동 생성물이다.
 
 ## 개발 규칙
@@ -64,7 +75,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 상태: **M1~M4 코드 완료 (2026-09-19)**. 남은 것: 브라우저 e2e 완주.
 - 빌더 `backend/planforge/builders/{build_ppt,build_doc,theme}.py`는 legacy scripts의
   바이트 동일 이식본 — **로직 변경 금지**, 경로/워크스페이스 주입만 어댑터로 처리.
-- LLM 호출은 `openai` SDK 기반 provider 추상화 계층으로만 한다. anthropic SDK 사용 금지.
+- LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider 어댑터 계층으로만 한다
+  (`chat_fn`/`stream_fn` dict 계약 유지). anthropic SDK 사용 금지.
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
   legacy `_sanitize_title` 규칙 유지.
 - 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/planforge/config.json`

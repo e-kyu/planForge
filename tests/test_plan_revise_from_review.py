@@ -25,8 +25,8 @@ def _make_project(client, slug: str) -> int:
 
 
 def _review_report(app, project_id: int, plan_id: int, findings: list[dict]) -> int:
-    from app.db import make_session_factory
-    from app.models import ReviewReport
+    from app.shared.db import make_session_factory
+    from app.modules.review.infrastructure.models import ReviewReport
 
     with make_session_factory(app.state.settings.database_url)() as s:
         rep = ReviewReport(
@@ -52,8 +52,8 @@ def test_revise_from_review_contract_exposes_suggestion(client, app):
 
 
 def test_revise_from_review_gates(client, app):
-    from app.db import make_session_factory
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     pid = _make_project(client, "prv-gate")
     # plan 404
@@ -113,8 +113,8 @@ def test_revise_from_review_happy_path(client, app, db_env):
     assert job["result"]["version_no"] == 2 and job["result"]["applied_count"] == 1
 
     # 새 세대: DRAFT, origin=review / base plan 무변경
-    from app.db import make_session_factory
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.shared.db import make_session_factory
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     with make_session_factory(app.state.settings.database_url)() as s:
         rows = {p.id: p for p in s.query(Plan).all()}
@@ -183,7 +183,8 @@ def test_revise_from_review_validation_failure_fails_job(client, app):
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "failed"
     assert job["error_class"] == "llm"  # 재시도 소진 — LLM이 유효 plan을 못 만듦
-    assert "plan 포맷 검증 실패" in job["error"]
+    assert "plan 반영 실패" in job["error"]
+    assert "핵심 메시지는 정확히 3개" in job["error"]
 
     # 새 Plan 세대가 만들어지지 않았다
     plans = client.get(f"/api/projects/{pid}/plans").json()
@@ -196,11 +197,38 @@ def test_revise_from_review_unchanged_markdown_is_validation_error(client, app):
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
-    llm = FakeLLM([tool_call("write_plan", {"markdown": SAMPLE})])
+    # 원문 복사 3회 → 루프 validate의 무변경 게이트가 매번 재시도 피드백 → 소진
+    llm = FakeLLM([tool_call("write_plan", {"markdown": SAMPLE})] * 3)
     _run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "failed"
-    assert job["error_class"] == "validation"  # 결정론 판정 — 변경 없음
+    assert job["error_class"] == "llm"  # 재시도 소진 — PlanReviseError
+    assert "변경이 없습니다" in job["error"]
     plans = client.get(f"/api/projects/{pid}/plans").json()
     assert len(plans) == 1
+
+
+def test_revise_from_review_unchanged_then_retry_succeeds(client, app):
+    pid = _make_project(client, "prv-retry")
+    plan_id = _approved_plan(app, pid)
+    rid = _review_report(app, pid, plan_id, FINDINGS)
+
+    client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
+    # 1차 응답은 원문 복사 → 무변경 피드백 → 2차 응답(수정본)으로 성공
+    llm = FakeLLM([
+        tool_call("write_plan", {"markdown": SAMPLE}),
+        tool_call("write_plan", {"markdown": REVISED}),
+    ])
+    _run_queue(app, llm, profile="plan_revise")
+
+    job = client.get("/api/jobs/1").json()
+    assert job["status"] == "done", job
+    assert job["result"]["version_no"] == 2
+
+    # 무변경 피드백이 assistant.tool_calls → tool 쌍으로 전달됐다 (루프 프로토콜)
+    assert len(llm.calls) == 2
+    retry_pair = llm.calls[1][2:4]  # [system, user] 뒤에 붙은 재시도 쌍
+    assert retry_pair[0]["role"] == "assistant" and retry_pair[0]["tool_calls"]
+    assert retry_pair[1]["role"] == "tool"
+    assert "원문과 동일" in retry_pair[1]["content"]

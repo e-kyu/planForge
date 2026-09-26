@@ -6,7 +6,7 @@
 (예: projects/X/work/report.json → projects/X/output).
 버전 채번은 확장자별 독립 시퀀스 ({접두어}_vNN.{ext}).
 docx만 python-docx 필요 (pip install python-docx) — md/html은 표준 라이브러리만으로 동작.
-스키마는 CLAUDE.md "report.json 스키마" 절 + samples/report.sample.json 참조.
+스키마는 CLAUDE.md "report.json 스키마" 절 + tests/fixtures/report.sample.json 참조.
 스타일은 theme.py 토큰 + 이 파일에 내장 (ppt-design 스킬은 PPT 전용).
 """
 import json

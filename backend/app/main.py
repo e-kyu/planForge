@@ -8,17 +8,16 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from .api import api_router
-from .config import get_settings
-from .db import get_engine
-from .errors import install_error_handlers
-from .models import Base
+from .shared.config import get_settings
+from .shared.db import Base, get_engine
+from .shared.errors import install_error_handlers
 
 
 def create_app(llm_overrides: dict | None = None, start_worker: bool = True) -> FastAPI:
     from contextlib import asynccontextmanager
 
-    from .db import make_session_factory
-    from .worker import JobContext, worker_loop
+    from .modules.jobs.application.worker import JobContext, worker_loop
+    from .shared.db import make_session_factory
 
     settings = get_settings()
 

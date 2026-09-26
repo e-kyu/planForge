@@ -13,6 +13,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .llm.loops import run_tool_loop
 from .numcheck import Finding, check_report, check_slides
 from .plan import Plan, PlanError, filter_slides, parse_plan_file, validate_skeleton
 
@@ -155,54 +156,41 @@ class Deriver:
             {"role": "user", "content": user_text},
         ]
 
-        def _feedback(resp_content: str, args_json: str, text: str) -> None:
-            """도구 호출 결과를 프로토콜대로 되돌린다 (assistant.tool_calls → tool 응답).
-
-            tool 응답 없이 user 피드백만 붙이면 OpenAI 호환 릴레이가 요청을 처리하지
-            못하고 정지한다 (사고: ollama cloud 재시도 요청 무응답).
-            """
-            messages.append({"role": "assistant", "content": resp_content or None,
-                             "tool_calls": [{"id": f"call_{tool_name}", "type": "function",
-                                             "function": {"name": tool_name,
-                                                          "arguments": args_json}}]})
-            messages.append({"role": "tool", "tool_call_id": f"call_{tool_name}",
-                             "content": text})
-
         last_findings: list[Finding] = []
-        for attempt in range(1, self.max_attempts + 1):
-            resp = self.chat_fn(messages, tools=[tool])
-            calls = [tc for tc in resp.get("tool_calls", []) if tc["name"] == tool_name]
-            if not calls:
-                messages.append({"role": "assistant", "content": resp.get("content") or ""})
-                messages.append({"role": "user", "content":
-                                 f"{tool_name} 도구를 호출해 변환 결과를 전달하라. 도구 호출 외 출력 금지."})
-                continue
-            args = calls[0]["arguments"]
-            if isinstance(args, str):
-                args = json.loads(args)
-            args_json = json.dumps(args, ensure_ascii=False)
+
+        def validate(args: dict) -> tuple[str, object]:
             payload = dict(args)
             self._snap_literals(slides, payload)  # 수치 리터럴 표기 보정 (원칙 3)
             try:
                 findings = self._check(kind, plan, slides, payload)
                 reds = [f for f in findings if f.severity == "red"]
             except ValueError as e:  # 스키마 위반 — 빌더 검증 오류를 그대로 되돌려 재변환
-                _feedback(resp.get("content") or "", args_json,
-                          f"스키마 검증 실패 — 아래 오류를 해소해 {tool_name} 도구를 다시 호출하라:\n{e}")
-                continue
+                return ("retry",
+                        f"스키마 검증 실패 — 아래 오류를 해소해 {tool_name} 도구를 다시 호출하라:\n{e}")
             if not reds:
-                return payload, attempt, last_findings
-            last_findings = findings
-            _feedback(resp.get("content") or "", args_json,
-                      "수치 무결성 검증 실패(🔴). 아래 발견사항을 모두 해소해 "
-                      f"{tool_name} 도구를 다시 호출하라. 수치 토큰은 plan 표기를 문자열 "
-                      "그대로 복사한다 — 소수점 자리·단위·기호를 정규화하지 않는다 "
-                      "(15.0→15 금지, '15.0억 원'→'15.0억' 금지):\n"
-                      + "\n".join(str(f) for f in reds))
-        raise DeriveError(
-            f"수치 무결성 위반이 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
-            "(수치·표·차트는 plan과 한 글자도 같아야 합니다):\n"
-            + "\n".join(str(f) for f in last_findings))
+                return ("ok", payload)
+            last_findings[:] = findings
+            return ("retry",
+                    "수치 무결성 검증 실패(🔴). 아래 발견사항을 모두 해소해 "
+                    f"{tool_name} 도구를 다시 호출하라. 수치 토큰은 plan 표기를 문자열 "
+                    "그대로 복사한다 — 소수점 자리·단위·기호를 정규화하지 않는다 "
+                    "(15.0→15 금지, '15.0억 원'→'15.0억' 금지):\n"
+                    + "\n".join(str(f) for f in reds))
+
+        # 재변환 루프 — LangGraph tool 루프 (편차 11, planforge/llm/loops.py)
+        # 도구 누락 nudge·재시도 피드백(assistant.tool_calls → tool 응답 쌍 — ollama cloud
+        # 무응답 사고 대응)은 loops.py가 동일 프로토콜로 조립한다.
+        final = run_tool_loop(self.chat_fn, [tool], tool_name,
+                              max_attempts=self.max_attempts,
+                              nudge_text=(f"{tool_name} 도구를 호출해 변환 결과를 전달하라. "
+                                          "도구 호출 외 출력 금지."),
+                              validate=validate, messages=messages)
+        if final["result"] is None:
+            raise DeriveError(
+                f"수치 무결성 위반이 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
+                "(수치·표·차트는 plan과 한 글자도 같아야 합니다):\n"
+                + "\n".join(str(f) for f in last_findings))
+        return final["result"], final["attempts"], last_findings
 
     def _snap_literals(self, slides, payload: dict) -> None:
         """LLM이 정규화한 수치 리터럴(15.0→15)을 plan 표기로 되돌린다 (결정론 보정).

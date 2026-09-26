@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Alembic 환경 — app.models 메타데이터를 사용한다."""
+"""Alembic 환경 — app.modules 모델 메타데이터를 사용한다."""
 from __future__ import annotations
 
 import os
@@ -13,8 +13,8 @@ from sqlalchemy import engine_from_config, pool
 # backend/를 import 경로에 추가 (app, planforge 모두)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.db import Base  # noqa: E402
-from app import models  # noqa: E402,F401  (메타데이터 등록)
+import app.modules  # noqa: E402,F401  (모든 모듈 models — metadata 등록)
+from app.shared.db import Base, ensure_sqlite_dir  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
@@ -22,13 +22,11 @@ if config.config_file_name is not None:
 
 database_url = os.environ.get("DATABASE_URL")
 if not database_url:
-    # app.config 기본값으로 폴백 — alembic.ini의 URL과 드리프트하지 않는다
-    from app.config import get_settings  # noqa: E402
+    # app.shared.config 기본값으로 폴백 — alembic.ini의 URL과 드리프트하지 않는다
+    from app.shared.config import get_settings  # noqa: E402
 
     database_url = get_settings().database_url
 if database_url.startswith("sqlite"):
-    from app.db import ensure_sqlite_dir  # noqa: E402
-
     ensure_sqlite_dir(database_url)
 config.set_main_option("sqlalchemy.url", database_url)
 

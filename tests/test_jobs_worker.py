@@ -11,7 +11,7 @@ FIX = Path(__file__).parent / "fixtures"
 
 def _approved_plan(db_session_factory, project_id: int) -> int:
     """승인된 plan 행을 직접 적립한다 (plan 편집 API는 PR-5)."""
-    from app.models import Plan, PlanOrigin, PlanStatus
+    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     with db_session_factory() as s:
         plan = Plan(project_id=project_id, version_no=1,
@@ -23,9 +23,9 @@ def _approved_plan(db_session_factory, project_id: int) -> int:
 
 
 def _run_queue(app, llm):
-    from app.config import get_settings
-    from app.db import make_session_factory
-    from app.worker import JobContext, claim_next_job, run_job
+    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
+    from app.shared.config import get_settings
+    from app.shared.db import make_session_factory
 
     ctx = JobContext(
         session_factory=make_session_factory(app.state.settings.database_url),
@@ -43,7 +43,7 @@ def _run_queue(app, llm):
 
 
 def test_derive_build_report_job_end_to_end(client, app, db_env):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     client.post("/api/projects", json={"slug": "queue-demo", "title": "큐 데모"})
     pid = 1
@@ -75,7 +75,7 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
 
 
 def test_derive_build_slides_job_creates_pptx(client, app, db_env):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     client.post("/api/projects", json={"slug": "ppt-demo", "title": "ppt"})
     _approved_plan(make_session_factory(app.state.settings.database_url), 1)
@@ -103,7 +103,7 @@ def test_unapproved_plan_blocks_derive(client, app):
 
 
 def test_llm_failure_classified_as_llm_error(client, app, db_env):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     client.post("/api/projects", json={"slug": "fail-demo", "title": "x"})
     _approved_plan(make_session_factory(app.state.settings.database_url), 1)
@@ -124,8 +124,8 @@ def test_llm_failure_classified_as_llm_error(client, app, db_env):
 
 
 def test_claim_returns_none_on_empty_queue(app):
-    from app.db import make_session_factory
-    from app.worker import claim_next_job
+    from app.shared.db import make_session_factory
+    from app.modules.jobs.application.worker import claim_next_job
 
     s = make_session_factory(app.state.settings.database_url)()
     try:
@@ -135,7 +135,7 @@ def test_claim_returns_none_on_empty_queue(app):
 
 
 def test_report_build_defaults_to_three_formats(client, app, db_env):
-    from app.db import make_session_factory
+    from app.shared.db import make_session_factory
 
     client.post("/api/projects", json={"slug": "fmt-demo", "title": "x"})
     _approved_plan(make_session_factory(app.state.settings.database_url), 1)

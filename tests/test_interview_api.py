@@ -92,7 +92,8 @@ def test_interview_full_flow_to_plan_approval(sclient, sapp, fake_llm, db_env):
     events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
     names = [n for n, _ in events]
     assert "questions" in names and "state" in names and "done" in names
-    assert names[0] == "state"  # 턴 시작 시 현재 상태 먼저 전송
+    assert names[0] == "progress"  # 턴 시작 즉시 컨텍스트 조립 진행 알림(progress) 먼저 전송
+    assert events[0][1] == {"step": "context"}
     s = sclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
     assert s["pending_questions"][0]["text"] == "청중은 누구인가?"
@@ -143,6 +144,20 @@ def test_interview_full_flow_to_plan_approval(sclient, sapp, fake_llm, db_env):
     assert s["phase"] == "approved" and s["status"] == "done"
     # plan.md 미러 — SSOT(DB)의 파일 형태
     assert (db_env / "interview-e2e" / "plan.md").read_text(encoding="utf-8") == plan_sample_markdown()
+
+
+def test_kick_emits_progress_and_not_persisted(sclient, fake_llm):
+    """progress 이벤트: 첫 토큰 전 구간 진행을 알리며, emit-only라 이력에 영속되지 않는다."""
+    sid = _setup(sclient)
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    names = [n for n, _ in events]
+    assert names[0] == "progress" and events[0][1] == {"step": "context"}
+    steps = [p["step"] for n, p in events if n == "progress"]
+    assert "llm" in steps and "tool" in steps
+    # 미영속 — GET /messages 리플레이에 progress가 없고, 빈 content의 text 행도 없다
+    msgs = sclient.get(f"/api/interview/sessions/{sid}/messages").json()
+    assert all(m["kind"] != "progress" for m in msgs)
+    assert all(m["content"] for m in msgs if m["role"] == "assistant" and m["kind"] == "text")
 
 
 def test_gate_phase_mismatches_are_409(sclient, fake_llm):
@@ -196,9 +211,9 @@ def test_interview_to_build_end_to_end(sclient, sapp, fake_llm, db_env):
     job_id = r.json()["id"]
 
     # 단일 워커 직렬화는 run_job 직접 호출로 결정론 검증 (worker 루프는 비활성)
-    from app.config import get_settings
-    from app.db import make_session_factory
-    from app.worker import JobContext, claim_next_job, run_job
+    from app.shared.config import get_settings
+    from app.shared.db import make_session_factory
+    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
 
     derive_llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
     ctx = JobContext(

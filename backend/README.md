@@ -19,28 +19,31 @@ FastAPI 웹 백엔드(`app/`)와 기획 문서 생성 코어 엔진(`planforge/`
 
 ```
 backend/
-├── app/                          웹 백엔드
+├── app/                          웹 백엔드 (모듈러 모놀리식)
 │   ├── main.py                   create_app 팩토리 · lifespan 워커 기동 · /api/health
-│   ├── config.py                 Settings (env → 경로/DB URL 설정)
-│   ├── db.py                     SQLAlchemy 엔진 (SQLite WAL·FK·busy_timeout)
-│   ├── models.py                 9개 테이블 + 상태 enum 전부
-│   ├── schemas.py                Pydantic 요청/응답 모델 (OpenAPI → 프론트 타입 원료)
-│   ├── errors.py                 에러 핸들러 설치 (WorkspaceError/PlanError → 422)
-│   ├── events.py                 SSE 이벤트 팩토리 (token/done/state/notice/error)
-│   ├── transcript.py             세션별 seq 채번 + append_message (SSE 커서 겸 이력)
-│   ├── workspace.py              워크스페이스 규약 · plan.md 미러 · atomic_build
-│   ├── worker.py                 DB 작업 큐 + 단일 워커 (run_job·requeue_stale_running)
-│   ├── api/                      REST·SSE 라우터 (라우터 집계는 __init__.py)
-│   │   ├── projects.py  sources.py  plans.py  derivatives.py
-│   │   ├── jobs.py      facts.py    interview.py  reviews.py
-│   └── agents/                   인터뷰 에이전트 + LLM 계층
-│       ├── interview.py          상태머신 + SSE 턴 (한 POST = 한 턴)
-│       ├── llm.py                LLMRegistry — 프로필별 chat_fn/stream_fn
-│       ├── tools.py              OpenAI function 스키마 + 서버측 검증
-│       ├── compact.py            팩트 압축 (LLM 판단만, 적용은 결정론)
-│       ├── planrevise.py         검수 발견사항 → plan 수정 (검증 단일 권위)
-│       ├── review.py             LLM 내용 검수 (결정론 검수와 역할 분리)
-│       └── prompts/              interview.md · compact.md · plan_revise.md · review.md
+│   ├── api.py                    라우터 집계 — 각 모듈 presentation/api.py를 기존 계약 순서대로 포함
+│   ├── modules/                  도메인 모듈 8종 — 새 기능은 기존 모듈을 템플릿으로 복제
+│   │   │                         (각 모듈 공통: facade.py · presentation/{api,schemas}.py
+│   │   │                          · application/ · infrastructure/models.py)
+│   │   ├── projects/             워크스페이스 자동 생성 · 프로젝트 하드 삭제 (application/service.py)
+│   │   ├── sources/              프로젝트 소스 업로드·삭제 + 글로벌 소스(읽기 전용 global_router)
+│   │   ├── plans/                plan 세대·승인·revise (application/{service,planrevise,plan_revise_job}.py)
+│   │   ├── derivatives/          파생물 생성 job + 산출물 목록·다운로드
+│   │   ├── jobs/                 작업 큐 + 단일 워커 (application/worker.py)
+│   │   ├── facts/                팩트 목록·수동 추가·수정·압축 (application/compact.py)
+│   │   ├── interview/            인터뷰 에이전트 + SSE 턴
+│   │   │                         (application/agent.py 상태머신 + turn_graph.py langgraph
+│   │   │                          턴 루프 · domain/events.py SSE 이벤트
+│   │   │                          · infrastructure/transcript.py seq 채번·이력 · prompts/interview.md)
+│   │   └── review/               결정론 검수 + LLM 내용 검수 (application/{run_review,review_agent}.py)
+│   ├── agents/tools.py           인터뷰 도구 5종 OpenAI function 스키마 + 서버측 검증
+│   └── shared/                   모듈 간 공용 계층 (타 모듈 내부 직접 import의 유일한 우회로)
+│       ├── config.py             Settings (env → 경로/DB URL 설정)
+│       ├── db.py                 SQLAlchemy 엔진 (SQLite WAL·FK·busy_timeout) + Base
+│       ├── errors.py             에러 핸들러 설치 (WorkspaceError/PlanError → 422)
+│       ├── workspace.py          워크스페이스 규약 · plan.md 미러 · atomic_build
+│       ├── llm.py                LLMRegistry — 프로필별 provider·모델 해석, chat_fn/stream_fn
+│       └── types.py              공용 타입 (UTCDateTime 등)
 ├── planforge/                  M1 코어 엔진 (CLI 진입점)
 │   ├── __main__.py               5개 서브커맨드 (parse|numcheck|derive|build-ppt|build-doc)
 │   ├── derive.py                 Deriver — LLM 변환 + 검증 게이트 + 빌드 오케스트레이션
@@ -49,11 +52,12 @@ backend/
 │   ├── plan/                     model.py · parser.py · filter.py (문서 필터·골격 검증)
 │   ├── builders/                 build_ppt.py · build_doc.py · theme.py
 │   │                             (계약 테스트로 고정 — 로직 변경 금지)
-│   ├── llm/                      provider.py (OpenAI 호환 단일 프로토콜)
+│   ├── llm/                      provider.py (langchain-openai ChatOpenAI — OpenAI 호환
+│   │   │                         단일 프로토콜) · loops.py (공용 tool-loop 그래프)
 │   │   └── prompts/              derive_slides.md · derive_report.md
 │   ├── config.json               LLM 프로필 설정 (gitignored)
 │   └── config.example.json       예시 설정
-├── alembic/                      DB 마이그레이션 (versions/ 2개)
+├── alembic/                      DB 마이그레이션 (versions/ 3개)
 ├── alembic.ini
 ├── scripts/
 │   └── export_openapi.py         OpenAPI 스키마 → frontend/openapi.json 덤프
@@ -74,10 +78,10 @@ Project → InterviewSession → Fact → Plan(세대) → Derivative → Build 
 
 ### SSOT의 실제 구현
 
-plan 본문의 원본은 DB `Plan.markdown`이다. `app/workspace.py`의 `write_plan_mirror`가
+plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 `write_plan_mirror`가
 워크스페이스에 기록하는 `plan.md`는 **미러**일 뿐이다 — Deriver·빌더가 파일로 읽기 위한
 것. 파생 경로: `Plan` 레코드 → 미러 → `planforge/derive.py`(`Deriver`) →
-`app/workspace.py`의 `atomic_build` → 채번 등록(`Build` 행). `workspaces/*/work/slides.json`
+`app/shared/workspace.py`의 `atomic_build` → 채번 등록(`Build` 행). `workspaces/*/work/slides.json`
 등 파생물 파일에 대한 직접 쓰기는 설계상 존재하지 않는다.
 
 ### 단일 워커 (병렬 실행 금지)
@@ -117,42 +121,57 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/workspace.py`의 `write_
 - `GET /api/health` → `{"status":"ok"}`.
 - `init_db(engine)`: 개발용 `create_all` 헬퍼(운영은 alembic 사용).
 
-### `app/config.py` — Settings
+### 모듈 구조 규약 (`app/modules/<모듈>/`)
 
-`DATABASE_URL`·`WORKSPACES_DIR`·`PLANFORGE_CONFIG`·`GLOBAL_SOURCES_DIR`·
-`SSE_KEEPALIVE_SECONDS` 환경변수를 읽는다. 기본값: DB는 저장소 루트
-`data/planforge.db`, 워크스페이스는 루트 `workspaces/`, 글로벌 소스는 루트 `sources/`.
+각 도메인 모듈은 동일 레이어 구조를 가진다. 새 모듈/기능은 기존 모듈을 템플릿으로 복제한다.
 
-### `app/db.py`
+| 레이어 | 역할 |
+|---|---|
+| `presentation/api.py` | REST·SSE 라우터 (`app/api.py`가 집계) |
+| `presentation/schemas.py` | Pydantic 요청/응답 모델 (OpenAPI → 프론트 타입 원료) |
+| `application/` | 도메인 로직 — 서비스·에이전트·job 핸들러·LLM 프롬프트(`prompts/*.md`) |
+| `infrastructure/models.py` | SQLAlchemy 테이블 정의 (`shared/db.py`의 Base 공유) |
+| `facade.py` | **타 모듈에 공개하는 함수만 모은 공개 계약** |
 
-SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeout 5000**을
-설정한다. URL별 엔진 캐시(`get_engine`)를 쓰고 테스트는 `dispose_cached_engines`로
-격리를 보장한다.
+**모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
+`facade.py` 공개 함수 또는 `shared/` 경유. 결정·편차는 루트 `docs/architecture-decisions.md`에
+기록한다.
 
-### `app/models.py` — 테이블 9개
+### `app/shared/` — 공용 계층
+
+- `config.py`: `DATABASE_URL`·`WORKSPACES_DIR`·`PLANFORGE_CONFIG`·`GLOBAL_SOURCES_DIR`·
+  `SSE_KEEPALIVE_SECONDS` 환경변수를 읽는다. 기본값: DB는 저장소 루트
+  `data/planforge.db`, 워크스페이스는 루트 `workspaces/`, 글로벌 소스는 루트 `sources/`.
+- `db.py`: SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeout
+  5000**을 설정한다. URL별 엔진 캐시(`get_engine`)를 쓰고 테스트는
+  `dispose_cached_engines`로 격리를 보장한다.
+- `workspace.py`: 워크스페이스 규약 `workspaces/<slug>/work·output·docs·sources·assets`
+  (슬러그는 ASCII 소문자-하이픈만, `validate_slug`). `write_plan_mirror`는 DB
+  `plans.markdown` → `plan.md` **바이트 동일** 미러
+  (`write_interview_log_mirror`·`compact_interview_log`도 동일한 미러 개념).
+  소스 업로드 검증(`.md .txt .json .csv`, 2MB 이하, UTF-8, Windows 금지 문자 정규화,
+  덮어쓰기 금지)과 `atomic_build`(tmp dir 빌드 → 채번 연속성 보장 복사 → `os.replace`
+  원자 이동, 규약 `<문서 제목>_vNN.<ext>`는 `parse_build_filename`이 해석)도 여기 있다.
+- `llm.py`: `LLMRegistry`가 프로필(interview/derive/review/plan_revise)별
+  provider·모델을 `planforge/llm`에서 읽어 `chat_fn`/`stream_fn`으로 노출.
+  `llm_overrides`에 있으면 가짜가 우선(테스트 주입 훅).
+- `errors.py`: WorkspaceError/PlanError → 422 에러 핸들러.
+- `types.py`: `UTCDateTime` TypeDecorator 등 공용 타입.
+
+### 테이블 9개 (`modules/*/infrastructure/models.py`)
 
 `projects` · `interview_sessions` · `interview_messages` · `facts` · `plans` ·
-`derivatives` · `builds` · `jobs` · `review_reports`
+`derivatives` · `builds` · `jobs` · `review_reports` — 테이블 정의는 소속 도메인 모듈의
+`infrastructure/models.py`로 분산되어 있다.
 
 주요 상태 enum:
 - `SessionPhase`: `hypothesis → awaiting_answers → fact_gate → key_message_gate →
   plan_review → approved` (+`failed`) — 인터뷰 상태머신의 단계.
 - `PlanStatus`: `draft / approved / superseded` — 승인 시 이전 승인본이 superseded.
 - `JobType`: `derive_build / review / plan_revise` · `JobStatus`: `queued/running/done/failed/cancelled`.
-- 시간은 `UTCDateTime` TypeDecorator로 UTC 저장, enum은 value 문자열 저장(native enum 미사용).
+- 시간은 UTC 저장, enum은 value 문자열 저장(native enum 미사용).
 
-### `app/workspace.py`
-
-- 워크스페이스 규약: `workspaces/<slug>/work·output·docs·sources·assets`.
-  슬러그는 ASCII 소문자-하이픈만 허용(`validate_slug`).
-- `write_plan_mirror`: DB `plans.markdown` → `plan.md` **바이트 동일** 미러.
-  `write_interview_log_mirror`·`compact_interview_log`도 동일한 미러 개념.
-- 소스 업로드 검증: `.md .txt .json .csv`, 2MB 이하, UTF-8, Windows 금지 문자 정규화
-  (`sanitize_source_filename`), 덮어쓰기 금지.
-- `atomic_build`: tmp dir 빌드 → 기존 파일들 복사로 채번 연속성 보장 → `os.replace`
-  원자 이동. 파일명 규약 `<문서 제목>_vNN.<ext>`는 `parse_build_filename`이 해석.
-
-### `app/worker.py` — 작업 큐
+### 작업 큐 (`modules/jobs/application/worker.py`)
 
 - `claim_next_job` → `run_job`(동기, 핸들러 디스패치). 핸들러 3종:
   - `_derive_build`: plan 미러 갱신 → `Deriver.derive` → `atomic_build` →
@@ -161,24 +180,35 @@ SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeou
     `ReviewReport`. LLM 실패는 리포트를 막지 않는다(`llm_ok=false`).
   - `_plan_revise`: LLM plan 수정 → 검증 → 새 DRAFT 세대.
 
-### `app/agents/` — 인터뷰 에이전트
+### 인터뷰 에이전트 (`modules/interview/` + `app/agents/tools.py`)
 
-- `interview.py`: `InterviewAgent.run_turn`이 한 POST = 한 턴. 상수
+- `application/agent.py`: `InterviewAgent.run_turn`이 한 POST = 한 턴. 상수
   `MAX_TOOL_TURNS=8`, `MAX_ROUNDS=8`, `PLAN_FIX_ATTEMPTS=3`. system prompt에
   `prompts/interview.md` + 소스/팩트 컨텍스트를 주입한다.
-- `tools.py`: 인터뷰 도구 5종(`ask_questions`·`save_facts`·`confirm_key_messages`·
-  `update_checklist`·`write_plan`)의 OpenAI function 스키마와 서버측 검증 —
-  라운드당 최대 4문항, 핵심 메시지는 정확히 3개.
-- `llm.py`: `LLMRegistry`가 프로필(interview/derive/review/plan_revise)별
-  provider·모델을 `planforge/llm`에서 읽어 `chat_fn`/`stream_fn`으로 노출.
-  `llm_overrides`에 있으면 가짜가 우선(테스트 주입 훅).
-- `compact.py`·`planrevise.py`·`review.py`: LLM은 판단/보고만 하고, 적용·검증은
-  결정론 코드가 담당하는 역할 분리. plan 마크다운 검증의 단일 권위는
-  `planrevise.validate_plan_markdown`(`api/plans.py`가 위임).
+- `application/turn_graph.py`: 턴 루프의 langgraph StateGraph 오케스트레이션
+  (편차 10). 턴 1건 = 그래프 1회 invoke, checkpointer 없음(세션 상태는 DB가 SSOT).
+  도구 판정·게이트·검증·커밋은 서버 코드 권한 — 프리셋 에이전트 미채택.
+- `domain/events.py`: SSE 이벤트 팩토리 (token/done/state/notice/error).
+- `infrastructure/transcript.py`: 세션별 seq 채번 + append_message (SSE 커서 겸 이력).
+- `app/agents/tools.py`: 인터뷰 도구 5종(`ask_questions`·`save_facts`·
+  `confirm_key_messages`·`update_checklist`·`write_plan`)의 OpenAI function 스키마와
+  서버측 검증 — 라운드당 최대 4문항, 핵심 메시지는 정확히 3개.
+- `facts/application/compact.py` · `plans/application/planrevise.py` ·
+  `review/application/review_agent.py`: LLM은 판단/보고만 하고, 적용·검증은 결정론
+  코드가 담당하는 역할 분리. 도구 루프(nudge·검증 재시도)는 공용 tool-loop 그래프
+  `planforge/llm/loops.py::run_tool_loop`로 표준화(편차 11). plan 마크다운 검증의
+  단일 권위는 `planrevise.validate_plan_markdown`(`plans/presentation/api.py`가 위임).
 
-### `app/api/` — 엔드포인트 전체 (37개)
+### LLM 프롬프트 위치
 
-라우터 집계는 `api/__init__.py`. 전체 명세는 기동 후 http://localhost:8000/docs (Swagger).
+모듈별 `app/modules/<모듈>/application/prompts/*.md`
+(interview·facts/compact·plans/plan_revise·review), 파생물 변환은
+`planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는 런타임 LLM 프롬프트다.
+
+### `app/api.py` — 엔드포인트 전체 (37개)
+
+라우터 집계는 `app/api.py`(각 모듈 `presentation/api.py`를 계약 순서대로 포함).
+전체 명세는 기동 후 http://localhost:8000/docs (Swagger).
 
 | 영역 | Method | Path | 설명 |
 |---|---|---|---|
@@ -248,7 +278,7 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 - LLM은 `write_slides_json` / `write_report_json` 도구를 각 1회 호출해 콘텐츠 변환만 한다.
 - 결정론 게이트: 문서 필터 → 골격 검증 → 스키마 검증(`build_ppt.validate` /
   `build_doc.validate`) → numcheck. 수치 무결성 red가 나면 피드백을 담아 재시도
-  (`MAX_ATTEMPTS=3`).
+  (`MAX_ATTEMPTS=3`) — 재시도 루프는 공용 tool-loop 그래프(`llm/loops.py`, 편차 11).
 - `_snap_literals`로 차트 수치를 plan 표기대로 복원한다. 추측 수치는
   `UNCONFIRMED_MARK="(미확정"`으로 표기된다.
 
@@ -278,18 +308,23 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
   토큰 변경 시 4종 세트(theme.py·빌더 리터럴·fixture·frontend `tokens.css`)를
   동시 점검해야 한다 — 절차는 `docs/token-checklist.md`.
 
-### `llm/` — provider 추상화
+### `llm/` — provider 추상화 + tool 루프 오케스트레이션
 
-- `provider.py`: **OpenAI 호환 단일 프로토콜**만 지원(openai SDK). anthropic SDK
-  사용 금지. ollama·openai를 base_url/키 차이만으로 소화한다(ollama는 더미 키 `ollama`).
-- `PROFILES=("interview","derive","review")` + `plan_revise`. 프로필별
+- `provider.py`: **OpenAI 호환 단일 프로토콜**만 지원(`langchain-openai` ChatOpenAI
+  기반 — 편차 10). anthropic SDK 사용 금지. ollama·openai를 base_url/키 차이만으로
+  소화한다(ollama는 더미 키 `ollama`). 자동 재시도 금지 계약 — `max_retries=0`.
+- `loops.py`: 공용 tool-loop 그래프(`run_tool_loop`) — derive 재변환·plan_revise·
+  review·compact가 공유하는 "호출 → nudge / tool 피드백 재시도 / 통과" 패턴을
+  StateGraph로 표준화(편차 11). 판정·피드백 문구는 caller의 `validate` 클로저
+  (결정론)가 담당한다.
+- `PROFILES=("interview","derive","review","plan_revise")`. 프로필별
   `provider/model/base_url/api_key_env`.
 - base_url 우선순위: config `base_url` > `LLM_BASE_URL` env > provider 기본값
   (ollama `http://localhost:11434/v1`, openai API 기본).
 - 타임아웃: `REQUEST_TIMEOUT=600`, `STREAM_DEADLINE=900`(정체 스트림 강제 중단).
 - 프롬프트: `llm/prompts/derive_slides.md`(plan→slides.json),
   `llm/prompts/derive_report.md`(plan→report.json — 문장체 재구성 + 수치 무결성 규칙).
-  앱 측 프롬프트는 `app/agents/prompts/*.md`에 별도로 있다.
+  앱 측 프롬프트는 모듈별 `app/modules/<모듈>/application/prompts/*.md`에 별도로 있다.
 
 ### LLM 설정 (`config.json`, gitignored)
 
@@ -318,9 +353,10 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
   alembic revision -m "..." # 새 마이그레이션
   ```
 
-- `alembic/env.py`는 `DATABASE_URL` env → `app.config.get_settings().database_url`
+- `alembic/env.py`는 `DATABASE_URL` env → `app/shared/config.py get_settings().database_url`
   폴백이며 SQLite batch mode(`render_as_batch=True`)를 쓴다.
-- 현재 리비전 2개: `22d6dcbe6fee`(initial M2 tables) → `663e20e95505`(review_reports).
+- 현재 리비전 3개: `22d6dcbe6fee`(initial M2 tables) → `663e20e95505`(review_reports) →
+  `c7e8d4a2f19b`(add updated_at).
 - 배포 컨테이너는 CMD에서 `alembic upgrade head`를 기동 시 자동 실행한다.
   개발용 `init_db`는 alembic 대체로만 사용.
 
@@ -328,18 +364,20 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 | 변수 | 위치 | 기본값 |
 |---|---|---|
-| `DATABASE_URL` | `app/config.py` · `alembic/env.py` | 저장소 루트 `data/planforge.db` |
-| `WORKSPACES_DIR` | `app/config.py` | 저장소 루트 `workspaces/` |
-| `GLOBAL_SOURCES_DIR` | `app/config.py` | 저장소 루트 `sources/` |
-| `PLANFORGE_CONFIG` | `app/config.py` · CLI | `backend/planforge/config.json` |
-| `SSE_KEEPALIVE_SECONDS` | `app/config.py` | 15 |
+| `DATABASE_URL` | `app/shared/config.py` · `alembic/env.py` | 저장소 루트 `data/planforge.db` |
+| `WORKSPACES_DIR` | `app/shared/config.py` | 저장소 루트 `workspaces/` |
+| `GLOBAL_SOURCES_DIR` | `app/shared/config.py` | 저장소 루트 `sources/` |
+| `PLANFORGE_CONFIG` | `app/shared/config.py` · CLI | `backend/planforge/config.json` |
+| `SSE_KEEPALIVE_SECONDS` | `app/shared/config.py` | 15 |
 | `LLM_BASE_URL` | `planforge/llm/provider.py` | — (config base_url 다음 우선순위) |
 | `OPENAI_API_KEY` | `provider.py` | provider가 openai일 때 필수(프로필별 `api_key_env`로 이름 지정 가능) |
 | `PYTHONUTF8=1` | Dockerfile · compose | Windows에서 필수 |
 | `TEST_DATABASE_URL` | `tests/conftest.py` | 테스트 DB 격리 오버라이드 |
 
-`.env`/dotenv 지원은 없다 — 설정은 순수 OS 환경변수로만 들어오며(개발 셸 또는
-docker-compose `environment`), 요구사항은 `requirements.txt`의 floor-pin(`>=`)만 있다.
+`.env`/dotenv 지원은 없다 — 설정은 순수 OS 환경변수로만 들어온다(개발 셸 또는
+docker-compose `environment`). `requirements.txt`는 일반 의존성은 floor-pin(`>=`),
+LLM 트랜스포트(langchain-core/openai/langgraph)는 exact-pin(`==`)으로 고정한다
+(편차 10 — 전송 계층 교체는 별도 결정으로 기록).
 
 ## 실행
 
@@ -398,7 +436,8 @@ npm run gen:types                    # openapi-typescript로 TS 타입 생성
   경로/워크스페이스 주입만 어댑터로 처리.
 - **LLM은 콘텐츠 변환만** — 파일 조립·좌표 배치·채번은 결정론 코드. LLM이 pptx/docx
   바이너리를 만드는 코드는 금지.
-- **anthropic SDK 금지** — LLM 호출은 openai SDK 기반 provider 추상화 계층으로만.
+- **anthropic SDK 금지** — LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider
+  어댑터 계층으로만 한다(`chat_fn`/`stream_fn` dict 계약 유지).
 - **멀티 워커 금지** — 빌더의 모듈 전역 상태 때문에 병렬 실행은 사양 위반이다.
 - **커밋 전 `git status`** — `workspaces/`·`sources/`·`data/`·`config.json` 등
   ignored 경로가 섞이지 않았는지 확인.
