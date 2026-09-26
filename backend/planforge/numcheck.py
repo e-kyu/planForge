@@ -34,10 +34,11 @@ _RENUMBER_KEYS = {"no", "label"}         # 재채번 구조 번호 (섹션 no·�
 
 @dataclass
 class Finding:
-    code: str      # numeric-missing | numeric-extra | unconfirmed-lost | unconfirmed-extra | source-missing | structure
+    code: str      # numeric-missing | numeric-extra | unconfirmed-lost | unconfirmed-extra | source-missing | structure | fact-mismatch | doc-tag | doc-skeleton | doc-toc | unconfirmed-resolvable
     severity: str  # "red" | "yellow"
     where: str
     message: str
+    suggestion: str | None = None  # 조치 안내 (결정론 발견사항은 선택 — ReviewPanel의 ↳ 행과 plan revise 컨텍스트로 전달)
 
     def __str__(self) -> str:
         return f"[{self.severity}] {self.where}: {self.message}"

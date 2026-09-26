@@ -10,12 +10,16 @@
 LLM/코드 역할 분리:
 - LLM: 발견사항 반영한 plan 마크다운 생성 (write_plan 도구 1회).
 - 코드(결정론): 포맷·골격 검증, 변경 없음 판정, 새 세대 채번·미러 기록.
+
+무변경 판정도 루프 validate(결정론)가 담당한다 — 원문 복사 응답은 포맷 실패와 동일하게
+tool 피드백으로 재시도를 돌리고, 소진 시 PlanReviseError. job의 무변경 판정
+(plan_revise_job.py)은 이중 방어로 남는다.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from planforge.llm.loops import run_tool_loop
 from planforge.plan import Plan as ParsedPlan
 from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
 
@@ -59,8 +63,9 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
                     summary: str = "") -> tuple[str, ParsedPlan]:
     """선택 발견사항을 반영한 plan 마크다운을 생성한다. 반환: (markdown, 파싱 결과).
 
-    도구 누락 시 nudge 1회, 포맷 검증 실패 시 도구 호출 결과 프로토콜로 피드백을
-    되돌려 재시도 (최대 MAX_ATTEMPTS — planforge/derive.py의 재변환 루프와 동일).
+    도구 누락 시 nudge, 포맷 검증 실패·원문 무변경 시 도구 호출 결과 프로토콜로
+    피드백을 되돌려 재시도 (최대 MAX_ATTEMPTS) — LangGraph tool 루프 (편차 11,
+    planforge/llm/loops.py::run_tool_loop, derive.py의 재변환 루프와 동일 패턴).
     소진 시 PlanReviseError.
     """
     system = (PROMPTS_DIR / "plan_revise.md").read_text(encoding="utf-8-sig")
@@ -68,41 +73,29 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
         {"role": "system", "content": system},
         {"role": "user", "content": build_context(base_markdown, findings, summary)},
     ]
-
-    def _feedback(resp_content: str, args_json: str, text: str) -> None:
-        """도구 호출 결과를 프로토콜대로 되돌린다 (assistant.tool_calls → tool 응답).
-
-        tool 응답 없이 user 피드백만 붙이면 OpenAI 호환 릴레이가 처리하지 못한다
-        (planforge/derive.py::Deriver._run_llm._feedback 주석 참조).
-        """
-        messages.append({"role": "assistant", "content": resp_content or None,
-                         "tool_calls": [{"id": f"call_{TOOL_NAME}", "type": "function",
-                                         "function": {"name": TOOL_NAME,
-                                                      "arguments": args_json}}]})
-        messages.append({"role": "tool", "tool_call_id": f"call_{TOOL_NAME}",
-                         "content": text})
-
     last_error: Exception | None = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        resp = chat_fn(messages, tools=[WRITE_PLAN_TOOL])
-        calls = [tc for tc in resp.get("tool_calls", []) if tc["name"] == TOOL_NAME]
-        if not calls:
-            messages.append({"role": "assistant", "content": resp.get("content") or ""})
-            messages.append({"role": "user", "content":
-                             f"{TOOL_NAME} 도구를 호출해 수정된 plan.md 마크다운 전체를 전달하라. "
-                             "도구 호출 외 출력 금지."})
-            continue
-        args = calls[0]["arguments"]
-        if isinstance(args, str):
-            args = json.loads(args)
+
+    def validate(args: dict) -> tuple[str, object]:
+        nonlocal last_error
         md = (args.get("markdown") or "").strip()
         try:
             parsed = validate_plan_markdown(md)
-            return md, parsed
         except PlanError as e:
             last_error = e
-            _feedback(resp.get("content") or "", json.dumps(args, ensure_ascii=False),
-                      "plan 포맷 검증 실패 — 아래 오류를 해소해 write_plan 도구를 다시 "
-                      f"호출하라:\n{e}")
-    raise PlanReviseError(
-        f"plan 포맷 검증 실패가 {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")
+            return ("retry", "plan 포맷 검증 실패 — 아래 오류를 해소해 write_plan 도구를 다시 "
+                             f"호출하라:\n{e}")
+        if md == (base_markdown or "").strip():
+            last_error = PlanError("LLM 결과에 변경이 없습니다 — 발견사항이 반영되지 않았습니다")
+            return ("retry", "plan 원문과 동일한 마크다운입니다 — 반영 대상 발견사항을 실제로 "
+                             "반영해 write_plan 도구를 다시 호출하라 (원문 복사 금지).")
+        return ("ok", (md, parsed))
+
+    final = run_tool_loop(chat_fn, [WRITE_PLAN_TOOL], TOOL_NAME,
+                          max_attempts=MAX_ATTEMPTS,
+                          nudge_text=(f"{TOOL_NAME} 도구를 호출해 수정된 plan.md 마크다운 "
+                                      "전체를 전달하라. 도구 호출 외 출력 금지."),
+                          validate=validate, messages=messages)
+    if final["result"] is None:
+        raise PlanReviseError(
+            f"plan 반영 실패 — {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")
+    return final["result"]

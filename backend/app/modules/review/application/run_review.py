@@ -39,9 +39,10 @@ def run_review(ctx, session, job) -> dict:
 
     findings: list[dict] = []
 
-    def add(code: str, severity: str, where: str, message: str) -> None:
+    def add(code: str, severity: str, where: str, message: str,
+            suggestion: str | None = None) -> None:
         findings.append({"code": code, "severity": severity, "where": where,
-                         "message": message})
+                         "message": message, "suggestion": suggestion})
 
     # SSOT 미러 (Deriver와 동일 — 엔진이 읽는 파일 형태일 뿐)
     ws = Path(project.workspace_path)
@@ -61,7 +62,7 @@ def run_review(ctx, session, job) -> dict:
         f = (check_slides(slides, parsed.key_messages, d.json) if kind == DerivativeKind.SLIDES
              else check_report(slides, parsed.key_messages, d.json))
         for x in f:
-            add(x.code, x.severity, x.where, x.message)
+            add(x.code, x.severity, x.where, x.message, suggestion=x.suggestion)
 
     # 2) 세대 대응성 (FR-4.1) — 기존 빌드가 이 plan 세대인지 (채번은 확장자별 독립이므로 plan_id로)
     for b in list_builds(session, project.id):
@@ -71,13 +72,13 @@ def run_review(ctx, session, job) -> dict:
 
     # 3) 문서 태그 검수
     for x in check_doc_tags(parsed):
-        add(x.code, x.severity, x.where, x.message)
+        add(x.code, x.severity, x.where, x.message, suggestion=x.suggestion)
 
     # 4) 팩트 대조 (FR-4.4 전제 — 활성 팩트만)
     facts = [{"content": f.content, "source": f.source, "date": f.date.isoformat()}
              for f in list_active_facts(session, project.id)]
     for x in check_facts(parsed, facts):
-        add(x.code, x.severity, x.where, x.message)
+        add(x.code, x.severity, x.where, x.message, suggestion=x.suggestion)
 
     # 5) LLM 내용 검수 (실패해도 결정론 결과는 보존)
     llm_ok = True

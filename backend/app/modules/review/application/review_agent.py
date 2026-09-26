@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from planforge.llm.loops import run_tool_loop
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 MAX_FINDINGS = 40  # 폭주 방지 — 이 이상은 어차피 한 문장 요약으로 볼 수 없다
@@ -79,33 +81,31 @@ def run_llm_review(chat_fn, plan_markdown: str, derivative_docs: list[dict],
                    facts: list[dict]) -> tuple[list[dict], str, bool]:
     """LLM 내용 검수 1회. 반환: (findings, summary, llm_ok).
 
-    도구 호출 실패 시 내용 검수만 실패로 기록하고 결정론 검수 결과는 보존한다
-    (검수 전체가 실패하면 발견사항이 통째로 사라진다).
+    도구 누락 시 nudge — LangGraph tool 루프 (편차 11, planforge/llm/loops.py,
+    max_attempts=2: 1회 + nudge 1회). 도구 호출 실패 시 내용 검수만 실패로 기록하고
+    결정론 검수 결과는 보존한다 (검수 전체가 실패하면 발견사항이 통째로 사라진다).
     """
     system = (PROMPTS_DIR / "review.md").read_text(encoding="utf-8-sig")
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": build_context(plan_markdown, derivative_docs, facts)},
     ]
-    for attempt in range(2):  # 1회 + 도구 누락 시 nudge 1회
-        resp = chat_fn(messages, tools=REVIEW_TOOLS)
-        calls = [tc for tc in resp.get("tool_calls", []) if tc["name"] == "report_findings"]
-        if calls:
-            args = calls[0]["arguments"]
-            if isinstance(args, str):
-                args = json.loads(args)
-            findings = args.get("findings") or []
-            for f in findings[:MAX_FINDINGS]:
-                f.setdefault("severity", "yellow")
-                if f["severity"] not in ("red", "yellow", "white"):
-                    f["severity"] = "yellow"
-                f.setdefault("code", "structure-suggest")
-                f.setdefault("where", "파생물")
-                f.setdefault("message", "")
-            return (findings[:MAX_FINDINGS], args.get("summary", ""), True)
-        messages = messages + [
-            {"role": "assistant", "content": resp.get("content") or ""},
-            {"role": "user", "content":
-             "report_findings 도구를 호출해 발견사항을 보고하라. 도구 호출 외 출력 금지."},
-        ]
-    return ([], "", False)
+
+    def validate(args: dict) -> tuple[str, object]:
+        findings = args.get("findings") or []
+        for f in findings[:MAX_FINDINGS]:
+            f.setdefault("severity", "yellow")
+            if f["severity"] not in ("red", "yellow", "white"):
+                f["severity"] = "yellow"
+            f.setdefault("code", "structure-suggest")
+            f.setdefault("where", "파생물")
+            f.setdefault("message", "")
+        return ("ok", (findings[:MAX_FINDINGS], args.get("summary", "")))
+
+    final = run_tool_loop(chat_fn, REVIEW_TOOLS, "report_findings", max_attempts=2,
+                          nudge_text=("report_findings 도구를 호출해 발견사항을 보고하라. "
+                                      "도구 호출 외 출력 금지."),
+                          validate=validate, messages=messages)
+    if final["result"] is None:
+        return ([], "", False)
+    return (*final["result"], True)

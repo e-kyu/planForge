@@ -14,8 +14,9 @@ archive로'하는 **그룹 판단만** 한다. DB 상태 변경·미러 파일 �
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from planforge.llm.loops import run_tool_loop
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
@@ -71,33 +72,31 @@ def run_llm_compact(chat_fn, facts: list[dict]) -> tuple[list[dict], str, bool]:
     """LLM 압축 그룹 제안 1회. 반환: (groups, summary, llm_ok).
 
     groups: [{topic, keep_id, archive_ids, reason}] — 검증·적용은 API의 결정론 코드가 한다.
-    도구 호출 실패 시 압축 제안만 실패로 기록한다 (팩트는 건드리지 않았으므로 무손실).
+    도구 누락 시 nudge — LangGraph tool 루프 (편차 11, planforge/llm/loops.py,
+    max_attempts=2: 1회 + nudge 1회). 도구 호출 실패 시 압축 제안만 실패로 기록한다
+    (팩트는 건드리지 않았으므로 무손실).
     """
     system = (PROMPTS_DIR / "compact.md").read_text(encoding="utf-8-sig")
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": build_context(facts)},
     ]
-    for attempt in range(2):  # 1회 + 도구 누락 시 nudge 1회
-        resp = chat_fn(messages, tools=COMPACT_TOOLS)
-        calls = [tc for tc in resp.get("tool_calls", []) if tc["name"] == "propose_compact"]
-        if calls:
-            args = calls[0]["arguments"]
-            if isinstance(args, str):
-                args = json.loads(args)
-            groups = args.get("groups") or []
-            for g in groups:
-                g.setdefault("topic", "")
-                g.setdefault("archive_ids", [])
-                g.setdefault("reason", "")
-            return (groups, args.get("summary", ""), True)
-        messages = messages + [
-            {"role": "assistant", "content": resp.get("content") or ""},
-            {"role": "user", "content":
-             "propose_compact 도구를 호출해 통합 그룹을 제안하라. 통합 대상이 없으면 빈 "
-             "groups 배열로. 도구 호출 외 출력 금지."},
-        ]
-    return ([], "", False)
+
+    def validate(args: dict) -> tuple[str, object]:
+        groups = args.get("groups") or []
+        for g in groups:
+            g.setdefault("topic", "")
+            g.setdefault("archive_ids", [])
+            g.setdefault("reason", "")
+        return ("ok", (groups, args.get("summary", "")))
+
+    final = run_tool_loop(chat_fn, COMPACT_TOOLS, "propose_compact", max_attempts=2,
+                          nudge_text=("propose_compact 도구를 호출해 통합 그룹을 제안하라. "
+                                      "통합 대상이 없으면 빈 groups 배열로. 도구 호출 외 출력 금지."),
+                          validate=validate, messages=messages)
+    if final["result"] is None:
+        return ([], "", False)
+    return (*final["result"], True)
 
 
 # ---------------------------------------------------------------- 결정론 검증·적용 (게이트)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .numcheck import Finding, UNCONFIRMED, numeric_tokens
+from .numcheck import _DATE_RE, _NUM_RE, Finding, UNCONFIRMED, numeric_tokens
 from .plan.filter import doc_names, filter_slides
 from .plan.model import Plan, Slide
 from .plan.parser import parse_toc_items
@@ -77,10 +77,34 @@ def _check_toc(doc: str, filtered: list[Slide]) -> list[Finding]:
 
 # ---------------------------------------------------------------- 팩트 대조 (review-doc.md §5, FR-4.4)
 
+_FACT_QUOTE_MAX = 200  # 발견사항 메시지에 표시할 팩트 본문 상한 (ReviewPanel 폭발 방지)
+
+def _fact_contexts(content: str, missing: set[str], before: int = 14, after: int = 10) -> dict[str, str]:
+    """팩트 원문에서 누락 수치가 등장한 문맥 조각을 추출한다 (결정론 — 순수 정규식).
+
+    numeric_tokens가 콤마 정규화·날짜 제거를 하므로 원문 매칭도 같은 규칙을 적용해
+    비교한다 (_DATE_RE 제거 → _NUM_RE 스캔 → 콤마 제거). 정규화 원인으로 생 원문에
+    정확 매치가 없는 토큰은 문맥 없이 토큰만 나열된다. 토큰별 첫 등장만 채택한다.
+    """
+    norm = " ".join(_DATE_RE.sub(" ", content).split())
+    ctxs: dict[str, str] = {}
+    for m in _NUM_RE.finditer(norm):
+        tok = m.group(0).replace(",", "")
+        if tok not in missing or tok in ctxs:
+            continue
+        head = norm[max(0, m.start() - before):m.start()].strip()
+        tail = norm[m.end():m.end() + after].strip()
+        prefix = ("…" + head) if head else ""
+        suffix = (tail + "…") if tail else ""
+        ctxs[tok] = f"{prefix}{m.group(0)}{suffix}"
+    return ctxs
+
+
 def check_facts(plan: Plan, facts: list[dict]) -> list[Finding]:
     """확립 팩트 ↔ plan 대조.
 
-    - 팩트의 수치가 plan에 없으면 red (수치 유실 — plan 반영 누락).
+    - 팩트의 수치가 plan에 없으면 red (수치 유실 — plan 반영 누락). 메시지에는
+      누락 수치의 원문 문맥 조각과 팩트 전문·출처를 담아 사용자가 수치를 식별하게 한다.
     - plan의 (미확정) 항목과 팩트가 같은 수치를 담으면 yellow — (미확정) 해소 대상.
     facts: [{content, source, date}] — DB Fact 행의 dict 표현.
     """
@@ -96,19 +120,28 @@ def check_facts(plan: Plan, facts: list[dict]) -> list[Finding]:
         f_tokens = set(numeric_tokens(content))
         missing = f_tokens - plan_tokens
         if missing:
+            ctxs = _fact_contexts(content, missing)
+            frag = ", ".join(f"“{ctxs[t]}”" for t in sorted(missing) if t in ctxs)
+            ctx_part = f" (문맥: {frag})" if frag else ""
+            src = (f.get("source") or "").strip()
+            src_part = f" (출처: {src})" if src else ""
+            quote = content[:_FACT_QUOTE_MAX] + ("…" if len(content) > _FACT_QUOTE_MAX else "")
             out.append(Finding(
                 "fact-mismatch", "red", "확립 팩트 대조",
-                f"팩트의 수치 {sorted(missing)}가 plan에 없습니다 — {content[:60]}"))
+                f"팩트의 수치 {', '.join(repr(t) for t in sorted(missing))}가 plan에 없습니다"
+                f"{ctx_part} — 팩트: {quote}{src_part}",
+                "plan에 수치를 반영하거나, 수치가 틀렸다면 팩트를 정정하세요."))
         # (미확정) 해소 제안: plan의 미확정 슬라이드와 같은 수치를 팩트가 갖고 있으면
         for s in plan.slides:
             if UNCONFIRMED not in (s.source or "") and UNCONFIRMED not in (s.message or ""):
                 continue
             s_tokens = set(numeric_tokens(_slide_all_text(s)))
             if f_tokens & s_tokens:
+                quote = content[:_FACT_QUOTE_MAX] + ("…" if len(content) > _FACT_QUOTE_MAX else "")
                 out.append(Finding(
                     "unconfirmed-resolvable", "yellow", f"슬라이드 {s.no} ({s.type})",
                     f"(미확정) 수치가 확립 팩트와 일치합니다 — 확인 후 plan에서 표기를 해소하세요: "
-                    f"{f.get('content', '')[:50]}"))
+                    f"{quote}"))
                 break
     return out
 

@@ -82,8 +82,14 @@ export default function OutputsPanel({ pid }: { pid: number }) {
             <Button onClick={() => enqueue("slides", docSel || undefined)} disabled={busy}>
               PPT 생성 (슬라이드)
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined)} disabled={busy}>
-              문서 생성 (MD·HTML·DOCX)
+            <Button onClick={() => enqueue("report", docSel || undefined, ["md"])} disabled={busy}>
+              MD 생성
+            </Button>
+            <Button onClick={() => enqueue("report", docSel || undefined, ["html"])} disabled={busy}>
+              HTML 생성
+            </Button>
+            <Button onClick={() => enqueue("report", docSel || undefined, ["docx"])} disabled={busy}>
+              DOCX 생성
             </Button>
           </>
         ) : (

@@ -7,7 +7,8 @@
 ```
 [브라우저]  프로젝트 목록 · 인터뷰 채팅(선택지 카드) · plan 뷰어/에디터 · 산출물 갤러리 · 검수 리포트
      │ REST + SSE
-[백엔드]    FastAPI · SQLite · 단일 워커(작업 큐) · LLM provider 추상화(OpenAI 호환)
+[백엔드]    FastAPI · SQLite · 단일 워커(작업 큐) · LLM provider 추상화(langchain-openai,
+            OpenAI 호환) · langgraph 에이전트 루프(인터뷰 턴·도구 재시도 루프)
      │
 [빌더]      Python 결정론 빌더 — slides.json/report.json → PPTX·MD·HTML·DOCX (채번·원자적 빌드)
 ```
@@ -44,28 +45,31 @@
 ## 2. 저장소 구조
 
 ```
-backend/                  FastAPI 백엔드 + 코어 엔진
-  app/                    웹 백엔드 (API·DB·워커·인터뷰 에이전트)
-    api/                  REST/SSE 라우터 (projects, sources, interview, plans, reviews, facts, jobs, outputs)
-    agents/               인터뷰 상태머신 + LLM 계층 + 프롬프트(prompts/*.md)
-    worker.py             단일 백그라운드 워커 (빌드 직렬화 — 멀티 워커 금지)
+backend/                  FastAPI 백엔드 + 코어 엔진 (모듈러 모놀리식)
+  app/                    웹 백엔드
+    api.py                라우터 집계 — 각 모듈 presentation/api.py를 기존 계약 순서대로 포함
+    modules/              도메인 모듈 8종 (projects·sources·plans·derivatives·jobs·facts·interview·review)
+      └ <모듈>/           facade.py · presentation/(api·schemas) · application/ · infrastructure/models.py
+    shared/               모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
+    agents/tools.py       인터뷰 도구 OpenAI function 스키마 + 서버측 검증
   planforge/            M1 코어 엔진 (CLI 진입점 `python -m planforge`)
     plan/                 plan.md 파서·문서 필터·골격 검증
     builders/             build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
-    llm/                  OpenAI 호환 provider 추상화
+    llm/                  OpenAI 호환 provider(langchain-openai ChatOpenAI) + 공용
+                          tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
     derive.py, review.py, numcheck.py
   alembic/                DB 마이그레이션
-frontend/                 React 19 + TypeScript (Vite)
-  src/pages/              ProjectsPage · ProjectPage + 탭 패널 5종
-                          (소스·인터뷰·plan·산출물·검수, components/에 CodeMirror 에디터)
-  e2e-smoke.mjs           브라우저 e2e 수동 스모크 스크립트 (실제 LLM 사용)
-  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용)
+frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
+  src/features/           화면별 feature 7종 (projects·project·sources·interview·plan·outputs·review)
+    └ <feature>/          models/(API 호출) · viewmodels/(상태·로직 훅) · views/(표현 전용)
+  src/shared/             components/(CodeMirror 에디터·마크다운 미리보기·공통 UI) · lib/ · styles/
+  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용 — 브라우저 e2e는 별도 완주 예정)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
-docs/                     보조 문서 (token-checklist.md)
+docs/                     보조 문서 (architecture-decisions.md · token-checklist.md)
 tests/                    pytest (계약 테스트 fixture 포함)
-CLAUDE.md                 개발 세션 계약 (설계 원칙 8개)
+CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
 docker-compose.yml        배포 스택 (backend · frontend · ollama)
 ```
@@ -79,7 +83,8 @@ docker-compose.yml        배포 스택 (backend · frontend · ollama)
 ```powershell
 # 1) LLM 설정 만들기 (예시 파일을 복사해 모델 지정)
 copy backend\planforge\config.example.json backend\planforge\config.json
-#   config.json 내용 예: {"profiles": {"interview": {...}, "derive": {...}, "review": {...}}}
+#   config.json 내용 예: {"profiles": {"interview": {...}, "derive": {...},
+#     "review": {...}, "plan_revise": {...}}}
 
 # 2) 빌드 및 기동
 docker compose build
@@ -156,8 +161,12 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 }
 ```
 
-- 프로바이더는 **OpenAI 호환 단일 프로토콜**(openai SDK)만 사용한다. ollama·openai를
-  base_url/키 차이만으로 소화한다. Ollama 모델은 **tool calling 지원이 필수**다.
+- 프로바이더는 **OpenAI 호환 단일 프로토콜**(`langchain-openai` ChatOpenAI 기반)만
+  사용한다. ollama·openai를 base_url/키 차이만으로 소화한다. Ollama 모델은
+  **tool calling 지원이 필수**다.
+- 에이전트 루프는 langgraph로 오케스트레이션된다 — 인터뷰 턴 루프(StateGraph)와
+  도구 재시도 루프 4곳(derive·plan_revise·review·compact, 공용 tool-loop 그래프).
+  판정·검증·커밋은 결정론 서버 코드가 담당한다.
 - `PLANFORGE_CONFIG` 환경변수로 설정 파일 경로를 바꿀 수 있다.
 - ollama 외 프로바이더는 `LLM_BASE_URL` env로 base_url을 전환할 수 있다.
 

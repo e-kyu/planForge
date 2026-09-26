@@ -24,6 +24,8 @@ export function useInterview(pid: number) {
   const qc = useQueryClient();
   const [sid, setSid] = useState<number | null>(() => storedSid(pid));
   const [streaming, setStreaming] = useState("");
+  const [status, setStatus] = useState<string | null>(null); // 턴 내부 진행 단계 (progress 이벤트)
+  const [active, setActive] = useState(false); // 이 라운드에서 토큰이 흐르는 중인지
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -76,11 +78,17 @@ export function useInterview(pid: number) {
     if (!sid || busy) return false;
     setBusy(true);
     setStreaming("");
+    setStatus("context"); // optimistic — 첫 progress 이벤트 전 네트워크 왕복 구간도 커버
+    setActive(false);
     setError(null);
     try {
       await apiSSE(path, body, (ev) => {
         if (ev.name === "token") {
           setStreaming((prev) => prev + String(ev.payload.text ?? ""));
+          setActive(true);
+        } else if (ev.name === "progress") {
+          setStatus(String(ev.payload.step ?? ""));
+          setActive(false); // 단계가 바뀌면 토큰 재대기 — 타이핑 버블로 전환
         } else if (ev.name === "error") {
           setError(String(ev.payload.message ?? ev.payload.code));
         }
@@ -97,6 +105,8 @@ export function useInterview(pid: number) {
       return true; // 시작은 됐음 — 입력 초기화는 원본과 동일하게 진행
     } finally {
       setStreaming("");
+      setStatus(null);
+      setActive(false);
       setBusy(false);
     }
   }
@@ -107,6 +117,8 @@ export function useInterview(pid: number) {
     messages,
     restoring,
     streaming,
+    status,
+    active,
     busy,
     error,
     setError,

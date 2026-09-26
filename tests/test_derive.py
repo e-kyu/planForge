@@ -198,9 +198,10 @@ def test_render_slides_text_design_plan_verbatim():
 def test_load_config_profiles():
     from planforge.llm import load_config
     profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
-    assert set(profiles) == {"interview", "derive", "review"}
+    assert set(profiles) == {"interview", "derive", "review", "plan_revise"}
     assert profiles["derive"].provider == "ollama"
     assert profiles["derive"].model == "glm-5.3-flash:cloud"  # config.example.json 샘플 모델과 동기
+    assert profiles["plan_revise"].model == "glm-5.3-flash:cloud"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
 
 
 def test_provider_requires_model():
