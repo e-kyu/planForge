@@ -37,16 +37,27 @@ def run_derive_build(ctx, session, job) -> dict:
     # SSOT: DB plan 행을 plan.md 미러로 갱신 (idempotent — Deriver가 파일을 읽음)
     plan_mirror = write_plan_mirror(ws, plan.markdown)
 
+    from app.modules.jobs.facade import report_progress
     from app.shared.llm import LLMRegistry
+
+    def on_attempt(n: int, max_n: int) -> None:
+        # LLM 변환 attempt 진행 기록 — DB 오류가 작업 자체를 죽이지 않게 방어한다.
+        try:
+            report_progress(session, job, "llm", attempt=n, max_attempts=max_n)
+        except Exception:
+            print(f"[derive] job #{job.id} 진행 기록 실패", flush=True)
 
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
     deriver = Deriver(registry.chat_fn("derive"), ws)
-    # 단계별 경계 로그 — 잡 시간을 LLM 변환 vs 결정론 빌드로 분해해 관측한다.
+    # 진행 기록 지점은 도메인 행 생성 이전으로 고정 — report_progress가 세션을 커밋하므로
+    # (facade 계약) 조기 커밋으로 빌드 실패 시 고아 Derivative가 남는 것을 원천 차단한다.
     t_llm = time.monotonic()
     print(f"[derive] job #{job.id} LLM 변환 시작 (kind={kind}, doc={doc})", flush=True)
-    res = deriver.derive(plan_mirror, kind, doc)
+    report_progress(session, job, "llm")
+    res = deriver.derive(plan_mirror, kind, doc, on_attempt=on_attempt)
     print(f"[derive] job #{job.id} LLM 변환 완료 "
           f"({time.monotonic() - t_llm:.0f}s, attempts={res.attempts})", flush=True)
+    report_progress(session, job, "build")
     # Deriver가 기본 문서를 해석했다 (doc=None → plan.docs[0])
     resolved_doc = doc or parse_plan_file(plan_mirror).docs[0]
 

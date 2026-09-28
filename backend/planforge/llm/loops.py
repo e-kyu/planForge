@@ -37,11 +37,18 @@ class ToolLoopState(TypedDict):
 
 
 def build_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
-                    nudge_text: str, validate: ValidateFn):
+                    nudge_text: str, validate: ValidateFn,
+                    on_attempt: Callable[[int, int], None] | None = None):
     """chat_fn 계약의 도구 루프 1건을 컴파일한다. 소진 시 result=None·ok=False로 END —
-    caller가 도메인 오류(DeriveError 등)나 ok=False로 변환한다."""
+    caller가 도메인 오류(DeriveError 등)나 ok=False로 변환한다.
+
+    on_attempt(attempt, max_attempts)는 chat_fn 호출 직전에 매번 불린다 — 실행이
+    긴 구간 동안 caller가 진행 상태(attempt n/m)를 기록할 수 있다. 예외는 전파한다
+    (방어 책임은 caller 콜백 쪽)."""
 
     def call_llm(state: ToolLoopState) -> dict:
+        if on_attempt is not None:
+            on_attempt(state["attempts"] + 1, max_attempts)
         # 진행 관측용 로그 — attempt별 소요 시간과 컨텍스트 크기. 재시도마다 이전 응답의
         # 전체 JSON이 messages에 누적되므로 컨텍스트가 커지는 것도 여기서 보인다.
         t0 = time.monotonic()
@@ -106,10 +113,12 @@ def build_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
 
 def run_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
                   nudge_text: str, validate: ValidateFn,
-                  messages: list[dict]) -> dict:
+                  messages: list[dict],
+                  on_attempt: Callable[[int, int], None] | None = None) -> dict:
     """tool 루프 1건 실행 — 소진 여부 판정에 쓸 최종 상태(result·attempts·ok)를 반환."""
     graph = build_tool_loop(chat_fn, tools, tool_name, max_attempts=max_attempts,
-                            nudge_text=nudge_text, validate=validate)
+                            nudge_text=nudge_text, validate=validate,
+                            on_attempt=on_attempt)
     return graph.invoke(
         {"messages": list(messages), "resp_content": "", "tool_call": None,
          "attempts": 0, "ok": False, "result": None},

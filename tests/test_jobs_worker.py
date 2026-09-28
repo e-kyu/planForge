@@ -60,6 +60,9 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
     assert job["result"]["counts"]["sections"] == 5
+    # 진행 상태 — 마지막 기록 단계가 남는다 (표시는 running일 때만, 완료는 status가 담당)
+    assert job["progress"]["step"] == "build"
+    assert job["started_at"] is not None  # 경과시간 계약 — JobOut 노출 확인
 
     # 파생물 행 — plan 세대 바인딩 (추적성 §5)
     ders = client.get(f"/api/projects/{pid}/derivatives").json()
@@ -119,6 +122,9 @@ def test_llm_failure_classified_as_llm_error(client, app, db_env):
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "failed"
     assert job["error_class"] == "llm"
+    # 실패 job은 "어디서 죽었는지"를 남긴다 — LLM 변환 3회 소진 지점
+    assert job["progress"]["step"] == "llm"
+    assert job["progress"]["attempt"] == 3
     # 불완전 산출물이 output에 남지 않는다 (§5 원자성)
     assert not list((db_env / "fail-demo" / "output").glob("*.md"))
 
@@ -149,3 +155,29 @@ def test_report_build_defaults_to_three_formats(client, app, db_env):
     assert {o["ext"] for o in outs} == {"md", "html", "docx"}
     # 확장자별 독립 시퀀스 — 모두 v01 (원칙 5)
     assert all(o["version_no"] == 1 for o in outs)
+
+
+def test_requeue_stale_running_resets_progress(client, app):
+    """재큐잉 시 running 잔재의 progress·started_at도 초기화 — stale 진행 노출 방지."""
+    from app.modules.jobs.application.worker import claim_next_job, requeue_stale_running
+    from app.modules.jobs.facade import JobStatus, JobType, enqueue, report_progress
+    from app.modules.jobs.infrastructure.models import Job
+    from app.shared.db import make_session_factory
+
+    factory = make_session_factory(app.state.settings.database_url)
+    client.post("/api/projects", json={"slug": "requeue-demo", "title": "x"})
+    with factory() as s:
+        job = enqueue(s, 1, JobType.DERIVE_BUILD, {"kind": "slides"})
+        s.commit()
+        job_id = job.id
+
+    with factory() as s:  # claim → running 시점 + 진행 기록
+        job = claim_next_job(s)
+        assert job is not None and job.id == job_id
+        report_progress(s, job, "llm", attempt=1, max_attempts=3)
+
+    assert requeue_stale_running(factory) == 1
+    with factory() as s:
+        job = s.get(Job, job_id)
+        assert job.status == JobStatus.QUEUED
+        assert job.started_at is None and job.progress is None

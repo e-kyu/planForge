@@ -19,7 +19,10 @@ class JobOut(BaseModel):
     status: str
     payload: dict[str, Any]
     result: dict[str, Any] | None
+    # 실행 중 진행 상태 — facade.report_progress가 기록하는 최신 1건 ({"step", "attempt", ...})
+    progress: dict[str, Any] | None
     error_class: str | None
     error: str | None
     attempts: int
+    started_at: datetime | None
     created_at: datetime

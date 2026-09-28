@@ -60,13 +60,14 @@ def build_context(base_markdown: str, findings: list[dict], summary: str) -> str
 
 
 def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
-                    summary: str = "") -> tuple[str, ParsedPlan]:
+                    summary: str = "", on_attempt=None) -> tuple[str, ParsedPlan]:
     """선택 발견사항을 반영한 plan 마크다운을 생성한다. 반환: (markdown, 파싱 결과).
 
     도구 누락 시 nudge, 포맷 검증 실패·원문 무변경 시 도구 호출 결과 프로토콜로
     피드백을 되돌려 재시도 (최대 MAX_ATTEMPTS) — LangGraph tool 루프 (편차 11,
     planforge/llm/loops.py::run_tool_loop, derive.py의 재변환 루프와 동일 패턴).
     소진 시 PlanReviseError.
+    on_attempt(attempt, max_attempts)는 루프의 chat_fn 호출 직전 콜백 (진행 기록용).
     """
     system = (PROMPTS_DIR / "plan_revise.md").read_text(encoding="utf-8-sig")
     messages = [
@@ -94,7 +95,8 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
                           max_attempts=MAX_ATTEMPTS,
                           nudge_text=(f"{TOOL_NAME} 도구를 호출해 수정된 plan.md 마크다운 "
                                       "전체를 전달하라. 도구 호출 외 출력 금지."),
-                          validate=validate, messages=messages)
+                          validate=validate, messages=messages,
+                          on_attempt=on_attempt)
     if final["result"] is None:
         raise PlanReviseError(
             f"plan 반영 실패 — {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")

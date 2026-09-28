@@ -4,6 +4,7 @@ import type { Job } from "../../../api/client";
 import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOutputs } from "../viewmodels/useOutputs";
+import { elapsedText, progressText } from "../../../shared/lib/jobs";
 
 const EXT_LABEL: Record<string, string> = {
   pptx: "PPTX",
@@ -43,6 +44,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     plans,
     jobs,
     failedLatest,
+    activeJob,
     error,
     notice,
     busy,
@@ -102,7 +104,16 @@ export default function OutputsPanel({ pid }: { pid: number }) {
 
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
-      {busy && <Banner kind="info">빌드 처리 중… (큐 직렬 처리)</Banner>}
+      {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시 */}
+      {busy && (
+        <Banner kind="info">
+          {activeJob?.status === "running"
+            ? `${JOB_TYPE_LABEL[activeJob.type] ?? activeJob.type} — ${progressText(activeJob) ?? "처리 중"}${
+                elapsedText(activeJob, Date.now()) ? ` · ${elapsedText(activeJob, Date.now())}` : ""
+              }`
+            : "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)"}
+        </Banner>
+      )}
 
       {visibleFailed.length > 0 && (
         <Banner kind="error" onDismiss={() => setFailedDismissId(visibleFailed[visibleFailed.length - 1]!.id)}>
@@ -185,6 +196,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
           <ul className="job-list">
             {recentJobs.map((j) => {
               const st = JOB_STATUS[j.status];
+              const now = Date.now();
               return (
                 <li key={j.id} className={`job-item job-${j.status}`}>
                   <div className="job-head">
@@ -194,7 +206,14 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                     </span>
                     <span className="job-title">{JOB_TYPE_LABEL[j.type] ?? j.type} #{j.id}</span>
                   </div>
-                  <div className="job-detail">{jobDetail(j)}</div>
+                  {j.status === "running" ? (
+                    <div className="job-detail job-progress">
+                      {progressText(j) ?? "처리 중"}
+                      {elapsedText(j, now) ? ` · ${elapsedText(j, now)}` : ""}
+                    </div>
+                  ) : (
+                    <div className="job-detail">{jobDetail(j)}</div>
+                  )}
                 </li>
               );
             })}

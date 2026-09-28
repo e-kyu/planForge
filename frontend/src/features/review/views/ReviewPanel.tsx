@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle, type LucideIcon } from "lucide-react";
-import type { Review, ReviewFinding } from "../../../api/client";
+import type { Job, Review, ReviewFinding } from "../../../api/client";
 import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../../../shared/components/ui";
 import { navigate } from "../../../shared/lib/hashRoute";
+import { elapsedText, latestByType, progressText } from "../../../shared/lib/jobs";
 import { useReviewApply, useReviews } from "../viewmodels/useReviews";
 
 const SEV_ICON: Record<string, LucideIcon> = { red: XCircle, yellow: AlertTriangle, white: Info };
@@ -18,12 +19,11 @@ export default function ReviewPanel({ pid }: { pid: number }) {
 
   const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
   const verById = new Map(plans.map((p) => [p.id, p.version_no]));
-  const reviseActive = jobs.some(
-    (j) => j.type === "plan_revise" && (j.status === "queued" || j.status === "running"),
-  );
-  const reviewActive = jobs.some(
-    (j) => j.type === "review" && (j.status === "queued" || j.status === "running"),
-  );
+  // 배너 기준 잡 — 타입별 최신(마지막 상태) 잡. 진행 문구·경과를 잡 폴링에서 파생한다.
+  const reviseJob = latestByType(jobs, "plan_revise");
+  const reviewJob = latestByType(jobs, "review");
+  const reviseActive = reviseJob?.status === "queued" || reviseJob?.status === "running";
+  const reviewActive = reviewJob?.status === "queued" || reviewJob?.status === "running";
 
   return (
     <section>
@@ -49,8 +49,8 @@ export default function ReviewPanel({ pid }: { pid: number }) {
       {busy && (
         <Banner kind="info">
           {reviseActive && !reviewActive
-            ? "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)"
-            : "검수 처리 중… (결정론 대조 + LLM 내용 검수)"}
+            ? bannerText(reviseJob, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)")
+            : bannerText(reviewJob, "검수 처리 중… (결정론 대조 + LLM 내용 검수)")}
         </Banner>
       )}
 
@@ -96,6 +96,16 @@ export default function ReviewPanel({ pid }: { pid: number }) {
       {sel && <ReviewDetail key={sel.id} r={sel} pid={pid} />}
     </section>
   );
+}
+
+/** 활성 잡의 진행 문구 + 경과 — 진행 기록이 없는 구간(결정론 대조 등)은 기존 안내 문구 유지. */
+function bannerText(job: Job | undefined, fallback: string): string {
+  if (!job) return fallback;
+  if (job.status === "queued") return "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다";
+  const text = progressText(job, fallback);
+  if (text === null) return fallback;
+  const elapsed = elapsedText(job, Date.now());
+  return elapsed ? `${text} · ${elapsed}` : text;
 }
 
 function ReviewDetail({ r, pid }: { r: Review; pid: number }) {

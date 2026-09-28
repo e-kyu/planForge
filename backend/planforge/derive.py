@@ -147,7 +147,8 @@ class Deriver:
         fname = "derive_slides.md" if kind == "slides" else "derive_report.md"
         return (PROMPTS_DIR / fname).read_text(encoding="utf-8-sig")
 
-    def _run_llm(self, kind: str, plan: Plan, slides, doc: str) -> tuple[dict, int]:
+    def _run_llm(self, kind: str, plan: Plan, slides, doc: str,
+                 on_attempt=None) -> tuple[dict, int]:
         tool = SLIDES_TOOL if kind == "slides" else REPORT_TOOL
         tool_name = tool["function"]["name"]
         user_text = render_slides_text(plan, slides, doc)
@@ -184,7 +185,8 @@ class Deriver:
                               max_attempts=self.max_attempts,
                               nudge_text=(f"{tool_name} 도구를 호출해 변환 결과를 전달하라. "
                                           "도구 호출 외 출력 금지."),
-                              validate=validate, messages=messages)
+                              validate=validate, messages=messages,
+                              on_attempt=on_attempt)
         if final["result"] is None:
             raise DeriveError(
                 f"수치 무결성 위반이 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
@@ -245,11 +247,14 @@ class Deriver:
 
     # ---- 파생물 생성
 
-    def derive(self, plan_path: str | Path, kind: str, doc: str | None = None) -> DeriveResult:
+    def derive(self, plan_path: str | Path, kind: str, doc: str | None = None, *,
+               on_attempt=None) -> DeriveResult:
+        """on_attempt(attempt, max_attempts) — LLM 변환 시도 직전 콜백 (진행 상황 기록용).
+        planforge는 DB를 모른다 — 예외 방어는 caller 콜백 쪽 책임."""
         if kind not in ("slides", "report"):
             raise DeriveError(f"kind는 slides|report 중 하나여야 합니다: {kind}")
         plan, doc, slides, unconfirmed = self._prepare(plan_path, doc)
-        payload, attempt, _ = self._run_llm(kind, plan, slides, doc)
+        payload, attempt, _ = self._run_llm(kind, plan, slides, doc, on_attempt=on_attempt)
 
         # 결정론 보정 — meta.title은 대상 문서 표지 슬라이드 제목 (make-ppt/make-doc 규칙)
         cover = next((s for s in slides if s.type == "cover"), None)

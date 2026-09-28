@@ -588,10 +588,7 @@ export interface components {
         };
         /** Body_upload_source_api_projects__project_id__sources_post */
         Body_upload_source_api_projects__project_id__sources_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
         };
         /** BuildOut */
@@ -794,12 +791,18 @@ export interface components {
             result: {
                 [key: string]: unknown;
             } | null;
+            /** Progress */
+            progress: {
+                [key: string]: unknown;
+            } | null;
             /** Error Class */
             error_class: string | null;
             /** Error */
             error: string | null;
             /** Attempts */
             attempts: number;
+            /** Started At */
+            started_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -979,6 +982,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;

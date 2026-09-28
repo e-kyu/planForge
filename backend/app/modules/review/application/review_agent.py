@@ -78,12 +78,13 @@ def build_context(plan_markdown: str, derivative_docs: list[dict], facts: list[d
 
 
 def run_llm_review(chat_fn, plan_markdown: str, derivative_docs: list[dict],
-                   facts: list[dict]) -> tuple[list[dict], str, bool]:
+                   facts: list[dict], on_attempt=None) -> tuple[list[dict], str, bool]:
     """LLM 내용 검수 1회. 반환: (findings, summary, llm_ok).
 
     도구 누락 시 nudge — LangGraph tool 루프 (편차 11, planforge/llm/loops.py,
     max_attempts=2: 1회 + nudge 1회). 도구 호출 실패 시 내용 검수만 실패로 기록하고
     결정론 검수 결과는 보존한다 (검수 전체가 실패하면 발견사항이 통째로 사라진다).
+    on_attempt(attempt, max_attempts)는 루프의 chat_fn 호출 직전 콜백 (진행 기록용).
     """
     system = (PROMPTS_DIR / "review.md").read_text(encoding="utf-8-sig")
     messages = [
@@ -105,7 +106,8 @@ def run_llm_review(chat_fn, plan_markdown: str, derivative_docs: list[dict],
     final = run_tool_loop(chat_fn, REVIEW_TOOLS, "report_findings", max_attempts=2,
                           nudge_text=("report_findings 도구를 호출해 발견사항을 보고하라. "
                                       "도구 호출 외 출력 금지."),
-                          validate=validate, messages=messages)
+                          validate=validate, messages=messages,
+                          on_attempt=on_attempt)
     if final["result"] is None:
         return ([], "", False)
     return (*final["result"], True)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from planforge.plan import PlanError
 
+from app.modules.jobs.facade import report_progress
 from app.modules.projects.facade import get_project
 from app.modules.review.facade import get_report
 from app.shared.workspace import write_plan_mirror
@@ -43,12 +44,22 @@ def run_plan_revise_job(ctx, session, job) -> dict:
 
     from app.shared.llm import LLMRegistry
 
+    # 진행 기록 — 이 시점에 대기 중인 도메인 행은 없다 (create_generation은 이후) —
+    # facade 커밋 계약 충족. DB 오류가 작업을 죽이지 않게 방어한다.
+    def on_attempt(n: int, max_n: int) -> None:
+        try:
+            report_progress(session, job, "llm", attempt=n, max_attempts=max_n)
+        except Exception:
+            print(f"[plan_revise] job #{job.id} 진행 기록 실패", flush=True)
+
+    report_progress(session, job, "llm")
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
     try:
         chat_fn = registry.chat_fn("plan_revise")
     except KeyError:
         chat_fn = registry.chat_fn("review")  # 신규 프로필이 없는 기존 config 호환
-    md, parsed = run_plan_revise(chat_fn, plan.markdown, selected, review.summary or "")
+    md, parsed = run_plan_revise(chat_fn, plan.markdown, selected, review.summary or "",
+                                 on_attempt=on_attempt)
 
     validate_plan_markdown(md)  # 이중 방어 — run_plan_revise 내부 검증과 동일 권위
     if md.strip() == (plan.markdown or "").strip():

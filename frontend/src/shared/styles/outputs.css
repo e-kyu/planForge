@@ -205,6 +205,11 @@
   margin-top: 2px;
 }
 
+/* 실행 중 진행 상태 줄 — 단계·재시도·경과 (잡 폴링 기반, report_progress 값) */
+.job-progress {
+  color: var(--blue);
+}
+
 .badge-job-done {
   border-color: var(--ok);
   color: var(--ok);

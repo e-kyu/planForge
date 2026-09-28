@@ -15,6 +15,7 @@ from planforge.review import check_doc_tags, check_facts
 
 from app.modules.derivatives.facade import DerivativeKind, list_builds, list_for_plan
 from app.modules.facts.facade import list_active_facts
+from app.modules.jobs.facade import report_progress
 from app.modules.plans.facade import PlanStatus, get_plan
 from app.modules.projects.facade import get_project
 from app.shared.workspace import write_plan_mirror
@@ -81,13 +82,23 @@ def run_review(ctx, session, job) -> dict:
         add(x.code, x.severity, x.where, x.message, suggestion=x.suggestion)
 
     # 5) LLM 내용 검수 (실패해도 결정론 결과는 보존)
+    # 진행 기록 — LLM 검수는 가장 긴 구간. 이 시점에 대기 중인 도메인 행은 없다
+    # (findings는 로컬 리스트, ReviewReport는 마지막에 add) — facade 커밋 계약 충족.
+    def on_attempt(n: int, max_n: int) -> None:
+        try:
+            report_progress(session, job, "llm", attempt=n, max_attempts=max_n)
+        except Exception:
+            print(f"[review] job #{job.id} 진행 기록 실패", flush=True)
+
     llm_ok = True
     summary = ""
     try:
         from app.shared.llm import LLMRegistry
+        report_progress(session, job, "llm")
         registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
         lf, summary, llm_ok = run_llm_review(
-            registry.chat_fn("review"), plan.markdown, derivative_docs, facts)
+            registry.chat_fn("review"), plan.markdown, derivative_docs, facts,
+            on_attempt=on_attempt)
         findings.extend(lf)
     except Exception as e:  # noqa: BLE001 — 내용 검수 실패는 리포트를 막지 않는다
         llm_ok = False

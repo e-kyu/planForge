@@ -119,7 +119,8 @@ def requeue_stale_running(session_factory) -> int:
     session = session_factory()
     try:
         n = session.execute(
-            text("UPDATE jobs SET status='queued', started_at=NULL WHERE status='running'")
+            text("UPDATE jobs SET status='queued', started_at=NULL, progress=NULL "
+                 "WHERE status='running'")
         ).rowcount
         session.commit()
         return n

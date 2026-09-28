@@ -46,6 +46,9 @@ class Job(UpdatedAtMixin, Base):
     )
     payload: Mapped[dict] = mapped_column(JSONVariant)
     result: Mapped[dict | None] = mapped_column(JSONVariant, nullable=True)
+    # 실행 중 진행 상태(최신 1건) — {"step": "llm"|"build", "attempt", "max_attempts", "at"}.
+    # 핸들러가 facade.report_progress로 기록하고, requeue_stale_running이 초기화한다.
+    progress: Mapped[dict | None] = mapped_column(JSONVariant, nullable=True)
     error_class: Mapped[JobErrorClass | None] = mapped_column(_enum(JobErrorClass), nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

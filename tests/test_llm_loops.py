@@ -17,9 +17,10 @@ TOOL = {"type": "function", "function": {"name": "f", "parameters": {}}}
 NUDGE = "f 도구를 호출하라. 도구 호출 외 출력 금지."
 
 
-def _run(llm, validate, max_attempts=3):
+def _run(llm, validate, max_attempts=3, on_attempt=None):
     return run_tool_loop(llm, [TOOL], "f", max_attempts=max_attempts,
-                         nudge_text=NUDGE, validate=validate, messages=[
+                         nudge_text=NUDGE, validate=validate,
+                         on_attempt=on_attempt, messages=[
                              {"role": "system", "content": "sys"},
                              {"role": "user", "content": "hi"},
                          ])
@@ -115,3 +116,27 @@ def test_messages_not_mutated_in_place():
     run_tool_loop(llm, [TOOL], "f", max_attempts=1, nudge_text=NUDGE,
                   validate=lambda args: ("ok", 1), messages=messages)
     assert messages == [{"role": "user", "content": "hi"}]
+
+
+# ---------------------------------------------------------------- on_attempt 콜백
+
+def test_on_attempt_called_before_each_chat_fn():
+    """on_attempt가 chat_fn 호출 직전마다 (attempt, max_attempts)로 불린다."""
+    llm = FakeLLM([tool_call("f", {"x": 1}), tool_call("f", {"x": 2})])
+    seen = []
+
+    def validate(args):
+        if args["x"] == 1:
+            return ("retry", "고쳐라")
+        return ("ok", "통과")
+
+    final = _run(llm, validate, on_attempt=lambda n, m: seen.append((n, m)))
+    assert final["result"] == "통과"
+    assert seen == [(1, 3), (2, 3)]
+
+
+def test_on_attempt_none_by_default():
+    """on_attempt 미지정(기본 None)에서 기존 동작 무변경 — 계약 회귀 확인."""
+    llm = FakeLLM([tool_call("f", {"x": 1})])
+    final = _run(llm, lambda args: ("ok", args["x"]))
+    assert final["result"] == 1 and final["attempts"] == 1

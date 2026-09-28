@@ -1798,7 +1798,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File"
           }
         },
@@ -2339,6 +2339,18 @@
             ],
             "title": "Result"
           },
+          "progress": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
           "error_class": {
             "anyOf": [
               {
@@ -2365,6 +2377,18 @@
             "type": "integer",
             "title": "Attempts"
           },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -2378,9 +2402,11 @@
           "status",
           "payload",
           "result",
+          "progress",
           "error_class",
           "error",
           "attempts",
+          "started_at",
           "created_at"
         ],
         "title": "JobOut"
@@ -2919,6 +2945,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
