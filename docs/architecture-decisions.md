@@ -102,6 +102,25 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       OpenAPI 계약(SSE는 스키마 밖이라 `types.gen.ts` 재생성 불필요), 턴 루프 그래프 구조
       (노드·엣지 추가 없음 — 기존 노드 안에 emit 1줄씩).
 
+13. **프로바이더 추가: azure — AzureChatOpenAI 어댑터 분기** (2026-09-30)
+    - 배경: 사내 Azure OpenAI 게이트웨이(`azure_endpoint` + `api_version` + 배포명 기반)로
+      LLM 호출을 전환해야 한다. `ChatOpenAI`에게는 `azure_endpoint`를 표현할 방법이 없고,
+      `AzureChatOpenAI.validate_base_url`이 base_url 경유 전달을 ValueError로 거부한다.
+    - 변경: `ProfileConfig`에 `azure_endpoint`·`api_version` 필드 추가,
+      `OpenAICompatProvider.__init__`가 `provider == "azure"`에서
+      `AzureChatOpenAI(model, azure_deployment=model, azure_endpoint, api_version, api_key,
+      timeout, max_retries=0)`로 분기. api_key_env 기본값 azure는 `AZURE_OPENAI_API_KEY`.
+      `config.example.json`을 azure 기준으로 전환(엔드포인트는 플레이스홀더).
+    - 계약 유지: `AzureChatOpenAI`는 `ChatOpenAI`와 동일 `BaseChatOpenAI` 계열 —
+      `chat_fn`/`stream_fn` dict 계약·`bind_tools(tool_choice="auto")`·`tool_call_chunks`
+      조립·deadline 중단 로직 무변경. `max_retries=0`(자동 재시도 금지)도 동일 적용.
+      langchain-openai 안(동일 패키지 — `requirements.txt` exact-pin 불변), anthropic SDK 금지 유지.
+    - 명시 실패: `azure_endpoint`/`api_version`/키 누락은 provider 생성기에서 한국어
+      ValueError로 즉시 중단 — openai SDK의 애매한 TypeError 전 제단.
+    - 런타임 유의: `stream_usage` 자동 True → 요청에 `stream_options` 포함. 게이트웨이가
+      거부하면(400) 생성 인자에 `stream_usage=False` 폴백. `disabled_params` 기본으로
+      `parallel_tool_calls` 미전송 — 순차 툴 루프라 무해.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

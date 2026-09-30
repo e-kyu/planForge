@@ -312,7 +312,8 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 - `provider.py`: **OpenAI 호환 단일 프로토콜**만 지원(`langchain-openai` ChatOpenAI
   기반 — 편차 10). anthropic SDK 사용 금지. ollama·openai를 base_url/키 차이만으로
-  소화한다(ollama는 더미 키 `ollama`). 자동 재시도 금지 계약 — `max_retries=0`.
+  소화한다(ollama는 더미 키 `ollama`). azure는 같은 패키지의 AzureChatOpenAI로 소화
+  (편차 13). 자동 재시도 금지 계약 — `max_retries=0`.
 - `loops.py`: 공용 tool-loop 그래프(`run_tool_loop`) — derive 재변환·plan_revise·
   review·compact가 공유하는 "호출 → nudge / tool 피드백 재시도 / 통과" 패턴을
   StateGraph로 표준화(편차 11). 판정·피드백 문구는 caller의 `validate` 클로저
@@ -331,16 +332,24 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 ```json
 {
   "profiles": {
-    "interview":   { "provider": "ollama", "model": "gemma4:26b" },
-    "derive":      { "provider": "openai", "model": "gpt-4.1" },
-    "review":      { "provider": "openai", "model": "gpt-4.1" },
+    "interview":   { "provider": "azure", "model": "gpt-4.1",
+                     "azure_endpoint": "https://<azure-endpoint>",
+                     "api_version": "2024-12-01-preview" },
+    "derive":      { "provider": "azure", "model": "gpt-4.1",
+                     "azure_endpoint": "https://<azure-endpoint>",
+                     "api_version": "2024-12-01-preview" },
+    "review":      { "provider": "ollama", "model": "gemma4:26b" },
     "plan_revise": { "provider": "openai", "model": "gpt-4.1" }
   }
 }
 ```
 
-`model`은 필수. `config.example.json`을 복사해 시작한다. **Ollama 모델은 tool calling
-지원이 필수**다.
+`model`은 필수(azure는 배포(deployment)명). `config.example.json`을 복사해 시작한다.
+**Ollama 모델은 tool calling 지원이 필수**다. azure는 `azure_endpoint`·`api_version`
+필수(환경변수 `AZURE_OPENAI_ENDPOINT`·`OPENAI_API_VERSION`로 각각 대체 가능)이고,
+API 키는 기본 환경변수 `AZURE_OPENAI_API_KEY`에서 읽는다(프로필별 `api_key_env`로
+이름 지정 가능). 배포 컨테이너는 docker-compose `environment`에
+`AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}`를 추가한다.
 
 ## 데이터베이스·마이그레이션
 
@@ -371,6 +380,9 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 | `SSE_KEEPALIVE_SECONDS` | `app/shared/config.py` | 15 |
 | `LLM_BASE_URL` | `planforge/llm/provider.py` | — (config base_url 다음 우선순위) |
 | `OPENAI_API_KEY` | `provider.py` | provider가 openai일 때 필수(프로필별 `api_key_env`로 이름 지정 가능) |
+| `AZURE_OPENAI_API_KEY` | `provider.py` | provider가 azure일 때 필수(기본 env 이름 — `api_key_env`로 지정 가능) |
+| `AZURE_OPENAI_ENDPOINT` | `provider.py` | azure 폴백(config `azure_endpoint` 다음 우선순위) |
+| `OPENAI_API_VERSION` | `provider.py` | azure 폴백(config `api_version` 다음 우선순위) |
 | `PYTHONUTF8=1` | Dockerfile · compose | Windows에서 필수 |
 | `TEST_DATABASE_URL` | `tests/conftest.py` | 테스트 DB 격리 오버라이드 |
 
@@ -411,6 +423,12 @@ pytest tests/test_numcheck.py::테스트이름   # 단일 지정
   `JobContext(..., llm_overrides={...})`를 만들어 `claim_next_job` + `run_job`
   **직접 호출**로 결정론 검증.
 - LLM은 `tests/fakes.py`의 `FakeLLM`/`FakeStreamLLM`을 `llm_overrides`로 주입.
+- 실행 설정 `backend/planforge/config.json`(gitignored) 기반 검증은
+  `tests/test_derive.py::test_provider_from_config_json`이 담당 — 파일이 있으면
+  model이 지정된 프로필만 실제 provider 생성 검증(미설정 프로필은 경고 후 생략,
+  생성 실패는 전부 모아 보고). 실호출 스모크는
+  `PLANFORGE_LLM_SMOKE=1 pytest tests/test_derive.py::test_real_llm_smoke_from_config_json`
+  — 평상 pytest는 스킵.
 - SSE는 TestClient로 스트림을 수집하고, `tests/fixtures/`의 샘플
   (`plan.sample.md` · `slides.sample.json` · `report.sample.json` 등)이 계약 테스트의
   동일성을 잠근다.

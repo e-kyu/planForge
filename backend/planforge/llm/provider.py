@@ -3,6 +3,7 @@
 
 계약 (§3.1 — docs/architecture-decisions.md 편차 10으로 의도적 변경):
 - OpenAI 호환 단일 프로토콜 — ollama·openai를 base_url/키 차이만으로 소화.
+  azure는 같은 패키지의 AzureChatOpenAI로 소화 (BaseChatOpenAI 계열 — 편차 13).
   트랜스포트는 langchain-openai ChatOpenAI (하위 SDK는 openai).
 - anthropic SDK 사용 금지. 프로바이더 추가 가능한 인터페이스.
 - 모델은 설정 파일의 단계별 프로필(interview/derive/review)로 지정 — 기본값 미지정(운영자가 확정).
@@ -35,24 +36,31 @@ STREAM_DEADLINE = 900.0  # 초 — 호출 1건의 총 벽시계 한도. keepaliv
 @dataclass
 class ProfileConfig:
     """단계별 LLM 프로필 (설정 파일의 profiles.<단계>)."""
-    provider: str            # "ollama" | "openai"
-    model: str               # 미지정 금지 — 배포 시점 확정
-    base_url: str = ""       # 빈 값이면 프로바이더 기본값
+    provider: str            # "ollama" | "openai" | "azure"
+    model: str               # 미지정 금지 — 배포 시점 확정 (azure는 배포(deployment)명)
+    base_url: str = ""       # 빈 값이면 프로바이더 기본값 (azure 무시 — azure_endpoint 사용)
     api_key_env: str = "OPENAI_API_KEY"
+    azure_endpoint: str = ""  # azure 전용 — 빈 값이면 AZURE_OPENAI_ENDPOINT 환경변수
+    api_version: str = ""     # azure 전용 — 빈 값이면 OPENAI_API_VERSION 환경변수
 
 
 def load_config(path: str | Path) -> dict:
     """설정 파일 로드: {"profiles": {interview|derive|review|plan_revise: {...}}}.
-    누락 프로필은 기본값(ollama)+모델 미지정."""
+    누락 프로필은 기본값(ollama)+모델 미지정. api_key_env 기본값은 프로바이더별로 다르다
+    (azure → AZURE_OPENAI_API_KEY, 그 외 → OPENAI_API_KEY)."""
     raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     profiles = {}
     for name in PROFILES:
         p = raw.get("profiles", {}).get(name, {})
+        default_key_env = "AZURE_OPENAI_API_KEY" if p.get("provider") == "azure" \
+            else "OPENAI_API_KEY"
         profiles[name] = ProfileConfig(
             provider=p.get("provider", "ollama"),
             model=p.get("model", ""),
             base_url=p.get("base_url", ""),
-            api_key_env=p.get("api_key_env", "OPENAI_API_KEY"),
+            api_key_env=p.get("api_key_env", default_key_env),
+            azure_endpoint=p.get("azure_endpoint", ""),
+            api_version=p.get("api_version", ""),
         )
     return profiles
 
@@ -73,7 +81,7 @@ def _resolve_base_url(profile: ProfileConfig) -> str:
 
 
 def _resolve_api_key(profile: ProfileConfig) -> str:
-    if profile.provider == "openai":
+    if profile.provider in ("openai", "azure"):
         api_key = os.environ.get(profile.api_key_env, "")
         if not api_key:
             raise ValueError(f"환경변수 {profile.api_key_env}에 API 키가 없습니다")
@@ -81,8 +89,32 @@ def _resolve_api_key(profile: ProfileConfig) -> str:
     return "ollama"  # 사내 서버 내부 통신 — 더미 키
 
 
+def _resolve_azure_endpoint(profile: ProfileConfig) -> str:
+    """azure_endpoint: config.json > AZURE_OPENAI_ENDPOINT 환경변수. 없으면 즉시 실패 —
+    openai SDK의 생성 시점 TypeError 대신 한국어 안내로 중단한다."""
+    endpoint = profile.azure_endpoint or os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+    if not endpoint:
+        raise ValueError(
+            "azure 프로바이더는 azure_endpoint가 필요합니다 "
+            "(config의 profiles.<단계>.azure_endpoint 또는 환경변수 AZURE_OPENAI_ENDPOINT)")
+    return endpoint
+
+
+def _resolve_api_version(profile: ProfileConfig) -> str:
+    """api_version: config.json > OPENAI_API_VERSION 환경변수. openai SDK가 필수값이라
+    없을 때 즉시 실패한다."""
+    version = profile.api_version or os.environ.get("OPENAI_API_VERSION", "")
+    if not version:
+        raise ValueError(
+            "azure 프로바이더는 api_version이 필요합니다 "
+            "(예: 2024-12-01-preview — config의 profiles.<단계>.api_version "
+            "또는 환경변수 OPENAI_API_VERSION)")
+    return version
+
+
 class OpenAICompatProvider:
-    """langchain-openai ChatOpenAI 기반 OpenAI 호환 provider (ollama/openai 공용)."""
+    """langchain-openai ChatOpenAI 기반 OpenAI 호환 provider (ollama/openai 공용,
+    azure는 같은 패키지의 AzureChatOpenAI)."""
 
     def __init__(self, profile: ProfileConfig):
         try:
@@ -93,13 +125,28 @@ class OpenAICompatProvider:
             raise ValueError("모델이 설정되지 않았습니다 (config의 profiles.<단계>.model 지정 필수)")
         self.model = profile.model
         # max_retries=0 필수 — 계약상 자동 재시도 금지 (failed로 기록, 사용자가 재실행)
-        self._llm = ChatOpenAI(
-            model=profile.model,
-            base_url=_resolve_base_url(profile),
-            api_key=_resolve_api_key(profile),
-            timeout=REQUEST_TIMEOUT,
-            max_retries=0,
-        )
+        if profile.provider == "azure":
+            from langchain_openai import AzureChatOpenAI  # ChatOpenAI와 동일 BaseChatOpenAI 계열
+            # base_url을 넘기지 않는다 — AzureChatOpenAI의 validate_base_url이 거부한다.
+            # model(페이로드·트레이싱)과 azure_deployment(URL /deployments/{model} 경로)에
+            # 같은 값을 넣는다 — 샘플의 create(model=...) = 배포명 의미 그대로.
+            self._llm = AzureChatOpenAI(
+                model=profile.model,
+                azure_deployment=profile.model,
+                azure_endpoint=_resolve_azure_endpoint(profile),
+                api_version=_resolve_api_version(profile),
+                api_key=_resolve_api_key(profile),
+                timeout=REQUEST_TIMEOUT,
+                max_retries=0,
+            )
+        else:
+            self._llm = ChatOpenAI(
+                model=profile.model,
+                base_url=_resolve_base_url(profile),
+                api_key=_resolve_api_key(profile),
+                timeout=REQUEST_TIMEOUT,
+                max_retries=0,
+            )
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
         """1회 완료 호출. tool calling 지원. 반환: {"content": str|None, "tool_calls": [{name, arguments}]}

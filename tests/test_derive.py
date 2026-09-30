@@ -2,6 +2,7 @@
 """derive 오케스트레이터 테스트 — 가짜 LLM을 주입해 결정론 파이프라인(검증·수치 게이트·재시도·기록)을 잠근다."""
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -196,12 +197,17 @@ def test_render_slides_text_design_plan_verbatim():
 # ---------------------------------------------------------------- provider 설정
 
 def test_load_config_profiles():
+    """config.example.json 로드 — ollama·openai·azure를 섞어 각 프로바이더 설정 형태를
+    보여주는 예시(편차 13) 기준. "_"로 시작하는 설명 키는 무시돼야 통과한다."""
     from planforge.llm import load_config
     profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
     assert set(profiles) == {"interview", "derive", "review", "plan_revise"}
-    assert profiles["derive"].provider == "ollama"
-    assert profiles["derive"].model == "glm-5.3-flash:cloud"  # config.example.json 샘플 모델과 동기
-    assert profiles["plan_revise"].model == "glm-5.3-flash:cloud"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
+    assert profiles["interview"].provider == "azure"
+    assert profiles["derive"].model == "gpt-4.1"  # config.example.json 샘플 모델과 동기
+    assert profiles["review"].provider == "ollama"
+    assert profiles["review"].model == "gemma4:26b"
+    assert profiles["plan_revise"].provider == "openai"
+    assert profiles["plan_revise"].model == "gpt-4.1"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
 
 
 def test_provider_requires_model():
@@ -217,3 +223,128 @@ def test_config_file_missing_message(tmp_path, monkeypatch):
                               doc=None, fmts=None, no_build=True, allow_unconfirmed=False,
                               config=str(tmp_path / "none.json"))
     assert m.cmd_derive(ns) == 2
+
+
+# ------------------------------------------------ 실행 설정(config.json) 기반 검증 (편차 13)
+
+def _runtime_config_path():
+    """실행 LLM 설정 경로 — PLANFORGE_CONFIG env > backend/planforge/config.json.
+
+    app/shared/config.py가 쓰는 우선순위를 그대로 미러럴 — 테스트가 실제 런타임 설정을
+    본다. PLANFORGE_CONFIG 주입으로 tmp config 기반 결정론 검증도 가능하다."""
+    import os
+    env = os.environ.get("PLANFORGE_CONFIG", "")
+    if env:
+        return Path(env)
+    return Path(__file__).parent.parent / "backend" / "planforge" / "config.json"
+
+
+def _verify_providers(path) -> tuple[list, list]:
+    """실행 설정 각 프로필의 provider 생성을 네트워크 호출 없이 검증한다.
+
+    model이 지정된 프로필만 생성하고, 미설정 프로필은 경고 후 생략하며, 생성 실패는
+    예외를 삼켜 전부 수집한다(README 계약 "생성 실패는 전부 모아 보고").
+    반환: (생성된 (프로필명, provider) 목록, 실패 문자열 목록).
+    """
+    from planforge.llm import get_provider, load_config
+
+    created, failures = [], []
+    for name, profile in load_config(path).items():
+        if not profile.model:
+            warnings.warn(f"config.json profiles.{name}: model 미설정 — 생략",
+                          stacklevel=2)
+            continue
+        try:
+            created.append((name, get_provider(profile)))
+        except Exception as e:
+            failures.append(f"  {name} ({profile.provider}/{profile.model}): {e}")
+    return created, failures
+
+
+def test_provider_from_config_json():
+    """실행 설정 backend/planforge/config.json(gitignored) 기반 provider 생성 검증.
+
+    파일이 있으면 model이 지정된 프로필만 실제 provider 생성을 검증한다(네트워크 호출
+    없음). 생성 실패는 전부 모아 보고하고, 생성에 성공한 프로필은 자동 재시도 금지
+    계약(max_retries=0 — azure 분기 포함)을 다시 잠근다."""
+    path = _runtime_config_path()
+    if not path.is_file():
+        pytest.skip(f"실행 설정이 없다: {path} (config.example.json을 복사해 시작)")
+    try:
+        created, failures = _verify_providers(path)
+    except Exception as e:  # JSON 파싱 실패 등 — 명확하게 보고
+        pytest.fail(f"실행 설정 파싱 실패: {path} — {e}")
+    if failures:
+        pytest.fail(f"provider 생성 실패 ({path}):\n" + "\n".join(failures))
+    for name, p in created:
+        assert p._llm.max_retries == 0, f"{name}: 자동 재시도 금지 계약(max_retries=0) 위반"
+
+
+def test_provider_config_verification_reports_failures(tmp_path, monkeypatch):
+    """결정론: 검증은 오류를 모아 보고한다 — azure 프로필에 필수값(azure_endpoint·
+    api_version·키)이 없으면 실패 1건에 한국어 안내가 담긴다."""
+    for var in ("AZURE_OPENAI_ENDPOINT", "OPENAI_API_VERSION", "AZURE_OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)  # 실제 환경 변수에 의존하지 않는다
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"profiles": {"interview": '
+                   '{"provider": "azure", "model": "dep-1"}}}', encoding="utf-8")
+    monkeypatch.setenv("PLANFORGE_CONFIG", str(cfg))
+    created, failures = _verify_providers(_runtime_config_path())
+    assert created == []
+    assert len(failures) == 1 and failures[0].startswith("  interview (azure/dep-1):")
+    assert "azure_endpoint" in failures[0]  # 즉시 실패 — openai SDK TypeError 전에 한국어 안내
+
+
+def test_provider_config_verification_warns_model_less(tmp_path, monkeypatch):
+    """결정론: model 미설정 프로필은 경고 후 생략 — 실패로 보고하지 않는다."""
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"profiles": {"interview": {"provider": "ollama"}}}',
+                   encoding="utf-8")
+    monkeypatch.setenv("PLANFORGE_CONFIG", str(cfg))
+    with pytest.warns(UserWarning, match="model 미설정"):
+        created, failures = _verify_providers(_runtime_config_path())
+    assert created == [] and failures == []
+
+
+def test_real_llm_smoke_from_config_json():
+    """PLANFORGE_LLM_SMOKE=1일 때만 실행하는 실호출 스모크 — 실행 설정의 model 지정
+    프로필마다 실제 LLM을 호출해 전송 경로(엔드포인트·키·스트리밍·tool 요청 수용)를
+    확인한다. 실호출이라 비용·수십 초가 든다(README 계약: 평상 pytest는 스킵).
+
+    실행 (PowerShell): $env:PLANFORGE_LLM_SMOKE = "1";
+        pytest tests/test_derive.py::test_real_llm_smoke_from_config_json -v -rs
+    """
+    import os
+    if os.environ.get("PLANFORGE_LLM_SMOKE", "") != "1":
+        pytest.skip("실호출 스모크는 PLANFORGE_LLM_SMOKE=1 환경변수로만 실행한다")
+    path = _runtime_config_path()
+    if not path.is_file():
+        pytest.skip(f"실행 설정이 없다: {path} (config.example.json을 복사해 시작)")
+    from planforge.llm import get_provider, load_config
+
+    profiles = {n: p for n, p in load_config(path).items() if p.model}
+    if not profiles:
+        pytest.skip("model이 지정된 프로필이 없다 — 검증 대상 없음")
+    # tool probe: 게이트웨이가 tool 필드 서식을 거부해 400 내는 경우를 잡는 목적 —
+    # 툴 호출 강제 없이 응답의 구조적 계약만 확인한다.
+    probe_tool = [{"type": "function", "function": {
+        "name": "noop", "description": "호출하지 않는 프로브",
+        "parameters": {"type": "object", "properties": {}}}}]
+    failures = []
+    for name, profile in profiles.items():
+        try:
+            p = get_provider(profile)
+            res = p.chat([{"role": "user", "content": "테스트 호출 — 한 단어로 대답하라"}])
+            if not (isinstance(res.get("content"), str) and res["content"]):
+                raise AssertionError(f"응답 계약 위반: {res!r}")
+            if not isinstance(res.get("tool_calls"), list):
+                raise AssertionError(f"tool_calls 계약 위반: {res!r}")
+            res2 = p.chat([{"role": "user", "content": "테스트 호출 — 대답하라"}],
+                          tools=probe_tool)
+            if not (isinstance(res2.get("content"), (str, type(None)))
+                    and isinstance(res2.get("tool_calls"), list)):
+                raise AssertionError(f"tool probe 계약 위반: {res2!r}")
+        except Exception as e:
+            failures.append(f"  {name} ({profile.provider}/{profile.model}): {e}")
+    if failures:
+        pytest.fail("실호출 스모크 실패:\n" + "\n".join(failures))
