@@ -57,7 +57,7 @@ backend/
 │   │   └── prompts/              derive_slides.md · derive_report.md
 │   ├── config.json               LLM 프로필 설정 (gitignored)
 │   └── config.example.json       예시 설정
-├── alembic/                      DB 마이그레이션 (versions/ 3개)
+├── alembic/                      DB 마이그레이션 (versions/ 4개)
 ├── alembic.ini
 ├── scripts/
 │   └── export_openapi.py         OpenAPI 스키마 → frontend/openapi.json 덤프
@@ -205,7 +205,7 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
 (interview·facts/compact·plans/plan_revise·review), 파생물 변환은
 `planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는 런타임 LLM 프롬프트다.
 
-### `app/api.py` — 엔드포인트 전체 (37개)
+### `app/api.py` — 엔드포인트 전체 (36개)
 
 라우터 집계는 `app/api.py`(각 모듈 `presentation/api.py`를 계약 순서대로 포함).
 전체 명세는 기동 후 http://localhost:8000/docs (Swagger).
@@ -319,7 +319,8 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
   StateGraph로 표준화(편차 11). 판정·피드백 문구는 caller의 `validate` 클로저
   (결정론)가 담당한다.
 - `PROFILES=("interview","derive","review","plan_revise")`. 프로필별
-  `provider/model/base_url/api_key_env`.
+  `provider/model/base_url/api_key/api_key_env/azure_endpoint/api_version`
+  (프로필 누락은 ollama 기본값 — `model` 미지정 시 생성 시점에 즉시 실패).
 - base_url 우선순위: config `base_url` > `LLM_BASE_URL` env > provider 기본값
   (ollama `http://localhost:11434/v1`, openai API 기본).
 - 타임아웃: `REQUEST_TIMEOUT=600`, `STREAM_DEADLINE=900`(정체 스트림 강제 중단).
@@ -332,18 +333,18 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 ```json
 {
   "profiles": {
-    "interview":   { "provider": "azure", "model": "gpt-4.1",
+    "interview":   { "provider": "azure", "model": "gpt-5.6-luna",
                      "api_key_env": "AZURE_OPENAI_API_KEY",
                      "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
                      "azure_endpoint": "https://<azure-endpoint>",
                      "api_version": "2024-12-01-preview" },
-    "derive":      { "provider": "azure", "model": "gpt-4.1",
+    "derive":      { "provider": "azure", "model": "gpt-5.6-luna",
                      "api_key_env": "AZURE_OPENAI_API_KEY",
                      "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
                      "azure_endpoint": "https://<azure-endpoint>",
                      "api_version": "2024-12-01-preview" },
     "review":      { "provider": "ollama", "model": "gemma4:26b" },
-    "plan_revise": { "provider": "openai", "model": "gpt-4.1",
+    "plan_revise": { "provider": "openai", "model": "gpt-5.6-luna",
                      "api_key_env": "OPENAI_API_KEY",
                      "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx" }
   }
@@ -383,8 +384,8 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 - `alembic/env.py`는 `DATABASE_URL` env → `app/shared/config.py get_settings().database_url`
   폴백이며 SQLite batch mode(`render_as_batch=True`)를 쓴다.
-- 현재 리비전 3개: `22d6dcbe6fee`(initial M2 tables) → `663e20e95505`(review_reports) →
-  `c7e8d4a2f19b`(add updated_at).
+- 현재 리비전 4개: `22d6dcbe6fee`(initial M2 tables) → `663e20e95505`(review_reports) →
+  `c7e8d4a2f19b`(add updated_at) → `e5f1a9b3c7d4`(add job progress).
 - 배포 컨테이너는 CMD에서 `alembic upgrade head`를 기동 시 자동 실행한다.
   개발용 `init_db`는 alembic 대체로만 사용.
 

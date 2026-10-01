@@ -160,26 +160,58 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 {
   "profiles": {
     "interview":   { "provider": "ollama", "model": "gemma4:26b" },
-    "derive":      { "provider": "openai", "model": "gpt-4.1" },
-    "review":      { "provider": "openai", "model": "gpt-4.1" },
-    "plan_revise": { "provider": "openai", "model": "gpt-4.1" }
+
+    "derive":      { "provider": "azure",  "model": "gpt-5.6-luna",
+                     "api_key_env": "AZURE_OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                     "azure_endpoint": "https://<azure-endpoint>",
+                     "api_version": "2024-12-01-preview" },
+
+    "review":      { "provider": "openai", "model": "gpt-5.6-luna",
+                     "api_key_env": "OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx" },
+
+    "plan_revise": { "provider": "openai", "model": "gpt-5.6-luna",
+                     "api_key_env": "OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx" }
   }
 }
 ```
 
+- 프로필별 역할 — **interview**: 소스 기반 인터뷰 대화 턴(유일한 스트리밍 프로필) ·
+  **derive**: plan 세대 → slides.json/report.json 변환(팩트 compact도 이 프로필 재사용) ·
+  **review**: 산출물 검수 · **plan_revise**: plan 수정 반영. 누락 프로필은 ollama
+  기본값으로 채워지므로, 쓸 프로필은 **model을 반드시 지정**한다(미지정 시 즉시 실패).
+  `_`로 시작하는 키는 로더가 무시하는 설명용 주석이다(`_note`).
 - 프로바이더는 **OpenAI 호환 단일 프로토콜**(`langchain-openai` ChatOpenAI 기반)만
-  사용한다. ollama·openai를 base_url/키 차이만으로 소화한다. Ollama 모델은
-  **tool calling 지원이 필수**다.
+  사용한다. ollama·openai를 base_url/키 차이만으로 소화하고, azure는 같은 패키지의
+  AzureChatOpenAI로 소화한다. 도구 루프(derive·review·plan_revise·compact)는
+  **tool calling이 필수**라 Ollama 모델도 지원 모델이어야 한다.
 - API 키는 두 가지 방법으로 공급한다 — 우선순위는 `api_key`(직접 기입) >
   `api_key_env`(환경변수 이름, openai 기본 `OPENAI_API_KEY` / azure 기본
-  `AZURE_OPENAI_API_KEY`). 운영에서는 환경변수 방식을 권장한다.
-  예시 파일의 `api_key` 값은 형식 참고용 더미(`"예시(더미): ...")이므로 복사 후
-  실제 키로 교체하거나 빈 값(`""`)으로 둔다(우선순위상 더미가 환경변수를 이긴다).
+  `AZURE_OPENAI_API_KEY`). ollama는 키가 필요 없다.
+  위 예시에서 **`derive`·`review`는 방법 2(환경변수)** — 키는
+  `$env:AZURE_OPENAI_API_KEY = "..."` 식으로 서버 환경변수에 넣고 config에는
+  `"api_key": ""`로 둔다. **`plan_revise`는 방법 1(직접 기입)** — 파일 자체가
+  노출되면 키도 노출되므로 로컬 임시 테스트용이고, 운영에서는 방법 2를 권장한다.
+  둘 다 비어 있으면 `ValueError: 환경변수 <이름>에 API 키가 없습니다`로
+  프로바이더 생성 시점에 중단된다. 예시 파일의 `api_key` 값은 형식 참고용
+  더미(`"예시(더미): ...")이므로 복사 후 실제 키로 교체하거나 빈 값(`""`)으로
+  둔다(우선순위상 더미가 환경변수를 이긴다).
+- **azure**는 `azure_endpoint`(환경변수 폴백 `AZURE_OPENAI_ENDPOINT`)와 `api_version`
+  (폴백 `OPENAI_API_VERSION`, 예: `2024-12-01-preview`)이 필요하고, `model` 값은
+  배포(deployment)명으로 쓰인다. 둘 중 하나라도 없으면 한국어 안내와 함께 즉시
+  실패한다. azure는 `base_url`을 무시한다.
+- base_url 우선순위: 프로필 `base_url` > `LLM_BASE_URL` env > 프로바이더 기본값
+  (ollama `http://localhost:11434/v1` · openai `https://api.openai.com/v1`).
+- 실패 처리: **자동 재시도 없음**(`max_retries=0`) — 실패한 작업은 failed로 기록되며
+  사용자가 재실행한다. 단일 호출 읽기 타임아웃 600초, 스트림 1건 전체 데드라인 900초
+  (정체 스트림은 TimeoutError로 중단).
+- 설정 파일 해석 순서: 웹은 `PLANFORGE_CONFIG` env > `backend/planforge/config.json`;
+  CLI derive는 `--config` 인자 > `PLANFORGE_CONFIG` env > 동일 기본 경로.
 - 에이전트 루프는 langgraph로 오케스트레이션된다 — 인터뷰 턴 루프(StateGraph)와
   도구 재시도 루프 4곳(derive·plan_revise·review·compact, 공용 tool-loop 그래프).
   판정·검증·커밋은 결정론 서버 코드가 담당한다.
-- `PLANFORGE_CONFIG` 환경변수로 설정 파일 경로를 바꿀 수 있다.
-- ollama 외 프로바이더는 `LLM_BASE_URL` env로 base_url을 전환할 수 있다.
 
 ---
 
