@@ -4,7 +4,7 @@
     "interview": {
       "_note": "역할: 소스 기반 인터뷰 대화 턴 — 에이전트가 소스 문서를 보고 질문하고, 답변에서 팩트를 추출해 적립한다(유일한 스트리밍 프로필).",
       "provider": "azure",
-      "model": "gpt-4.1",
+      "model": "gpt-5.6-luna",
       "api_key_env": "AZURE_OPENAI_API_KEY",
       "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "azure_endpoint": "https://<azure-endpoint>",
@@ -13,7 +13,7 @@
     "derive": {
       "_note": "역할: 승인된 plan 세대 → slides.json·report.json 콘텐츠 재변환(파일 조립·채번은 결정론 빌더가 담당) — 팩트 compact도 이 프로필을 재사용한다.",
       "provider": "azure",
-      "model": "gpt-4.1",
+      "model": "gpt-5.6-luna",
       "api_key_env": "AZURE_OPENAI_API_KEY",
       "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "azure_endpoint": "https://<azure-endpoint>",
@@ -27,7 +27,7 @@
     "plan_revise": {
       "_note": "역할: plan 수정 요청 반영 — 지시를 plan 마크다운에 반영해 새 DRAFT 세대를 만든다(프로필 누락 시 review 프로필로 폴백). API 키는 두 가지 방법: (1) api_key_env로 키를 담은 환경변수 이름 지정 — 권장 방식이며 아래 설정은 이 방식이다, (2) api_key에 키값 직접 기입 — api_key_env 경로보다 우선하므로 이 샘플처럼 빈 값(\"\")으로 두면 환경변수가 사용된다. OPENAI_API_KEY 환경변수에 토큰을 넣어 사용한다.",
       "provider": "openai",
-      "model": "gpt-4.1",
+      "model": "gpt-5.6-luna",
       "api_key_env": "OPENAI_API_KEY",
       "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx"
     }
