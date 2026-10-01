@@ -47,6 +47,40 @@ def test_base_url_config_wins_over_env(monkeypatch):
     assert p._llm.openai_api_base == "http://x:1"
 
 
+def _plain_key(value):
+    """langchain의 SecretStr 래핑을 벗겨 평문 키를 반환한다 (버전별 차이 흡수)."""
+    return value.get_secret_value() if hasattr(value, "get_secret_value") else value
+
+
+def test_api_key_config_direct_beats_env(monkeypatch):
+    """config.json의 api_key(직접값)가 api_key_env 환경변수보다 우선한다."""
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    profile = ProfileConfig(provider="openai", model="m", api_key="direct-key")
+    assert provider_mod._resolve_api_key(profile) == "direct-key"
+
+
+def test_api_key_env_fallback(monkeypatch):
+    """api_key 직접값이 없으면 기존 경로(api_key_env 환경변수)로 읽는다."""
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    profile = ProfileConfig(provider="openai", model="m")
+    assert provider_mod._resolve_api_key(profile) == "env-key"
+
+
+def test_api_key_missing_raises(monkeypatch):
+    """직접값·환경변수 모두 없으면 기존과 동일한 한국어 에러로 중단한다."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    profile = ProfileConfig(provider="openai", model="m")
+    with pytest.raises(ValueError, match="환경변수 OPENAI_API_KEY에 API 키가 없습니다"):
+        provider_mod._resolve_api_key(profile)
+
+
+def test_api_key_from_config_allows_envless_construction(monkeypatch):
+    """api_key를 config에 직접 넣으면 환경변수가 없어도 프로바이더가 생성된다."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    p = get_provider(ProfileConfig(provider="openai", model="m", api_key="direct-key"))
+    assert _plain_key(p._llm.openai_api_key) == "direct-key"
+
+
 def test_no_auto_retry_and_timeout():
     """계약: 자동 재시도 금지(max_retries=0) + 침묵 소켓 read timeout."""
     p = get_provider(ProfileConfig(provider="ollama", model="test-model"))

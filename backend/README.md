@@ -333,22 +333,41 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 {
   "profiles": {
     "interview":   { "provider": "azure", "model": "gpt-4.1",
+                     "api_key_env": "AZURE_OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
                      "azure_endpoint": "https://<azure-endpoint>",
                      "api_version": "2024-12-01-preview" },
     "derive":      { "provider": "azure", "model": "gpt-4.1",
+                     "api_key_env": "AZURE_OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
                      "azure_endpoint": "https://<azure-endpoint>",
                      "api_version": "2024-12-01-preview" },
     "review":      { "provider": "ollama", "model": "gemma4:26b" },
-    "plan_revise": { "provider": "openai", "model": "gpt-4.1" }
+    "plan_revise": { "provider": "openai", "model": "gpt-4.1",
+                     "api_key_env": "OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx" }
   }
 }
 ```
 
 `model`은 필수(azure는 배포(deployment)명). `config.example.json`을 복사해 시작한다.
-**Ollama 모델은 tool calling 지원이 필수**다. azure는 `azure_endpoint`·`api_version`
-필수(환경변수 `AZURE_OPENAI_ENDPOINT`·`OPENAI_API_VERSION`로 각각 대체 가능)이고,
-API 키는 기본 환경변수 `AZURE_OPENAI_API_KEY`에서 읽는다(프로필별 `api_key_env`로
-이름 지정 가능). 배포 컨테이너는 docker-compose `environment`에
+예시 파일의 openai·azure 프로필은 **모두 `api_key_env`(환경변수 이름) 기반**으로 샘플링되어
+있고, `api_key` 필드에는 형식 참고용 더미 토큰(`"예시(더미): sk-proj-..."`)이 들어 있다 —
+더미는 로더가 유효 키로 취급하므로(우선순위 `api_key` > `api_key_env`) 복사 후 반드시
+실제 키로 교체하거나, `api_key`를 빈 값(`""`)으로 남겨 환경변수 경로를 사용한다.
+**Ollama 모델은 tool calling 지원이 필수**다(ollama는 API 키가 필요 없다). azure는
+`azure_endpoint`·`api_version` 필수(환경변수 `AZURE_OPENAI_ENDPOINT`·
+`OPENAI_API_VERSION`로 각각 대체 가능)이고, API 키는 아래 둘 중 한 가지로 공급한다 —
+우선순위는 `api_key` > `api_key_env`:
+
+1. `api_key` — config.json에 키값을 직접 기입. 키를 담을 환경변수가 없어도 동작하며
+   `api_key_env` 경로보다 우선한다. config.json은 gitignored이며 Claude 읽기도 deny로
+   보호되지만, 파일 자체가 노출되면 키도 노출되므로 운영에서는 2번(환경변수)을 권장한다.
+2. `api_key_env` — 키를 담은 환경변수의 이름. openai 기본 `OPENAI_API_KEY`,
+   azure 기본 `AZURE_OPENAI_API_KEY`(프로필별로 이름 지정 가능).
+
+둘 다 없으면 `ValueError: 환경변수 <이름>에 API 키가 없습니다`로 생성 시점에 중단한다
+(키 해석은 프로바이더 생성 시점 1회). 배포 컨테이너는 docker-compose `environment`에
 `AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}`를 추가한다.
 
 ## 데이터베이스·마이그레이션
@@ -379,8 +398,8 @@ API 키는 기본 환경변수 `AZURE_OPENAI_API_KEY`에서 읽는다(프로필�
 | `PLANFORGE_CONFIG` | `app/shared/config.py` · CLI | `backend/planforge/config.json` |
 | `SSE_KEEPALIVE_SECONDS` | `app/shared/config.py` | 15 |
 | `LLM_BASE_URL` | `planforge/llm/provider.py` | — (config base_url 다음 우선순위) |
-| `OPENAI_API_KEY` | `provider.py` | provider가 openai일 때 필수(프로필별 `api_key_env`로 이름 지정 가능) |
-| `AZURE_OPENAI_API_KEY` | `provider.py` | provider가 azure일 때 필수(기본 env 이름 — `api_key_env`로 지정 가능) |
+| `OPENAI_API_KEY` | `provider.py` | provider가 openai일 때 필요(config `api_key` 직접 기입 시 불필요; 프로필별 `api_key_env`로 이름 지정 가능) |
+| `AZURE_OPENAI_API_KEY` | `provider.py` | provider가 azure일 때 필요(config `api_key` 직접 기입 시 불필요; 기본 env 이름 — `api_key_env`로 지정 가능) |
 | `AZURE_OPENAI_ENDPOINT` | `provider.py` | azure 폴백(config `azure_endpoint` 다음 우선순위) |
 | `OPENAI_API_VERSION` | `provider.py` | azure 폴백(config `api_version` 다음 우선순위) |
 | `PYTHONUTF8=1` | Dockerfile · compose | Windows에서 필수 |

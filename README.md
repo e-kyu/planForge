@@ -83,6 +83,11 @@ docker-compose.yml        배포 스택 (backend · frontend · ollama)
 ```powershell
 # 1) LLM 설정 만들기 (예시 파일을 복사해 모델 지정)
 copy backend\planforge\config.example.json backend\planforge\config.json
+#   - 예시의 openai·azure 프로필은 api_key_env(환경변수 이름)로 키를 받는다:
+#     OPENAI_API_KEY / AZURE_OPENAI_API_KEY — 실제 키는 환경변수에 넣는다.
+#   - 예시 파일의 api_key 값은 형식 참고용 더미("예시(더미): sk-proj-...")이며
+#     api_key가 환경변수보다 우선하므로, 복사 후 실제 키로 교체하거나
+#     빈 값("")으로 두는 것이 안전하다.
 #   config.json 내용 예: {"profiles": {"interview": {...}, "derive": {...},
 #     "review": {...}, "plan_revise": {...}}}
 
@@ -106,9 +111,10 @@ docker compose --profile ollama exec ollama ollama signin
 볼륨: `workspaces/`(산출물) · `sources/`(글로벌 소스) · `data/`(SQLite DB)는 호스트에
 남으므로 컨테이너를 재생성해도 유지된다.
 
-> **다른 LLM 프로바이더(openai 등)**: `config.json`의 `base_url`이 compose의
+> **다른 LLM 프로바이더(openai·azure 등)**: `config.json`의 `base_url`이 compose의
 > `LLM_BASE_URL` env보다 우선한다. ollama를 쓰지 않으면 `LLM_BASE_URL`만 바꿔도 된다.
-> OpenAI API 키는 서버 환경변수로만 관리한다(브라우저 노출 금지).
+> OpenAI·Azure API 키는 서버 환경변수(`OPENAI_API_KEY` / `AZURE_OPENAI_API_KEY`,
+> 프로필별 `api_key_env`로 이름 지정 가능)로만 관리한다(브라우저 노출 금지).
 
 ---
 
@@ -164,6 +170,11 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 - 프로바이더는 **OpenAI 호환 단일 프로토콜**(`langchain-openai` ChatOpenAI 기반)만
   사용한다. ollama·openai를 base_url/키 차이만으로 소화한다. Ollama 모델은
   **tool calling 지원이 필수**다.
+- API 키는 두 가지 방법으로 공급한다 — 우선순위는 `api_key`(직접 기입) >
+  `api_key_env`(환경변수 이름, openai 기본 `OPENAI_API_KEY` / azure 기본
+  `AZURE_OPENAI_API_KEY`). 운영에서는 환경변수 방식을 권장한다.
+  예시 파일의 `api_key` 값은 형식 참고용 더미(`"예시(더미): ...")이므로 복사 후
+  실제 키로 교체하거나 빈 값(`""`)으로 둔다(우선순위상 더미가 환경변수를 이긴다).
 - 에이전트 루프는 langgraph로 오케스트레이션된다 — 인터뷰 턴 루프(StateGraph)와
   도구 재시도 루프 4곳(derive·plan_revise·review·compact, 공용 tool-loop 그래프).
   판정·검증·커밋은 결정론 서버 코드가 담당한다.

@@ -39,6 +39,7 @@ class ProfileConfig:
     provider: str            # "ollama" | "openai" | "azure"
     model: str               # 미지정 금지 — 배포 시점 확정 (azure는 배포(deployment)명)
     base_url: str = ""       # 빈 값이면 프로바이더 기본값 (azure 무시 — azure_endpoint 사용)
+    api_key: str = ""        # config 직접 키값 — 비어있으면 api_key_env 환경변수 경로
     api_key_env: str = "OPENAI_API_KEY"
     azure_endpoint: str = ""  # azure 전용 — 빈 값이면 AZURE_OPENAI_ENDPOINT 환경변수
     api_version: str = ""     # azure 전용 — 빈 값이면 OPENAI_API_VERSION 환경변수
@@ -47,7 +48,8 @@ class ProfileConfig:
 def load_config(path: str | Path) -> dict:
     """설정 파일 로드: {"profiles": {interview|derive|review|plan_revise: {...}}}.
     누락 프로필은 기본값(ollama)+모델 미지정. api_key_env 기본값은 프로바이더별로 다르다
-    (azure → AZURE_OPENAI_API_KEY, 그 외 → OPENAI_API_KEY)."""
+    (azure → AZURE_OPENAI_API_KEY, 그 외 → OPENAI_API_KEY). api_key(직접 키값)를 넣으면
+    환경변수 없이 동작하며 api_key_env 경로보다 우선한다."""
     raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     profiles = {}
     for name in PROFILES:
@@ -58,6 +60,7 @@ def load_config(path: str | Path) -> dict:
             provider=p.get("provider", "ollama"),
             model=p.get("model", ""),
             base_url=p.get("base_url", ""),
+            api_key=p.get("api_key", ""),
             api_key_env=p.get("api_key_env", default_key_env),
             azure_endpoint=p.get("azure_endpoint", ""),
             api_version=p.get("api_version", ""),
@@ -82,6 +85,9 @@ def _resolve_base_url(profile: ProfileConfig) -> str:
 
 def _resolve_api_key(profile: ProfileConfig) -> str:
     if profile.provider in ("openai", "azure"):
+        # 우선순위: config.json의 api_key(직접값) > api_key_env 환경변수.
+        if profile.api_key:
+            return profile.api_key
         api_key = os.environ.get(profile.api_key_env, "")
         if not api_key:
             raise ValueError(f"환경변수 {profile.api_key_env}에 API 키가 없습니다")
