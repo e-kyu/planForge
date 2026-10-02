@@ -94,7 +94,13 @@ def run_review(ctx, session, job) -> dict:
     summary = ""
     try:
         from app.shared.llm import LLMRegistry
-        report_progress(session, job, "llm")
+        # 초기 진행 기록 — DB 오류가 작업 자체를 죽이지 않게 방어한다
+        # (facade 계약: caller 방어 — 여기를 통과하지 않으면 진행 기록 실패가
+        # 아래 except에서 LLM 검수 실패로 오기록된다).
+        try:
+            report_progress(session, job, "llm")
+        except Exception:
+            print(f"[review] job #{job.id} 진행 기록 실패", flush=True)
         registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
         lf, summary, llm_ok = run_llm_review(
             registry.chat_fn("review"), plan.markdown, derivative_docs, facts,

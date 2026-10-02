@@ -137,6 +137,28 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       다운로드해 사용자 Git 저장소로 직접 갈 수 있다. 읽기는 `utf-8-sig`(BOM 제거, Notepad
       대응)와 짝을 이룬다. 동시 편집은 last-write-wins(이력 콘셉트 미도입).
 
+15. **잡 진행 표시: 폴링 단일 소유자 + derive_build 도메인 행 후발 생성** (2026-10-02)
+    - 배경: 진행 배너(5381af9)가 런타임 DB에 `jobs.progress` 마이그레이션 미적용 상태로
+      침묵했다 — `/api/jobs` SELECT가 500이 돼도 프론트가 `jobsQ.isError`를 렌더하지 않아
+      화면에 흔적이 없었고, 워커 태스크(`asyncio.create_task`의 첫 `claim_next_job`
+      SELECT)도 조용히 죽어 잡이 영구 queued에 머물렀다.
+    - 변경 1 (폴링 소유자): `["jobs", pid]` 쿼리의 refetchInterval은 shared/lib
+      `useActiveJobs` 하나만 보유한다 (헤더 ActivityPill이 아핀 — 탭 전환에도 폴링 생존).
+      TanStack v5는 refetchInterval이 관측점별 타이머라 interval 없는 관측점은 타이머를
+      만들지 않는다 — 탭 뷰모델(useOutputs/useReviews)은 소비만 하고 소유자 1곳에만 중복
+      요청이 없다. 에러 시 5초 주기 재시도로 자가 복구. 경과 갱신은 structural sharing
+      (동일 페이로드 폴링 시 리렌더 없음) 때문에 폴링만으론 안 되므로 `useTickingNow`(1s
+      틱, 조건은 `some(running)` — activeJob.status가 아닌 이유: 직렬 워커는 최오부 잡을
+      running, latestActive는 최신 queued를 가리킨다)로 지각 시각을 공급한다.
+    - 변경 2 (도메인 행 후발 생성): `derive_build`의 Derivative/Build 행 생성을
+      `atomic_build` 이후로 밀었다. report_progress가 세션 전체를 즉시 커밋하는 facade
+      계약상 커밋 시점에 대기 중 도메인 행이 있으면 빌드 실패 시 고아가 남는다 — 이제 빌드
+      루프 내부에서도 fmt별 `report_progress(detail="HTML 작성 중")`가 안전하다 (불변식:
+      모든 session.add는 atomic_build 이후). 빌더 실패 → 고아 0행·output 무손상
+      (test_build_failure_leaves_no_derivative_or_output로 잠굼).
+    - 계약 불변: jobs facade·JobOut·openapi.json/types.gen.ts 미변경 (diff 0 증명).
+      진행 상세(detail)는 job.progress JSON 내부 필드일 뿐 스키마는 free-form 유지.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

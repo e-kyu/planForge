@@ -4,7 +4,7 @@ import type { Job } from "../../../api/client";
 import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOutputs } from "../viewmodels/useOutputs";
-import { elapsedText, progressText } from "../../../shared/lib/jobs";
+import { elapsedText, jobStateText, progressText, JOB_TYPE_LABEL } from "../../../shared/lib/jobs";
 
 const EXT_LABEL: Record<string, string> = {
   pptx: "PPTX",
@@ -15,12 +15,7 @@ const EXT_LABEL: Record<string, string> = {
 
 type JobCounts = { slides?: number; sections?: number; attempts?: number };
 
-const JOB_TYPE_LABEL: Record<string, string> = {
-  derive_build: "파생물 생성",
-  review: "검수",
-  plan_revise: "plan 반영",
-};
-
+/** 잡 타입·상태 레이블 — 타입 레이블은 공용 셀렉터(jobs.ts)에서 import한다. */
 const JOB_STATUS: Record<string, { icon: string; label: string }> = {
   queued: { icon: "○", label: "대기" },
   running: { icon: "⟳", label: "진행" },
@@ -45,6 +40,8 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     jobs,
     failedLatest,
     activeJob,
+    jobsError,
+    now,
     error,
     notice,
     busy,
@@ -102,15 +99,15 @@ export default function OutputsPanel({ pid }: { pid: number }) {
         )}
       </PageHeader>
 
+      {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
-      {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시 */}
+      {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시.
+          진행 문구·경과는 useTickingNow 틱으로 매초 갱신 — 폴링만으론 동일 페이로드에서 리렌더가 없다 */}
       {busy && (
         <Banner kind="info">
           {activeJob?.status === "running"
-            ? `${JOB_TYPE_LABEL[activeJob.type] ?? activeJob.type} — ${progressText(activeJob) ?? "처리 중"}${
-                elapsedText(activeJob, Date.now()) ? ` · ${elapsedText(activeJob, Date.now())}` : ""
-              }`
+            ? (jobStateText(activeJob, now) ?? "파생물 생성 — 처리 중")
             : "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)"}
         </Banner>
       )}
@@ -196,7 +193,6 @@ export default function OutputsPanel({ pid }: { pid: number }) {
           <ul className="job-list">
             {recentJobs.map((j) => {
               const st = JOB_STATUS[j.status];
-              const now = Date.now();
               return (
                 <li key={j.id} className={`job-item job-${j.status}`}>
                   <div className="job-head">

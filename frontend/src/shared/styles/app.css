@@ -103,6 +103,61 @@
   color: var(--danger);
 }
 
+/* 활성 잡 전역 필 — metric-pill 계열이지만 이름을 별도로 갖는다 (≤900px에서 metric-pill
+ * 숨김 규칙의 영향을 받도록 의도된 것은 아님: 진행 표시는 좁은 화면에서도 유지). */
+.activity-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 12px;
+  margin-right: var(--space-2);
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  background: var(--surface-sub);
+  color: var(--navy);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  max-width: 340px;
+  min-width: 0;
+}
+
+.activity-pill .activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+
+.activity-pill .activity-dot-pulse {
+  animation: activity-pulse 1.2s ease-in-out infinite;
+}
+
+.activity-pill .activity-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-pill-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.activity-pill-danger .activity-dot {
+  background: var(--danger);
+}
+
+@keyframes activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* 헬스 필 — 화이트 배경용 재색 */
 .health {
   font-size: var(--fs-caption);

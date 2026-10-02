@@ -12,7 +12,8 @@ const SEV_ORDER: Record<string, number> = { red: 0, yellow: 1, white: 2 };
 
 /** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3). */
 export default function ReviewPanel({ pid }: { pid: number }) {
-  const { reports, plans, jobs, error, notice, busy, reviseDone, enqueue } = useReviews(pid);
+  const { reports, plans, jobs, jobsError, now, error, notice, busy, reviseDone, enqueue } =
+    useReviews(pid);
   const [sel, setSel] = useState<Review | null>(null);
 
   if (reports === null) return <Empty>불러오는 중…</Empty>;
@@ -44,13 +45,14 @@ export default function ReviewPanel({ pid }: { pid: number }) {
         )}
       </PageHeader>
 
+      {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
       {busy && (
         <Banner kind="info">
           {reviseActive && !reviewActive
-            ? bannerText(reviseJob, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)")
-            : bannerText(reviewJob, "검수 처리 중… (결정론 대조 + LLM 내용 검수)")}
+            ? bannerText(reviseJob, now, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)")
+            : bannerText(reviewJob, now, "검수 처리 중… (결정론 대조 + LLM 내용 검수)")}
         </Banner>
       )}
 
@@ -98,13 +100,14 @@ export default function ReviewPanel({ pid }: { pid: number }) {
   );
 }
 
-/** 활성 잡의 진행 문구 + 경과 — 진행 기록이 없는 구간(결정론 대조 등)은 기존 안내 문구 유지. */
-function bannerText(job: Job | undefined, fallback: string): string {
+/** 활성 잡의 진행 문구 + 경과 — 경과는 useTickingNow의 now로 갱신한다 (폴링만으론 정지).
+ *  진행 기록이 없는 구간(결정론 대조 등)은 기존 안내 문구 유지. */
+function bannerText(job: Job | undefined, now: number, fallback: string): string {
   if (!job) return fallback;
   if (job.status === "queued") return "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다";
   const text = progressText(job, fallback);
   if (text === null) return fallback;
-  const elapsed = elapsedText(job, Date.now());
+  const elapsed = elapsedText(job, now);
   return elapsed ? `${text} · ${elapsed}` : text;
 }
 

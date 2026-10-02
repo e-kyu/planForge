@@ -40,27 +40,50 @@ def run_derive_build(ctx, session, job) -> dict:
     from app.modules.jobs.facade import report_progress
     from app.shared.llm import LLMRegistry
 
-    def on_attempt(n: int, max_n: int) -> None:
-        # LLM 변환 attempt 진행 기록 — DB 오류가 작업 자체를 죽이지 않게 방어한다.
+    def progress(step: str, **kw) -> None:
+        # 진행 기록 — DB 오류가 작업 자체를 죽이지 않게 방어한다 (facade 계약: caller 방어).
         try:
-            report_progress(session, job, "llm", attempt=n, max_attempts=max_n)
+            report_progress(session, job, step, **kw)
         except Exception:
             print(f"[derive] job #{job.id} 진행 기록 실패", flush=True)
 
+    def on_attempt(n: int, max_n: int) -> None:
+        progress("llm", attempt=n, max_attempts=max_n)
+
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
     deriver = Deriver(registry.chat_fn("derive"), ws)
-    # 진행 기록 지점은 도메인 행 생성 이전으로 고정 — report_progress가 세션을 커밋하므로
-    # (facade 계약) 조기 커밋으로 빌드 실패 시 고아 Derivative가 남는 것을 원천 차단한다.
+    # 진행 기록 불변식 — 모든 report_progress는 대기 중 도메인 행이 없는 시점에서만 호출한다.
+    # report_progress가 세션 전체를 커밋하므로(facade 계약), 조기 커밋은 빌드 실패 시 고아
+    # Derivative를 남긴다. 그래서 session.add()는 전부 atomic_build 이후로 밀렸다.
     t_llm = time.monotonic()
     print(f"[derive] job #{job.id} LLM 변환 시작 (kind={kind}, doc={doc})", flush=True)
-    report_progress(session, job, "llm")
+    progress("llm")
     res = deriver.derive(plan_mirror, kind, doc, on_attempt=on_attempt)
     print(f"[derive] job #{job.id} LLM 변환 완료 "
           f"({time.monotonic() - t_llm:.0f}s, attempts={res.attempts})", flush=True)
-    report_progress(session, job, "build")
+    progress("build")
+
+    # 결정론 빌드 — 원자적 실행 (D7). 빌더 로직은 건드리지 않는다.
+    if kind == "slides":
+        def run_builder(tmp: Path):
+            progress("build", detail="PPTX 작성 중")
+            from planforge.builders import build_ppt
+            build_ppt.build(str(res.work_path), str(tmp))
+    else:
+        from planforge.builders import build_doc
+        def run_builder(tmp: Path):
+            for fmt in (fmts or ("md", "html", "docx")):
+                progress("build", detail=f"{fmt.upper()} 작성 중")
+                build_doc.build(str(res.work_path), fmt, str(tmp))
+
+    t_build = time.monotonic()
+    made = atomic_build(ws, run_builder)
+    print(f"[derive] job #{job.id} 결정론 빌드 완료 "
+          f"({time.monotonic() - t_build:.0f}s, 파일 {len(made)}건)", flush=True)
+
+    # 도메인 행 생성 — 여기부터는 report_progress를 호출하지 않는다 (진행 기록 불변식).
     # Deriver가 기본 문서를 해석했다 (doc=None → plan.docs[0])
     resolved_doc = doc or parse_plan_file(plan_mirror).docs[0]
-
     derivative = Derivative(
         plan_id=plan.id,
         project_id=project.id,
@@ -74,22 +97,6 @@ def run_derive_build(ctx, session, job) -> dict:
     )
     session.add(derivative)
     session.flush()
-
-    # 결정론 빌드 — 원자적 실행 (D7). 빌더 로직은 건드리지 않는다.
-    if kind == "slides":
-        def run_builder(tmp: Path):
-            from planforge.builders import build_ppt
-            build_ppt.build(str(res.work_path), str(tmp))
-    else:
-        from planforge.builders import build_doc
-        def run_builder(tmp: Path):
-            for fmt in (fmts or ("md", "html", "docx")):
-                build_doc.build(str(res.work_path), fmt, str(tmp))
-
-    t_build = time.monotonic()
-    made = atomic_build(ws, run_builder)
-    print(f"[derive] job #{job.id} 결정론 빌드 완료 "
-          f"({time.monotonic() - t_build:.0f}s, 파일 {len(made)}건)", flush=True)
 
     builds = []
     for f in made:

@@ -62,6 +62,7 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
     assert job["result"]["counts"]["sections"] == 5
     # 진행 상태 — 마지막 기록 단계가 남는다 (표시는 running일 때만, 완료는 status가 담당)
     assert job["progress"]["step"] == "build"
+    assert "MD" in job["progress"]["detail"]  # fmt별 진행 상세 — 빌드 루프가 기록
     assert job["started_at"] is not None  # 경과시간 계약 — JobOut 노출 확인
 
     # 파생물 행 — plan 세대 바인딩 (추적성 §5)
@@ -127,6 +128,37 @@ def test_llm_failure_classified_as_llm_error(client, app, db_env):
     assert job["progress"]["attempt"] == 3
     # 불완전 산출물이 output에 남지 않는다 (§5 원자성)
     assert not list((db_env / "fail-demo" / "output").glob("*.md"))
+
+
+def test_build_failure_leaves_no_derivative_or_output(client, app, db_env, monkeypatch):
+    """빌더 실패 → 고아 Derivative·산출물 파일 0건 (진행 불변식 회귀 — 도메인 행은
+    atomic_build 이후에만 생성: report_progress 커밋이 조기 행 확정을 만들지 않는다)."""
+    from app.shared.db import make_session_factory
+
+    client.post("/api/projects", json={"slug": "build-fail", "title": "x"})
+    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    r = client.post("/api/projects/1/derivatives",
+                    json={"kind": "report", "fmts": ["md"]})
+    job_id = r.json()["id"]
+
+    import planforge.builders.build_doc as build_doc_mod
+
+    def raiser(json_path: str, fmt: str, out_dir: str) -> None:
+        raise RuntimeError("builder exploded")
+
+    monkeypatch.setattr(build_doc_mod, "build", raiser)
+
+    llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
+    _run_queue(app, llm)
+
+    job = client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "failed", job
+    # 진행 상태 — 빌드 단계 기록까지 남는다 (마지막 진행 기록)
+    assert job["progress"]["step"] == "build"
+    # 고아 없음 — 파생물행·빌드행·output 파일 모두 없어야 한다 (§5 원자성)
+    assert client.get(f"/api/projects/1/derivatives").json() == []
+    assert client.get(f"/api/projects/1/outputs").json() == []
+    assert not list((db_env / "build-fail" / "output").glob("*"))
 
 
 def test_claim_returns_none_on_empty_queue(app):
