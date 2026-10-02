@@ -83,6 +83,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Overview
+         * @description 개요 문서 조회 — 파일 부재는 오류가 아니라 exists=False (에디터의 빈 뼈대 시작용).
+         */
+        get: operations["get_overview_api_projects__project_id__overview_get"];
+        /**
+         * Save Overview
+         * @description 개요 문서 업서트 — 덮어쓰기가 허용되는 유일한 소스 경로 (개요 문서 docstring 참조).
+         */
+        put: operations["save_overview_api_projects__project_id__overview_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}/sources/{name}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Source
+         * @description 소스 대역파일 다운로드 — DELETE /sources/{name}과 대칭 (파일 경로 검증 공유).
+         */
+        get: operations["download_source_api_projects__project_id__sources__name__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources": {
         parameters: {
             query?: never;
@@ -833,6 +877,25 @@ export interface components {
             /** Created At */
             created_at: unknown;
         };
+        /**
+         * OverviewOut
+         * @description 소스 탭 웹 작성 개요 문서 (sources/overview.md — 파일이 곧 SSOT).
+         */
+        OverviewOut: {
+            /** Exists */
+            exists: boolean;
+            /** Content */
+            content: string;
+            /** Size */
+            size: number;
+            /** Mtime */
+            mtime: number | null;
+        };
+        /** OverviewSave */
+        OverviewSave: {
+            /** Content */
+            content: string;
+        };
         /** PlanOut */
         PlanOut: {
             /** Id */
@@ -1239,6 +1302,104 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_overview_api_projects__project_id__overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_overview_api_projects__project_id__overview_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverviewSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_source_api_projects__project_id__sources__name__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

@@ -10,9 +10,9 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.modules.projects.facade import require_project
-from app.shared.workspace import ensure_workspace_dirs
+from app.shared.workspace import OVERVIEW_NAME, ensure_workspace_dirs
 
-__all__ = ["project_sources_dir"]
+__all__ = ["project_sources_dir", "project_overview_path"]
 
 
 def project_sources_dir(db: Session, project_id: int) -> Path:
@@ -21,3 +21,13 @@ def project_sources_dir(db: Session, project_id: int) -> Path:
     ws = Path(p.workspace_path)
     ensure_workspace_dirs(ws)
     return ws / "sources"
+
+
+def project_overview_path(db: Session, project_id: int) -> Path:
+    """소스 탭 웹 작성 개요 문서(sources/overview.md) 경로를 보장하고 반환한다.
+
+    파일이 곧 SSOT인 fs 네이티브 문서 — 존재 여부는 응답 exists로 표현한다.
+    sources/ 안의 파일이므로 목록·인터뷰 주입 컨텍스트에 일반 소스와 동일하게 들어간다.
+    """
+    src = project_sources_dir(db, project_id)
+    return src / OVERVIEW_NAME

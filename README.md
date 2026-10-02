@@ -228,6 +228,8 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 ### ② 소스 등록 ("소스" 탭)
 - 기존 기획자료를 업로드한다. 확장자 `.md .txt .json .csv`, 2MB 이하, UTF-8만 허용.
 - 같은 이름으로 덮어쓸 수 없다(무덮어쓰기 원칙).
+- **개요 작성** 버튼으로 `sources/overview.md`(개요 문서)를 웹에서 만들 수 있다 —
+  인터뷰 기본자료 전용 문서(plan 결과물 생성에는 미사용), 덮어쓰기 편집 가능.
 - 여기서 등록한 소스는 **이 프로젝트 전용**이다. 모든 프로젝트가 공유하는 글로벌 소스는
   `sources/` 디렉토리에 파일을 직접 넣는다(`GET /api/sources`로 조회).
 
@@ -308,7 +310,7 @@ LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 | 영역 | 엔드포인트 |
 |---|---|
 | 프로젝트 | `POST/GET /api/projects` · `DELETE /api/projects/{pid}` |
-| 소스 | `GET/POST/DELETE /api/projects/{pid}/sources` · `GET /api/sources`(글로벌 읽기전용) |
+| 소스 | `GET/POST/DELETE /api/projects/{pid}/sources` · `GET .../sources/{name}/download` · `GET/PUT .../overview`(개요 문서) · `GET /api/sources`(글로벌 읽기전용) |
 | 인터뷰(SSE) | `POST .../interview/sessions` → `.../kick` · `.../turn` · `.../answers` · `.../facts/confirm` · `.../key-messages` · `GET .../messages?after=seq` |
 | plan | `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}` · `POST /api/plans/{id}/approve` · `POST /api/plans/{id}/revise` |
 | 검수 | `POST /api/projects/{pid}/reviews` · `GET /api/projects/{pid}/reviews`(및 단건) |

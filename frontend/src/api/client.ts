@@ -10,6 +10,7 @@ export type Build = components["schemas"]["BuildOut"];
 export type Review = components["schemas"]["ReviewOut"];
 export type ReviewFinding = components["schemas"]["FindingOut"];
 export type SourceFile = components["schemas"]["SourceOut"];
+export type Overview = components["schemas"]["OverviewOut"];
 export type Session = components["schemas"]["SessionOut"];
 export type CompactPreview = components["schemas"]["CompactPreview"];
 export type CompactApplyResult = components["schemas"]["CompactApplyResult"];
@@ -49,6 +50,13 @@ export const apiGet = <T>(path: string) =>
 export const apiPost = <T>(path: string, body?: unknown) =>
   api<T>(path, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? "{}" : JSON.stringify(body),
+  });
+
+export const apiPut = <T>(path: string, body?: unknown) =>
+  api<T>(path, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: body === undefined ? "{}" : JSON.stringify(body),
   });

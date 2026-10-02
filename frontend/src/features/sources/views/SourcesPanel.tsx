@@ -1,7 +1,10 @@
-import { FileCode, Trash2, Upload } from "lucide-react";
+import { useState } from "react";
+import { FileCode, FileText, Trash2, Upload } from "lucide-react";
 import type { SourceFile } from "../../../api/client";
-import { Banner, Empty, PageHeader, fmtBytes } from "../../../shared/components/ui";
+import { Banner, Button, Empty, fmtBytes } from "../../../shared/components/ui";
+import { useOverviewMeta } from "../viewmodels/useOverview";
 import { MAX_MB, useSources } from "../viewmodels/useSources";
+import OverviewEditor from "./OverviewEditor";
 
 const fmtEpoch = (sec: number) => {
   const d = new Date(sec * 1000); // st_mtime — float epoch 초
@@ -12,9 +15,19 @@ const fmtEpoch = (sec: number) => {
 /** 포맷 배지 — API에 type 필드가 없어 확장자에서 도출 (설계 D6). */
 const extOf = (name: string) => name.split(".").pop()?.toUpperCase() ?? "";
 
-/** 소스 관리 (FR-2.1) — 인터뷰 시작 전 확인하는 소스 문서 (표현 전용 View). */
+/** 소스 관리 (FR-2.1) — 목록 ↔ 개요 문서 편집기 스위칭 (표현 전용 View). */
 export default function SourcesPanel({ pid }: { pid: number }) {
+  const [overviewEdit, setOverviewEdit] = useState(false);
+  return overviewEdit ? (
+    <OverviewEditor pid={pid} onBack={() => setOverviewEdit(false)} />
+  ) : (
+    <SourcesList pid={pid} onStartOverview={() => setOverviewEdit(true)} />
+  );
+}
+
+function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: () => void }) {
   const { files, globalFiles, error, upload, remove, fileInput } = useSources(pid);
+  const { meta: overview } = useOverviewMeta(pid);
 
   const table = (fs: SourceFile[], dir: "project" | "global") => (
     <div className="table-wrap">
@@ -66,36 +79,44 @@ export default function SourcesPanel({ pid }: { pid: number }) {
 
   return (
     <section>
-      <PageHeader
-        icon={FileCode}
-        title="소스 데이터 문서 (Sources)"
-        desc={`인터뷰 에이전트와 기획서 생성의 기초 팩트로 활용될 수집 문서를 등록·관리합니다. (.md .txt .json .csv, 최대 ${MAX_MB}MB · UTF-8 · PDF 미지원)`}
-      >
-        <label className="upload-label">
-          <Upload aria-hidden="true" />
-          신규 문서 업로드
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".md,.txt,.json,.csv"
-            multiple
-            onChange={(e) => upload(e.target.files)}
-            data-testid="source-file-input"
-          />
-        </label>
-      </PageHeader>
       {error && <Banner kind="error">{error}</Banner>}
 
       <div className="card">
         <div className="panel-head">
-          <h4>프로젝트 소스</h4>
-          <span className="hint">{files === null ? "" : `${files.length}건`}</span>
+          <div className="sources-head-text">
+            <h4>
+              <FileCode aria-hidden="true" />
+              소스 데이터 문서 (Sources)
+            </h4>
+            {files === null ? null : <span className="hint">{`${files.length}건`}</span>}
+          </div>
         </div>
         {files === null ? null : files.length === 0 ? (
           <Empty>업로드된 소스가 없습니다.</Empty>
         ) : (
           table(files, "project")
         )}
+        <div className="panel-foot">
+          <span className="hint sources-foot-desc">
+            인터뷰 에이전트와 기획서 생성의 기초 팩트로 활용될 수집 문서를 등록·관리합니다. (.md .txt .json .csv, 최대 {MAX_MB}MB · UTF-8 · PDF 미지원)
+          </span>
+          <label className="upload-label">
+            <Upload aria-hidden="true" />
+            신규 문서 업로드
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".md,.txt,.json,.csv"
+              multiple
+              onChange={(e) => upload(e.target.files)}
+              data-testid="source-file-input"
+            />
+          </label>
+          <Button onClick={onStartOverview}>
+            <FileText aria-hidden="true" />
+            {overview?.exists ? "개요 편집" : "개요 작성"}
+          </Button>
+        </div>
       </div>
 
       <div className="card">

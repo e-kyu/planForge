@@ -121,6 +121,22 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       거부하면(400) 생성 인자에 `stream_usage=False` 폴백. `disabled_params` 기본으로
       `parallel_tool_calls` 미전송 — 순차 툴 루프라 무해.
 
+14. **개요 문서: 파일이 곧 SSOT인 fs 네이티브 소스 문서 + 첫 PUT 엔드포인트** (2026-10-02)
+    - 개요 문서(`workspaces/<slug>/sources/overview.md`)는 소스 탭에서 웹으로 작성·편집하는
+      특수 소스다. 용도가 **인터뷰 기본자료 전용**(plan→derive 결과물 생성 체인 미사용)이므로
+      plan처럼 DB SSOT·세대·승인·채번 개념을 두지 않는다 — 파일 자체가 권위다. plan.md는
+      DB `Plan.markdown`의 미러(원칙 1)라는 것과 계약적으로 다른 점이다. sources/ 안의
+      파일이라 소스 목록·인터뷰 주입 컨텍스트(`read_sources_context`)·프로젝트 삭제
+      정리(`delete_project`의 rmtree)가 기존 경로로 자동 동작한다.
+    - 계약: `GET/PUT /api/projects/{pid}/overview`(업서트) + `GET /sources/{name}/download`
+      (DELETE `{name}`과 대칭). PUT은 코드베이스 첫 사용 — 리소스 경로 고정·전체 본문
+      교체·멱등 저장에 맞는 메서드다. 개요 문서만 소스의 덮어쓰기 금지(409) 규칙 예외이며,
+      빈 내용 저장은 409 거부("파일이 존재하면 내용이 있다" 불변식 유지).
+    - 개행 규약 예외: 기존 `Path.write_text`(newline=None → Windows CRLF 변환) 대신
+      `validate_overview_content`가 전수 LF 정규화 + `write_bytes`로 LF 고정 — 이 문서는
+      다운로드해 사용자 Git 저장소로 직접 갈 수 있다. 읽기는 `utf-8-sig`(BOM 제거, Notepad
+      대응)와 짝을 이룬다. 동시 편집은 last-write-wins(이력 콘셉트 미도입).
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

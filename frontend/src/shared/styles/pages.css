@@ -672,6 +672,21 @@
   flex-wrap: wrap;
 }
 
+/* 카드 하단 액션 행 — 좌측 설명 힌트 · 우측 버튼 (업로드 · 개요) */
+.panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+/* 하단 좌측 설명 힌트 — auto 마진이 버튼들을 우측 끝으로 밀어냄 */
+.sources-foot-desc {
+  margin-right: auto;
+}
+
 /* 페이지헤더 카드 (PageHeader) */
 .page-head {
   display: flex;
@@ -711,6 +726,30 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* 소스 탭 — PageHeader를 카드 헤더로 통합 (page-head-text 레시피 계열) */
+.sources-head-text {
+  flex: 1 1 auto; /* 유일 자식 확장 — 건수 힌트를 카드 우측 끝까지 밀기 */
+}
+
+.sources-head-text h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sources-head-text h4 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+}
+
+/* 건수 힌트 — (헤드 텍스트 블록 내) 별도 줄, 우측 끝 정렬 */
+.sources-head-text .hint {
+  display: block;
+  margin-top: 4px;
+  text-align: right;
 }
 
 /* 소스 테이블 */
@@ -816,6 +855,13 @@
 .row-del:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* panel-foot 내 .btn 아이콘 — upload-label svg(14px)와 동일 크기로 버튼 높이 정렬
+   (lucide 기본 24px가 flex content를 밀어 .btn이 .upload-label보다 높아지는 것 방지) */
+.panel-foot .btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 업로드 라벨 버튼 (숨김 input 감쌈) — .btn-primary와 동일 톤 */

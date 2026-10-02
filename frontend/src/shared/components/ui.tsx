@@ -10,6 +10,7 @@ export function Button(props: {
   disabled?: boolean;
   type?: "button" | "submit";
   className?: string;
+  title?: string;
 }) {
   const cls =
     props.variant === "ghost"
@@ -21,7 +22,7 @@ export function Button(props: {
           : "btn btn-primary";
   return (
     <button className={`${cls} ${props.className ?? ""}`} onClick={props.onClick} disabled={props.disabled}
-            type={props.type ?? "button"}>
+            type={props.type ?? "button"} title={props.title}>
       {props.children}
     </button>
   );
