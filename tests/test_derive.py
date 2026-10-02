@@ -203,11 +203,11 @@ def test_load_config_profiles():
     profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
     assert set(profiles) == {"interview", "derive", "review", "plan_revise"}
     assert profiles["interview"].provider == "azure"
-    assert profiles["derive"].model == "gpt-4.1"  # config.example.json 샘플 모델과 동기
+    assert profiles["derive"].model == "gpt-5.6-luna"  # config.example.json 샘플 모델과 동기
     assert profiles["review"].provider == "ollama"
     assert profiles["review"].model == "gemma4:26b"
     assert profiles["plan_revise"].provider == "openai"
-    assert profiles["plan_revise"].model == "gpt-4.1"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
+    assert profiles["plan_revise"].model == "gpt-5.6-luna"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
 
 
 def test_provider_requires_model():
