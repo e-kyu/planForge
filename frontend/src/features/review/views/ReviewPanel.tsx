@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle, type LucideIcon } from "lucide-react";
 import type { Job, Review, ReviewFinding } from "../../../api/client";
 import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../../../shared/components/ui";
+import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { navigate } from "../../../shared/lib/hashRoute";
 import { elapsedText, latestByType, progressText } from "../../../shared/lib/jobs";
 import { useReviewApply, useReviews } from "../viewmodels/useReviews";
@@ -12,7 +13,7 @@ const SEV_ORDER: Record<string, number> = { red: 0, yellow: 1, white: 2 };
 
 /** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3). */
 export default function ReviewPanel({ pid }: { pid: number }) {
-  const { reports, plans, jobs, jobsError, now, error, notice, busy, reviseDone, enqueue } =
+  const { reports, plans, jobs, jobsError, now, error, failedReviseJob, notice, busy, reviseDone, enqueue } =
     useReviews(pid);
   const [sel, setSel] = useState<Review | null>(null);
 
@@ -47,6 +48,12 @@ export default function ReviewPanel({ pid }: { pid: number }) {
 
       {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
+      {failedReviseJob && (
+        <Banner kind="error">
+          {/* 저장된 오류 전문에 실린 진단을 잃지 않게 토글로 펼친다 (결정 16) */}
+          <JobErrorDetail job={failedReviseJob} title="plan 반영 실패" />
+        </Banner>
+      )}
       {notice && <Banner kind="info">{notice}</Banner>}
       {busy && (
         <Banner kind="info">

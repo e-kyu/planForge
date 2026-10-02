@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""derive 오케스트레이터 테스트 — 가짜 LLM을 주입해 결정론 파이프라인(검증·수치 게이트·재시도·기록)을 잠근다."""
+"""derive 오케스트레이터 테스트 — 가짜 LLM을 주입해 결정론 파이프라인(스키마 검증·재시도·numcheck 측정 기록)을 잠근다."""
 import json
 import sys
 import warnings
@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from planforge.derive import Deriver, DeriveError, render_slides_text
+from planforge.derive import Deriver, DeriveError, DeriveSchemaError, render_slides_text
 from planforge.plan import filter_slides, parse_plan_file
 from fakes import FakeLLM, correct_report_payload, correct_slides_payload, tool_call
 
@@ -24,24 +24,26 @@ def test_derive_slides_success(tmp_path):
     ws = tmp_path / "ws"
     res = Deriver(llm, ws).derive(PLAN, "slides", "제안서")
     assert res.slides_count == 5 and res.attempts == 1
+    assert res.findings == []  # 클린 대조 — 측정값 없음
     payload = json.loads(res.work_path.read_text(encoding="utf-8"))
     assert payload["meta"]["title"] == "업무 자동화 도입 제안"  # 결정론 보정: 표지 제목
     # SSOT: work/slides.json에 기록됨
     assert res.work_path == ws / "work" / "slides.json"
 
 
-def test_derive_numeric_gate_retries_then_succeeds(tmp_path):
+def test_derive_numeric_distortion_recorded_not_gated(tmp_path):
+    """수치 왜곡은 생성 실패가 아니라 측정 기록이다 (결정 17 — 판정 권위는 검수 단계).
+
+    왜곡 주입 LLM 1회 → 재시도 없이 derive가 성공하고 findings에 red를 남긴다."""
     bad = correct_slides_payload()
     bad["slides"][4]["bullets"][0]["body"] = "주 12시간 절감"  # 11.5 왜곡 주입 (수용 기준 3)
-    llm = FakeLLM([
-        tool_call("write_slides_json", bad),
-        tool_call("write_slides_json", correct_slides_payload()),
-    ])
+    llm = FakeLLM([tool_call("write_slides_json", bad)])
     res = Deriver(llm, tmp_path).derive(PLAN, "slides", "제안서")
-    assert res.attempts == 2
-    # 재시도 피드백에 🔴 발견사항이 전달됐는지
-    retry_user = llm.calls[1][-1]["content"]
-    assert "수치 무결성 검증 실패" in retry_user and "12" in retry_user
+    assert res.attempts == 1  # 수치 위반이 재변환을 유도하지 않는다
+    assert res.work_path.exists()  # 게이트 폐지 — 파생물이 기록된다
+    from planforge.numcheck import has_red
+    assert has_red(res.findings)
+    assert any("12" in f.message for f in res.findings)  # 왜곡 수치가 진단에 실린다
 
 
 def test_derive_schema_violation_retries():
@@ -58,14 +60,51 @@ def test_derive_schema_violation_retries():
         assert "스키마 검증 실패" in retry_user
 
 
-def test_derive_gives_up_after_max_attempts():
-    bad = correct_slides_payload()
-    bad["slides"][4]["bullets"][0]["body"] = "주 12시간 절감"
+def test_derive_schema_gives_up_raises_schema_subclass():
+    """스키마 위반 지속 소진 — DeriveSchemaError로 raise하고 builder 진단을 실린다.
+    '수치 무결성 위반' 헤드로 미표시 회귀 방지 (job #34 사후 대응 — 결정 16)."""
+    bad = {"meta": {"title": "제목"}, "slides": [{"type": "unknown", "title": "x"}]}
     llm = FakeLLM([tool_call("write_slides_json", bad) for _ in range(3)])
     import tempfile
     with tempfile.TemporaryDirectory() as td:
-        with pytest.raises(DeriveError, match="수치 무결성"):
+        with pytest.raises(DeriveSchemaError) as ei:
             Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    assert isinstance(ei.value, DeriveError)  # 하위형 계약 — 기존 catch 사이트 유지
+    msg = str(ei.value)
+    assert "스키마 검증 실패가 3회" in msg
+    assert "알 수 없는 유형" in msg            # builder가 낸 실제 오류문
+    assert "수치 무결성 위반이" not in msg
+
+
+def test_derive_tool_never_called_reports_missing_tool_not_numeric():
+    """도구 미호출 소진 — nudge만 소비해 판정 없이 끝나면 수치 무결성이 아니라
+    도구 미호출로 라벨하고 마지막 응답 진단을 실린다 (결정 16)."""
+    llm = FakeLLM([{"content": "도구 호출 없이 끝난 텍스트", "tool_calls": []} for _ in range(3)])
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(DeriveError, match="도구를 호출하지 않았습니다") as ei:
+            Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    msg = str(ei.value)
+    assert "수치 무결성" not in msg
+    assert "도구 호출 없이 끝난 텍스트" in msg  # 마지막 응답 진단
+
+
+def test_derive_schema_then_tool_less_notes_miss():
+    """스키마 실패 → 도구 미호출 혼합 소진 — 스키마 소진 라벨과 무응답 노트를 함께
+    남긴다 (결정 16 라벨링 보존 — 도달하는 하드 fail은 이 둘뿐이다, 결정 17)."""
+    bad_schema = {"meta": {"title": "제목"}, "slides": [{"type": "unknown", "title": "x"}]}
+    llm = FakeLLM([
+        tool_call("write_slides_json", bad_schema),
+        {"content": "무응답 텍스트", "tool_calls": []},
+        {"content": "무응답 텍스트", "tool_calls": []},
+    ])
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(DeriveSchemaError, match="스키마 검증 실패가 3회") as ei:
+            Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    msg = str(ei.value)
+    assert "알 수 없는 유형" in msg                                    # builder 진단
+    assert "마지막 2회 응답은" in msg and "도구 호출 없이" in msg       # 무응답 노트
 
 
 # ---------------------------------------------------------------- 수치 리터럴 스냅 (LLM 정규화 교정)
@@ -163,6 +202,18 @@ def test_derive_report_success_and_build(tmp_path):
     assert md and "_v01" in md[0].name
     text = md[0].read_text(encoding="utf-8")
     assert "11.5시간" in text and "10시간" in text  # 수치 유지
+
+
+def test_derive_report_yellow_only_findings(tmp_path):
+    """report 대조는 문서체 재구성을 허용한다 — red 없이 yellow만 남는 완성물도
+    생성 완료로 기록된다 (결정 17 — 측정은 게이트가 아니며 판정은 검수 단계)."""
+    from planforge.numcheck import has_red
+
+    llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
+    res = Deriver(llm, tmp_path).derive(PLAN, "report", "제안서")
+    assert res.findings  # 정규 재진술·근거 표기 경고가 남는다
+    assert all(f.severity == "yellow" for f in res.findings)
+    assert not has_red(res.findings)
 
 
 def test_derive_rejects_doc_not_in_plan(tmp_path):

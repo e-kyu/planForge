@@ -21,6 +21,29 @@ export function latestFailed(jobs: Job[]): Job[] {
   return [...byType.values()].filter((j) => j.status === "failed");
 }
 
+/** derive 잡 result.findings에 실린 numcheck 측정값 (Finding dict — 결정 17). */
+export type DeriveFinding = {
+  code: string;
+  severity: string;
+  where: string;
+  message: string;
+  suggestion?: string | null;
+};
+
+/** 최신(최대 id) done derive_build 잡이 수치 위반 red를 남겼을 때만 반환 (결정 17).
+ * 생성 실패가 아니라 측정 기록 — 배너로 안내하고 검수 판정으로 닫는다. 이후 같은
+ * 타입의 클린 done 잡(또는 이보다 최신 done 잡에 red가 없는 경우)이 나타나면
+ * 사라진다: 배너는 이력이 아니라 마지막 상태를 반영한다 (latestFailed와 같은 규약). */
+export function latestDoneDeriveWithReds(jobs: Job[]): Job | undefined {
+  let latest: Job | undefined;
+  for (const j of jobs) {
+    if (j.type === "derive_build" && j.status === "done" && (!latest || j.id > latest.id))
+      latest = j;
+  }
+  const findings = latest?.result?.findings as DeriveFinding[] | undefined;
+  return findings?.some((f) => f.severity === "red") ? latest : undefined;
+}
+
 /** 타입 불문 현재 활성(queued/running) job — busy 배너·pill이 가리킬 대상.
  * running을 queued보다 우선한다: 직렬 워커 하에서 큐가 밀리면 최신 id 잡은 queued일
  * 수밖에 없어 "마지막 클릭 잡" 기준이면 실제 실행 중 잡의 진행(변환/빌드·경과)이
@@ -45,6 +68,15 @@ export const JOB_TYPE_LABEL: Record<string, string> = {
   derive_build: "파생물 생성",
   review: "검수",
   plan_revise: "plan 반영",
+};
+
+/** 실패 job의 error_class 한국어 라벨 — OutputsPanel·ReviewPanel 배너 공용. */
+export const JOB_ERROR_CLASS_LABEL: Record<string, string> = {
+  validation: "스키마/포맷 문제",
+  schema: "스키마/포맷 문제",
+  llm: "LLM 변환 문제",
+  builder: "빌더 문제",
+  internal: "내부 오류",
 };
 
 /* 실행 중 진행 상태 표시 — 백엔드 facade.report_progress가 기록한 job.progress를

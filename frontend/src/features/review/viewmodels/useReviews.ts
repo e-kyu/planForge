@@ -25,7 +25,7 @@ export function useReviews(pid: number) {
   const plansQ = useQuery({ queryKey: ["plans", pid], queryFn: () => fetchPlans(pid) });
   const jobsS = useActiveJobs(pid);
 
-  // 검수 enqueue API 즉시 실패용 — 반영 잡 실패는 최신 job에서 파생(reviseError)한다
+  // 검수 enqueue API 즉시 실패용 — 반영 잡 실패는 최신 job 객체에서 파생 한다(error 원문 보존)
   const [enqueueError, setEnqueueError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -82,12 +82,13 @@ export function useReviews(pid: number) {
     }
   }, [jobs, jobsS.loaded]);
 
-  // 마지막 반영 잡이 실패한 경우에만 배너 — 새 잡이 큐에 들어오면 자동 소멸
+  // 마지막 반영 잡이 실패한 경우에만 배너 — 새 잡이 큐에 들어오면 자동 소멸.
+  // 문자열 가공은 View 공용 JobErrorDetail이 담당하므로 job 객체만 흘린다 (결정 16).
   const latestRevise = useMemo(() => latestByType(jobs, "plan_revise"), [jobs]);
-  const reviseError =
-    latestRevise?.status === "failed"
-      ? `plan 반영 실패: ${(latestRevise.error ?? "원인 불명").split("\n")[0]}`
-      : null;
+  const failedReviseJob = useMemo(
+    () => (latestRevise && latestRevise.status === "failed" ? latestRevise : null),
+    [latestRevise],
+  );
 
   function enqueue() {
     setEnqueueError(null);
@@ -110,7 +111,8 @@ export function useReviews(pid: number) {
     jobs,
     jobsError: jobsS.jobsError,
     now,
-    error: enqueueError ?? reviseError,
+    error: enqueueError,
+    failedReviseJob,
     notice,
     busy,
     reviseDone,

@@ -109,6 +109,22 @@ def test_nudge_exhaustion_returns_none():
     assert llm.calls[1][-1]["content"] == NUDGE  # 마지막 attempt에서도 nudge가 붙는다
 
 
+def test_final_state_exposes_triage_fields():
+    """소진 라벨링 판별용 final 상태 키 — derive.py가 도구 미호출 소진을 분류하는 데 읽는다
+    (결정 16)."""
+    # (a) 도구 미호출 소진 — tool_call None, 마지막 텍스트 응답 노출
+    llm = FakeLLM([{"content": "텍스트", "tool_calls": []} for _ in range(2)])
+    final = _run(llm, lambda args: ("ok", None), max_attempts=2)
+    assert final["result"] is None
+    assert final["tool_call"] is None
+    assert final["resp_content"] == "텍스트"
+    # (b) validate 소진 — 마지막 도구 호출 arguments가 그대로 남는다
+    llm2 = FakeLLM([tool_call("f", {"x": 1}), tool_call("f", {"x": 2})])
+    final2 = _run(llm2, lambda args: ("retry", "고쳐라"), max_attempts=2)
+    assert final2["result"] is None
+    assert final2["tool_call"] == {"name": "f", "arguments": {"x": 2}}
+
+
 def test_messages_not_mutated_in_place():
     """caller의 messages 리스트를 복사해 쓴다 — 재시도 추가는 상태 안에서만."""
     llm = FakeLLM([tool_call("f", {"x": 1})])

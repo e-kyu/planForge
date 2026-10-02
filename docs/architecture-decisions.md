@@ -159,6 +159,77 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
     - 계약 불변: jobs facade·JobOut·openapi.json/types.gen.ts 미변경 (diff 0 증명).
       진행 상세(detail)는 job.progress JSON 내부 필드일 뿐 스키마는 free-form 유지.
 
+16. **derive 소진 오류의 실제 라벨·진단 고정 + 실패 job 오류 전문 토글** (2026-10-02, `create-readme`)
+    - 배경: HTML 파생물 job #34(plan_id 16, llm-wiki) 실패 시 실패 배너가
+      `j.error.split("\n")[0]`으로 첫 줄만 보여
+      "수치 무결성 위반이 3회 재시도 후에도 해소되지 않았습니다 (…):"에서 끝났다. 진단
+      목록(수치 '4' plan 소실·'5'/'6' 창작 추가)은 DB `jobs.error`에 온전히 저장돼 있었다.
+      같은 조사에서 `Deriver._run_llm`의 `last_findings`는 red 판정 시에만 채워지므로,
+      마지막 시도가 스키마 검증 실패이거나 도구 호출 없이 소진되면 같은 "수치 무결성
+      위반" 헤드 + 빈 진단으로 raise되는 잠재 결함이 확인됐다. 프론트 `fmtDateTime`도
+      UTC ISO를 `slice`해 현지시각을 허상으로 표기했다(21:54 KST 실패 잡이 "12:54"로
+      보여 원인 추적을 혼란시켰다).
+    - 변경: (1) `planforge/derive.py` — `_run_llm`의 validate 클로저가 마지막 검증 실패
+      종류("numeric"|"schema")·진단 본문·판정 시도 수를 추적하고, 소진 시 `_final_error`
+      가 실제 라벨로 raise한다. 수치 소진은 기존 문구를 그대로 유지, 스키마 지속 소진은
+      "스키마 검증 실패가 N회…" + builder 스키마 오류문을, 도구 미호출 소진은
+      "LLM이 N회 응답 동안 … 도구를 호출하지 않았습니다" + 마지막 텍스트 응답(앞 500자)을
+      실는다. 스키마 지속 소진은 `DeriveSchemaError(DeriveError)` 하위형으로
+      `isinstance(e, DeriveError)` 계약을 유지한다.
+      (2) `jobs/application/worker.py::_classify` — `DeriveSchemaError → SCHEMA`
+      (하위형 판정이 `DeriveError → LLM` 앞에 온다).
+      (3) `planforge/llm/loops.py` — final 상태의 `tool_call`(마지막 응답이 도구 없이
+      끝나면 None)·`resp_content`(마지막 텍스트 응답)를 소진 라벨링 입력으로 docstring에
+      명시 — 그래프 상태·노드·엣지 무변경.
+      (4) 프론트 — 공용 `shared/components/JobErrorDetail`(요약 행 + "자세히" 토글,
+      저장된 오류 전문 pre — Traceback 포함)로 실패 배너·작업 큐 실패 행·plan 반영
+      배너를 교체한다. `ERROR_CLASS_LABEL`은 shared/lib/jobs의 `JOB_ERROR_CLASS_LABEL`
+      로 공용화. `fmtDateTime`은 UTC → 로컬 변환으로 고정, date-only 2곳
+      (ProjectsPage·ProjectPage 생성일)은 신규 `fmtDate`로 같은 분류 결함을 함께 교정.
+    - 불변: 재시도 tool 피드백 문구·nudge 문구·메시지 조립 순서(편차 11 불변 항목,
+      테스트 `llm.calls[N]` 고정) 1바이트 유지 — 실패 라벨링은 validate 클로저 쪽
+      추적으로만 하고 루프 그래프·`chat_fn`/`stream_fn` dict 계약은 불변.
+      `JobOut`·`JobErrorClass` enum·openapi 계약 무변경(`npm run gen:types` 불필요,
+      SCHEMA 분류값은 이미 frontend 계약에 존재). 본 항목은 편차 11의 "오류 메시지
+      불변"을 소진 최종 오류에 한정 개정한다 — 수치 소진 first line은 그대로(기록·
+      테스트 호환), 스키마/도구 미호출은 신규 템플릿. 기존 실패 job 행의 저장 문자열은
+      백필 없이 verbatim 표시.
+
+17. **수치 무결성 판정의 derive 게이트 폐지 — 검수 단계로 권위 이관** (2026-10-02, `create-readme`)
+    - 배경: 수치 위반이 derive의 하드 실패로 처리됐다(job #34 — 소진 3회 → FAILED/LLM
+      라벨). 스펙(요청서 §2.1 원칙 3 원문: "검수 단계에서 기계적으로 대조 검증한다" —
+      CLAUDE.md 재압축 때 유실)은 반대다: FR-3.2는 파생물 생성의 유일한 중단점을 골격
+      검증으로 한정(원칙 8), FR-3.4의 실패 보고 계급은 스키마/스크립트뿐이고 수치 실패
+      계급이 없으며, FR-4.1이 수치 무결성 검수를 검수 단계 소관으로 규정한다(수용 기준 3
+      "검수가 🔴로 탐지"). legacy(make-doc)도 생성 중 numcheck를 실행하지 않았다. 검수
+      핸들러는 이미 **동일 numcheck 엔진**을 Derivative `d.json`에 재적용하므로 권위 이관
+      후에도 잠금 기준은 그대로다.
+    - 변경 (사용자 결정 확정 2건 반영): (1) derive는 numcheck를 **재시도·중단 게이트로
+      쓰지 않는다** — 스키마 통과 payload에 **1회 측정**만 하고 findings를 `DeriveResult`
+      · job result에 보고한다(`derive_build`가 `result.findings`에 영속 기록). 수치
+      왜곡 주입에도 job은 done이며 위반 수치가 실린 산출물이 채번돼 존재한다. (2) red
+      잔여 시 같은 커밋에 검수 잡을 **자동 큐잉**한다(`review` facade
+      `enqueue_auto_review` — 같은 plan 세대 활성 검수 있으면 중복 큐잉 차단; 클린
+      생성은 자동 검수 없음 — 수동 실행 유지). 자동 잡도 단일 워커 직렬 루프가 처리하며,
+      run_review가 동엔진 판정으로 리포트를 닫으면 FR-4.2 🔴 → FR-4.3 plan만 수정 →
+      재승인 → 재생성(버전 +1)의 유일 수정 경로로 귀결된다. 잡 진행 불변식(대기 중 도메인
+      행 0) 유지 — 큐잉은 모든 report_progress 뒤, run_job의 단일 커밋에 묶인다.
+    - 불변: 스키마 재시도 피드백 문구·nudge 1바이트 유지(편차 11 항목 중 numcheck 재시도
+      분기만 소멸 — `validate`는 재조립 없이 스키마 분기 하나가 된다). 도달하는 하드
+      fail은 **스키마 소진**(`DeriveSchemaError` → SCHEMA 분류)과 **도구 미호출 소진**
+      (도구 없는 응답 → LLM 분류)뿐 — 결정 16의 라벨링은 스키마/도구 미호출 케이스로
+      한정 보존(수치 소진 라벨링 분기는 도달 불가가 되어 제거, 라벨링 기법 전반·프론트
+      토글 유지), 골격 게이트(원칙 8) 유지. `JobOut.result`는 free-form dict라 findings
+      키 추가도 계약 무변경(결정 15 선례 — openapi diff 0, `npm run gen:types` 불필요).
+    - 프론트: 최신 done derive가 red를 남겼을 때만 산출물 탭에 info 배너
+      ("생성 완료 — 수치 무결성 미달 N건(🔴 M건) — 검수가 자동 실행되어 대조합니다",
+      검수 탭 이동 버튼·dismiss, 최신 클린 생성이 배너를 대체) + 작업 큐 상세줄에
+      `· 위반 N건(🔴 M건)` 접미. CLI `derive`는 측정값을 `주의:`로 출력하고 exit 0 유지
+      (게이트는 `python -m planforge numcheck` exit 1 계약으로 별행).
+    - 리스크 수용: 잘못된 수치 산출물이 채번돼 존재하는 상태가 생긴다 — 상쇄: red 잔여
+      즉시 자동 검수 → 검수 동엔진 재판정(빠짐 없음) → findings 영속 기록 → FR-4.3 재생성
+      루프. 채번은 덮어쓰기 없으므로 과거 버전 추적 가능(원칙 5).
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

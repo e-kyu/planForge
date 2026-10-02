@@ -179,6 +179,8 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
   - `_review`: numcheck + 세대 대응 + 문서 태그 + 팩트 대조(결정론) + LLM 내용 검수 →
     `ReviewReport`. LLM 실패는 리포트를 막지 않는다(`llm_ok=false`).
   - `_plan_revise`: LLM plan 수정 → 검증 → 새 DRAFT 세대.
+- 실패 분류(`_classify`): derive의 스키마 위반 지속 소진은 `DeriveSchemaError` 하위형으로
+  `SCHEMA`, 그 외 소진(LLM 변환 미수정·수치 무결성)은 `LLM`으로 분류한다 (결정 16).
 
 ### 인터뷰 에이전트 (`modules/interview/` + `app/agents/tools.py`)
 
@@ -259,7 +261,9 @@ python -m planforge build-ppt <slides.json> [output_dir]
 python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 ```
 
-- `numcheck`는 red 발견 시 exit 1 (CI/훅에서 게이트로 사용).
+- `numcheck`는 red 발견 시 exit 1 (CI/훅에서 게이트로 사용). `derive`는 위반해도
+  실패하지 않고 측정값(`주의:` 프리픽스 출력)을 남기고 exit 0 — 게이트가 필요하면 별행
+  (결정 17).
 - config 해석 우선순위: `--config` 인자 > `PLANFORGE_CONFIG` env >
   `backend/planforge/config.json`.
 
@@ -276,11 +280,17 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
 ### `derive.py` — Deriver
 
 - LLM은 `write_slides_json` / `write_report_json` 도구를 각 1회 호출해 콘텐츠 변환만 한다.
-- 결정론 게이트: 문서 필터 → 골격 검증 → 스키마 검증(`build_ppt.validate` /
-  `build_doc.validate`) → numcheck. 수치 무결성 red가 나면 피드백을 담아 재시도
-  (`MAX_ATTEMPTS=3`) — 재시도 루프는 공용 tool-loop 그래프(`llm/loops.py`, 편차 11).
+- 결정론 통과 순서: 문서 필터 → 골격 검증(미달 시 중단 — 스펙상 유일한 derive
+  중단점, 원칙 8) → 스키마 검증(`build_ppt.validate` / `build_doc.validate`, 위반 시
+  피드백 재시도 `MAX_ATTEMPTS=3` — 루프는 공용 tool-loop 그래프 `llm/loops.py`, 편차 11)
+  → numcheck 측정. **numcheck는 게이트가 아니다**(결정 17): 스키마 통과 payload에
+  1회 측정해 `DeriveResult.findings`와 job result로 보고하고, 판정 권위는 검수 단계에
+  남는다. red 잔여 시 derive_build 핸들러가 같은 커밋에 검수 잡을 자동 큐잉한다.
 - `_snap_literals`로 차트 수치를 plan 표기대로 복원한다. 추측 수치는
   `UNCONFIRMED_MARK="(미확정"`으로 표기된다.
+- 소진 오류는 마지막 실제 실패 종류의 라벨·진단을 실린다(결정 16): 스키마 검증 실패
+  (`DeriveSchemaError` — builder 오류문 포함, SCHEMA 분류) / 도구 미호출(마지막
+  텍스트 응답 진단, LLM 분류). 수치 위반은 소진 경로가 없다 — 측정 후 진행(결정 17).
 
 ### `numcheck.py` / `review.py`
 

@@ -7,6 +7,7 @@ SSOT(원칙 1): DB plan 행을 plan.md 미러로 갱신한 뒤 Deriver가 파일
 from __future__ import annotations
 
 import time
+from dataclasses import asdict
 from pathlib import Path
 
 from planforge.derive import Deriver
@@ -119,7 +120,17 @@ def run_derive_build(ctx, session, job) -> dict:
     session.add_all(builds)
     session.flush()
 
-    return {
+    # 결정 17 — 수치 판정은 검수 단계. red 잔여면 같은 커밋에 검수 잡을 큐에 넣는다.
+    # 모든 report_progress가 끝난 뒤이므로 "진행 기록 불변식(대기 중 도메인 행 0)" 유지.
+    from planforge.numcheck import has_red
+
+    if has_red(res.findings):
+        from app.modules.review.facade import enqueue_auto_review
+
+        if enqueue_auto_review(session, project.id, plan.id):
+            print(f"[derive] job #{job.id} 잔여 수치 위반 — 검수 자동 큐진입", flush=True)
+
+    result = {
         "derivative_id": derivative.id,
         "builds": [
             {"build_id": b.id, "file_path": b.file_path, "version_no": b.version_no, "ext": b.ext}
@@ -131,6 +142,10 @@ def run_derive_build(ctx, session, job) -> dict:
             "attempts": derivative.attempts,
         },
     }
+    if res.findings:
+        # numcheck 측정값 — Finding dict는 run_review 발견사항과 동형 (코드/severity/위치/메시지)
+        result["findings"] = [asdict(f) for f in res.findings]
+    return result
 
 
 def _read_json(path: Path) -> dict:

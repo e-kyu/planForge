@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Build } from "../../../api/client";
 import { enqueueDerivative, fetchBuilds, fetchOutputText, fetchPlans } from "../models/outputsApi";
-import { latestFailed } from "../../../shared/lib/jobs";
+import { latestDoneDeriveWithReds, latestFailed } from "../../../shared/lib/jobs";
 import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { errMsg } from "../../../shared/lib/errMsg";
@@ -31,6 +31,8 @@ export function useOutputs(pid: number) {
   const now = useTickingNow(jobs.some((j) => j.status === "running"));
   // 실패 배너는 이력이 아니라 마지막 상태 기준 — 타입별 최신 job이 실패일 때만 노출
   const failedLatest = useMemo(() => latestFailed(jobs), [jobs]);
+  // 수치 위반 잔여 배너 — 최신 클린 생성이 이를 대체한다 (결정 17: 측정 기록은 job.result에 영속)
+  const residualJob = useMemo(() => latestDoneDeriveWithReds(jobs), [jobs]);
   // 상태창 배너가 가리킬 활성 잡 — queued/running 중 최신 1건 (진행 문구·경과 표시용)
   const activeJob = jobsS.activeJob;
   const busy = pending || active;
@@ -96,6 +98,7 @@ export function useOutputs(pid: number) {
     plans: plansQ.data ?? [],
     jobs,
     failedLatest,
+    residualJob,
     activeJob,
     jobsError: jobsS.jobsError,
     now,

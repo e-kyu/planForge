@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, Folder, Trash2, X } from "lucide-react";
-import { Banner, Button, Empty, Loading } from "../../../shared/components/ui";
+import { Banner, Button, Empty, Loading, fmtDate } from "../../../shared/components/ui";
 import { navigate } from "../../../shared/lib/hashRoute";
 import { useProjects } from "../viewmodels/useProjects";
 import type { Project } from "../../../api/client";
@@ -213,7 +213,7 @@ function ProjectRow(props: { p: Project; delBusy: boolean; onDelete: () => void 
           {p.owner && <span className="project-owner">{p.owner}</span>}
         </span>
         <span className="project-foot">
-          <span className="project-date">{p.created_at.slice(0, 10)}</span>
+          <span className="project-date">{fmtDate(p.created_at)}</span>
           <span className="project-open" aria-hidden="true">
             열기
             <ChevronRight />

@@ -42,6 +42,10 @@ def build_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
     """chat_fn 계약의 도구 루프 1건을 컴파일한다. 소진 시 result=None·ok=False로 END —
     caller가 도메인 오류(DeriveError 등)나 ok=False로 변환한다.
 
+    소진 라벨링에 쓰는 final 상태 키: tool_call(마지막 응답의 도구 호출 dict — 마지막
+    응답이 도구를 실지 않았으면 None nudge 분기가 리셋한다), resp_content(마지막 텍스트
+    응답). caller가 소진 사인(도구 미호출 / validate retry 지속)을 분류하는 데 읽는다.
+
     on_attempt(attempt, max_attempts)는 chat_fn 호출 직전에 매번 불린다 — 실행이
     긴 구간 동안 caller가 진행 상태(attempt n/m)를 기록할 수 있다. 예외는 전파한다
     (방어 책임은 caller 콜백 쪽)."""
@@ -115,7 +119,9 @@ def run_tool_loop(chat_fn, tools, tool_name: str, *, max_attempts: int,
                   nudge_text: str, validate: ValidateFn,
                   messages: list[dict],
                   on_attempt: Callable[[int, int], None] | None = None) -> dict:
-    """tool 루프 1건 실행 — 소진 여부 판정에 쓸 최종 상태(result·attempts·ok)를 반환."""
+    """tool 루프 1건 실행 — 소진 판정·라벨링에 쓸 최종 상태(result·attempts·ok·
+    tool_call·resp_content)를 반환. tool_call은 마지막 응답의 도구 호출(도구를 실지
+    않았으면 None), resp_content는 마지막 텍스트 응답이다."""
     graph = build_tool_loop(chat_fn, tools, tool_name, max_attempts=max_attempts,
                             nudge_text=nudge_text, validate=validate,
                             on_attempt=on_attempt)

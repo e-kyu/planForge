@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { ArrowLeft, Bot, FileText, Layout, Layers, ShieldCheck } from "lucide-react";
-import { Empty, Loading } from "../../../shared/components/ui";
+import { Empty, Loading, fmtDate } from "../../../shared/components/ui";
 import { navigate } from "../../../shared/lib/hashRoute";
 import type { ProjectTab } from "../models/projectApi";
 import { useProject, useTabBadges } from "../viewmodels/useProjectShell";
@@ -52,7 +52,7 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
           </h2>
           <p className="ws-meta">
             {project.owner ? `담당 ${project.owner} · ` : ""}
-            생성일 {project.created_at.slice(0, 10)}
+            생성일 {fmtDate(project.created_at)}
           </p>
         </div>
       </nav>
