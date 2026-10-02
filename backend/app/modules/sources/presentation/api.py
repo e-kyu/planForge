@@ -2,7 +2,7 @@
 """소스 API (FR-2.1, §5 업로드 검증).
 
 - 프로젝트 sources/: 업로드(쓰기 가능)·목록·삭제·다운로드 — 인터뷰 에이전트가 매 턴 읽는다.
-- 글로벌 sources/: 목록만 (서버 운영자가 배치하는 공용 소스 — 읽기 전용).
+- 글로벌 sources/: 목록·다운로드 (서버 운영자가 배치하는 공용 소스 — 쓰기·삭제는 읽기 전용).
 - 개요 문서 (sources/overview.md): 소스 탭에서 웹으로 작성·편집하는 특수 소스 —
   인터뷰 기본자료 전용(결과물 생성 체인 미사용). 파일이 곧 SSOT인 fs 네이티브 문서로,
   편집 경로(PUT /overview)만 다른 소스의 덮어쓰기 금지(409) 규칙의 예외다.
@@ -57,6 +57,15 @@ def _validated_source_path(src: Path, name: str) -> Path:
     if not target.is_file():
         raise http_404(f"소스 없음: {name}")
     return target
+
+
+def _source_response(target: Path) -> FileResponse:
+    """소스 파일 응답 — 확장자별 media-type, 프로젝트/글로벌 download 공용."""
+    media = _SOURCE_MEDIA.get(target.suffix.lower())
+    if media is None:
+        media = "application/octet-stream"
+    return FileResponse(target, media_type=media, filename=target.name,
+                        content_disposition_type="inline")
 
 
 @router.get("/sources", response_model=list[SourceOut])
@@ -120,15 +129,17 @@ def save_overview(project_id: int, body: OverviewSave, db: Session = Depends(get
 @router.get("/sources/{name}/download")
 def download_source(project_id: int, name: str, db: Session = Depends(get_db)):
     """소스 대역파일 다운로드 — DELETE /sources/{name}과 대칭 (파일 경로 검증 공유)."""
-    src = project_sources_dir(db, project_id)
-    target = _validated_source_path(src, name)
-    media = _SOURCE_MEDIA.get(target.suffix.lower())
-    if media is None:
-        media = "application/octet-stream"
-    return FileResponse(target, media_type=media, filename=name,
-                        content_disposition_type="inline")
+    target = _validated_source_path(project_sources_dir(db, project_id), name)
+    return _source_response(target)
 
 
 @global_router.get("", response_model=list[SourceOut])
 def list_global_sources(settings: Settings = Depends(get_settings)):
     return _list_dir(settings.global_sources_dir, "global")
+
+
+@global_router.get("/{name}/download")
+def download_global_source(name: str, settings: Settings = Depends(get_settings)):
+    """글로벌 소스 다운로드 — 쓰기·삭제 없는 읽기 전용 경로 (프로젝트 download와 검증 공유)."""
+    target = _validated_source_path(settings.global_sources_dir, name)
+    return _source_response(target)

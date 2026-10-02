@@ -533,6 +533,47 @@
         }
       }
     },
+    "/api/sources/{name}/download": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Download Global Source",
+        "description": "글로벌 소스 다운로드 — 쓰기·삭제 없는 읽기 전용 경로 (프로젝트 download와 검증 공유).",
+        "operationId": "download_global_source_api_sources__name__download_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{project_id}/plans": {
       "get": {
         "tags": [

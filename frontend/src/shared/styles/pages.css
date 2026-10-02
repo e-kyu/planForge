@@ -485,6 +485,14 @@
   color: var(--navy);
 }
 
+/* 확인 모달 하단 버튼 행 (취소 + 삭제) */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 @media (max-width: 480px) {
   .modal {
     padding: 16px;
@@ -855,6 +863,38 @@
 .row-del:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 작업 열 아이콘 가로 정렬 래퍼 (다운로드 + 삭제) */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* row 다운로드 링크 — .row-del 미러 (a 태그 기본 스타일 리셋 포함) */
+.row-dl {
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.row-dl svg {
+  width: 14px;
+  height: 14px;
+}
+
+.row-dl:hover {
+  color: var(--blue);
+  background: rgba(46, 109, 180, 0.08); /* --blue #2e6db4 틴트 — .row-del danger 틴트와 동일 수법 */
 }
 
 /* panel-foot 내 .btn 아이콘 — upload-label svg(14px)와 동일 크기로 버튼 높이 정렬

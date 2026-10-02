@@ -2,6 +2,8 @@
 """소스 API (FR-2.1 + §5 업로드 검증) 테스트."""
 from __future__ import annotations
 
+from urllib.parse import unquote
+
 from app.shared.workspace import read_sources_context
 
 OVERVIEW = "overview.md"  # shared.workspace.OVERVIEW_NAME — 하드코딩으로 계약 고정
@@ -226,6 +228,41 @@ def test_source_delete_and_download_reject_traversal(client, db_env):
         r = client.delete(f"/api/projects/{pid}/sources/{encoded}")
         assert r.status_code == 404, encoded
     assert plan.read_text(encoding="utf-8") == "# plan"
+
+
+# ---------------------------------------------------------------- 글로벌 소스 다운로드 (읽기 전용)
+
+def test_global_source_download_roundtrip(client, db_env, monkeypatch):
+    glob = db_env / "global-sources"
+    glob.mkdir(parents=True)
+    (glob / "공용-메뉴얼.txt").write_text("공용 소스 본문", encoding="utf-8")
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
+
+    r = client.get("/api/sources/공용-메뉴얼.txt/download")
+    assert r.status_code == 200, r.text
+    assert r.content == "공용 소스 본문".encode("utf-8")
+    assert r.headers["content-type"].startswith("text/plain")
+    # 비ASCII 파일명 — RFC 5987 filename*으로 인코딩되어 실린다
+    cd = r.headers["content-disposition"]
+    assert unquote(cd.split("utf-8''")[1]) == "공용-메뉴얼.txt"
+    # 다운로드는 파일을 변하지 않게 한다 — 글로벌 소스는 읽기 전용이다
+    assert (glob / "공용-메뉴얼.txt").read_text(encoding="utf-8") == "공용 소스 본문"
+
+
+def test_global_source_download_missing_and_traversal(client, db_env, monkeypatch):
+    glob = db_env / "global-sources"
+    glob.mkdir(parents=True)
+    (glob / "공용.txt").write_text("x", encoding="utf-8")
+    outside = db_env / "outside.md"  # global-sources/ 밖 — 접근 불가해야 한다
+    outside.write_text("# outside", encoding="utf-8")
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
+
+    r = client.get("/api/sources/없는파일.txt/download")
+    assert r.status_code == 404
+    for encoded in ("..%2Foutside.md", "..%5Coutside.md", "%2E%2E"):
+        r = client.get(f"/api/sources/{encoded}/download")
+        assert r.status_code == 404, encoded
+    assert outside.read_text(encoding="utf-8") == "# outside"
 
 
 def test_overview_in_sources_list_and_interview_context(client, db_env):
