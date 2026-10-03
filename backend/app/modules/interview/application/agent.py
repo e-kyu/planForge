@@ -201,8 +201,10 @@ class InterviewAgent:
             if isinstance(args, str):
                 args = json.loads(args)
             args = validate_tool_args(name, args)
-        except (ToolError, json.JSONDecodeError) as e:
+        except ToolError as e:
             return f"ERROR: {e}"
+        except json.JSONDecodeError as e:
+            return f"ERROR: 도구 인자 JSON 파싱 실패 — {e}"
 
         if name == "ask_questions":
             return self._ask_questions(args, events)

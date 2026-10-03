@@ -483,3 +483,103 @@ def test_ask_questions_options_contract_triggers_retry(rclient, retry_llm):
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
     q = s["pending_questions"][0]
     assert q["options"][0]["label"] == "경영진"
+
+
+# ---------------------------------------------------------------------------
+# 본문 서술형 선택지 계약 — 선택지는 options 배열로만 전달한다 (본문 "예:" 나열 거부)
+
+
+@pytest.fixture()
+def prose_llm():
+    return FakeStreamLLM([
+        # 턴1 1호출 — 선택지를 본문에 나열한 ask_questions (prose 탐지 → ERROR)
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "시스템 구조는 어떻게 잡나요?\n"
+                                                "예:\n- 레이어드 모놀리식\n- 마이크로서비스",
+                                                "allow_free": True}]})]),
+        # 턴1 2호출 — ERROR 피드백을 받아 선택지를 options 배열로 옮겨 재호출
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "시스템 구조는 어떻게 잡나요?",
+                                                "options": [
+                                                    {"label": "레이어드 모놀리식",
+                                                     "description": "계층 분리·단일 배포"},
+                                                    {"label": "마이크로서비스",
+                                                     "description": "도메인별 독립 배포"}]}]})]),
+    ])
+
+
+@pytest.fixture()
+def prose_app(db_env, test_engine, prose_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": prose_llm})
+
+
+@pytest.fixture()
+def prose_client(prose_app):
+    from fastapi.testclient import TestClient
+
+    with TestClient(prose_app) as c:
+        yield c
+
+
+def test_ask_questions_prose_options_triggers_retry(prose_client, prose_llm):
+    sid = _setup(prose_client)
+
+    events = _sse_events(prose_client, f"/api/interview/sessions/{sid}/kick")
+    assert "questions" in [n for n, _ in events]
+    assert len(prose_llm.calls) == 2  # 본문 나열 탐지 → ERROR 피드백 → 같은 턴 내 재호출
+    tool_feedback = [m["content"] for m in prose_llm.calls[1] if m["role"] == "tool"]
+    assert len(tool_feedback) == 1 and tool_feedback[0].startswith("ERROR:")
+    assert "본문" in tool_feedback[0] and "options 배열" in tool_feedback[0]
+
+    s = prose_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    q = s["pending_questions"][0]
+    assert q["options"][0]["label"] == "레이어드 모놀리식"  # 정규화된 라벨이 카드에 노출
+
+
+@pytest.fixture()
+def rawargs_llm():
+    return FakeStreamLLM([
+        # 턴1 1호출 — 유효하지 않은 JSON 문자열 인자 (json.loads 실패 → ERROR)
+        ("", [("ask_questions", '{"questions": ')]),
+        # 턴1 2호출 — 유효 JSON이지만 object가 아닌 인자 (list → ToolError)
+        ("", [("ask_questions", ["list"])]),
+        # 턴1 3호출 — 정상 인자
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "청중은 누구인가?",
+                                                "options": [{"label": "경영진"},
+                                                            {"label": "실무팀"}]}]})]),
+    ])
+
+
+@pytest.fixture()
+def raw_app(db_env, test_engine, rawargs_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": rawargs_llm})
+
+
+@pytest.fixture()
+def raw_client(raw_app):
+    from fastapi.testclient import TestClient
+
+    with TestClient(raw_app) as c:
+        yield c
+
+
+def test_ask_questions_non_dict_arguments_retry_not_fail(raw_client, rawargs_llm):
+    """비-object 도구 인자는 세션 FAILED(튕김) 대신 ERROR 피드백 재시도로 수렴한다."""
+    sid = _setup(raw_client)
+
+    events = _sse_events(raw_client, f"/api/interview/sessions/{sid}/kick")
+    assert "questions" in [n for n, _ in events]
+    assert len(rawargs_llm.calls) == 3
+    fb1 = [m["content"] for m in rawargs_llm.calls[1] if m["role"] == "tool"][-1]
+    assert fb1.startswith("ERROR: 도구 인자 JSON 파싱 실패")
+    fb2 = [m["content"] for m in rawargs_llm.calls[2] if m["role"] == "tool"][-1]
+    assert "JSON object여야" in fb2 and "현재 list" in fb2
+
+    s = raw_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["error"] is None
