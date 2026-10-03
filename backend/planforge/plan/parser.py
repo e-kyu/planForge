@@ -77,7 +77,8 @@ def parse_plan_text(text: str) -> Plan:
             if m:
                 key, val = m.group(1).strip(), m.group(2).strip()
                 if key == "산출 문서":
-                    plan.docs = [d.strip() for d in val.split(",") if d.strip()]
+                    # 쉼표와 + 모두 허용 — 슬라이드 태그의 + 표기를 메타에 옮겨 쓰는 실수를 흡수한다
+                    plan.docs = [d.strip() for d in re.split(r"[,+]", val) if d.strip()]
                 elif key == "목적":
                     plan.purpose = val
                 elif key == "청중":
@@ -131,7 +132,8 @@ def _parse_slide_head(no: int, head: str) -> Slide:
         elif br.startswith("문서:") or br.startswith("문서："):
             names = br[3:].strip()
             if names and names != "공통":
-                docs = [d.strip() for d in names.split("+") if d.strip()]
+                # 쉼표와 + 모두 허용 — 메타의 쉼표 표기를 태그에 옮겨 쓰는 실수를 흡수한다
+                docs = [d.strip() for d in re.split(r"[,+]", names) if d.strip()]
             title = title.replace(f"[{br}]", "", 1)
     if not stype_ko:
         raise PlanError(f"슬라이드 {no}: [유형: ...] 표기가 없습니다 (7종 표기 필수)")
@@ -247,6 +249,23 @@ def _validate_plan(plan: Plan) -> None:
         raise PlanError("plan.md에 슬라이드 목록이 없습니다")
     if not plan.docs:
         plan.docs = ["제안서"]  # 메타 항목 없음 = 제안서 1개 (현행 동작)
+    # 다중 문서 계약 교차검증 — 슬라이드 [문서: ...] 태그와 메타 '산출 문서'는 일치해야 한다.
+    # 디폴트 치환으로 불일치가 무음 통과되면 derive가 나머지 문서 슬라이드를 그대로 버린다
+    # (태그는 정확한데 메타 누락으로 제안서 1종만 산출되는 사고의 방지책 — fail-loud).
+    tagged = {d for s in plan.slides for d in s.docs}
+    unknown = sorted(tagged - set(plan.docs))
+    if unknown:
+        raise PlanError(
+            f"슬라이드 문서 태그 '{', '.join(unknown)}'가 메타 '산출 문서'({', '.join(plan.docs)})에 없습니다 — "
+            "## 메타에 '- 산출 문서: 제안서, 개발설계서'처럼 확정 산출 문서를 쉼표로 나열해야 한다"
+        )
+    if len(plan.docs) > 1:
+        missing = [d for d in plan.docs if d not in tagged]
+        if missing:
+            raise PlanError(
+                f"메타 '산출 문서'의 '{', '.join(missing)}' 문서가 [문서: ...] 태그 슬라이드가 없습니다 — "
+                "여러 문서일 때 표지·목차·마무리는 문서별 태그([문서: 문서명])로 별도 슬라이드를 써야 한다"
+            )
     if len(plan.key_messages) != 3:
         raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
     nos = [s.no for s in plan.slides]

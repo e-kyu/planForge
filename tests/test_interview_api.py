@@ -734,6 +734,45 @@ def test_plan_skeleton_error_feedback_loops_back(sclient, fake_llm):
     assert s["phase"] == "plan_review" and s["error"] is None
 
 
+DOC_TAG_META_MISSING_MARKDOWN = (
+    "# 기획 (메타 누락)\n"
+    "\n## 메타\n- 목적: x\n"
+    "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+    "\n## 슬라이드 목록\n"
+    "\n### 1. [유형: 표지][문서: 제안서] 표지\n- 핵심문장: 표지다\n"
+    "\n### 2. [유형: 표지][문서: 개발설계서] 개발 표지\n- 핵심문장: 표지다\n"
+)
+
+
+def test_plan_doc_tag_mismatch_feedback_loops_back(sclient, fake_llm):
+    """다중 문서 plan의 메타 '산출 문서' 누락(태그는 정상 — 실세션 수업)을 파서 교차검증이
+    막는다: 디폴트 ["제안서"] 무음 치환 대신 PlanError가 치트시트와 함께 ERROR 피드백으로
+    돌아와 재시도에 참여한다."""
+    fake_llm.turns = [
+        ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
+        ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
+        ("", [("confirm_key_messages", {"messages": ["a", "b", "c"]})]),
+        ("", [("write_plan", {"markdown": DOC_TAG_META_MISSING_MARKDOWN})]),  # 교차검증 실패
+        ("", [("write_plan", {"markdown": plan_sample_markdown()})]),
+    ]
+    sid = _setup(sclient)
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "답"}]})
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    assert len(fake_llm.calls) == 5                       # 실패 1회 → 재시도 1회에 수렴
+    fb = [m["content"] for m in fake_llm.calls[4] if m["role"] == "tool"][-1]
+    assert fb.startswith("ERROR: plan 포맷 검증 실패")
+    assert "슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'(제안서)에 없습니다" in fb
+    assert "'- 산출 문서: 제안서, 개발설계서'" in fb      # 치료안 — 필요 표기 안내
+    assert "치트시트" in fb
+    assert "plan_draft" in [n for n, _ in events]
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["error"] is None
+
+
 def test_plan_retry_exhaustion_marks_session_failed(sclient, fake_llm):
     """write_plan 실패 3회 소진 — 4번째 write_plan 호출에서 dispatch_blocking 가드가
     TurnError로 세션 FAILED를 남긴다 (SSE error 이벤트 + 세션 error 문자열)."""

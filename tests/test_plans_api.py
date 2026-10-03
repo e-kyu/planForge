@@ -82,6 +82,13 @@ def test_revise_invalid_markdown_422(client, app):
     assert "plan 골격 검증 실패" in r.json()["detail"]
     assert "문서 '제안서'" in r.json()["detail"]
 
+    # 메타 '산출 문서' 라인 유실(다중 문서) — 파서 교차검증이 422로 막는다. 유실을 무음
+    # default(["제안서"])로 격하시키면 derive가 나머지 문서를 통째로 버린다 (실세션 수업)
+    md = plan_sample_markdown().replace("- 산출 문서: 제안서, 개발설계서\n", "")
+    r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": md})
+    assert r.status_code == 422
+    assert "슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'" in r.json()["detail"]
+
 
 def test_plan_404(client):
     assert client.get("/api/plans/999").status_code == 404

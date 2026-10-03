@@ -89,6 +89,12 @@
   대응이다. write_plan 검증 실패는 턴 한도와 별개로 `PLAN_FIX_ATTEMPTS=3`까지 재시도하며
   4번째 write_plan 호출에서 TurnError → 세션 FAILED. 골격 미달(SkeletonError)도
   "plan 골격 검증 실패"(문서명 포함) ERROR 피드백으로 같은 재시도 루프에 참여한다.
+- 다중 문서 계약은 파서가 교차검증한다 — 슬라이드 `[문서: ...]` 태그는 메타 `산출 문서:
+  (쉼표 나열)`에 정의된 문서만 가리킬 수 있고, 메타가 복수 문서면 각 문서가 태그 슬라이드를
+  1개 이상 갖는다 (`planforge/plan/parser.py _validate_plan`; 구분자 쉼표·플러스 흡수).
+  메타 라인 누락은 디폴트(["제안서"])와 태그의 불일치로 검출된다 — 위반 시 "plan 포맷
+  검증 실패" ERROR 피드백으로 위 재시도 루프에 참여한다. 이 검증이 없으면 태그는 정확해도
+  전 파이프라인이 문서 1개 전제로 무음 단일화된다 (제안서만 산출되는 실사고의 방지책).
 - 이 문서는 **구조만** 잠근다. 하드 규칙(임의 추측 금지·모순 처리 등 콘텐츠 품질)은
   `interview.md` 프롬프트의 소관이다.
 - 이력(interview_messages)에는 원본(raw) 도구 인자가 남는다 — 정규화(strip 등)는
@@ -139,6 +145,7 @@
 | 목차 슬라이드를 `- 내용: 01 … / 02 …` 임의 키로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: `- 핵심문장: 01 …`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
 | 표 데이터 행을 `- 행: …`(키 붙인 최상위 불릿)으로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: 들여쓰기 + 키 없는 `셀\|셀\|셀`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
 | plan 포맷은 통과했으나 표지·목차·마무리·내용 슬라이드 누락 (SkeletonError) | "plan 골격 검증 실패 — 문서명 포함" ERROR 피드백 → 재시도 참여 | `agent.py _write_plan` |
+| 다중 문서 plan에서 `## 메타` `산출 문서:` 누락 (슬라이드 태그는 정상) | "plan 포맷 검증 실패 — 슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'(제안서)에 없습니다…" + 치트시트 | `agent.py _write_plan` + `planforge/plan/parser.py` |
 | plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도 초과" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
 
 참고: 같은 수업의 병행 결함은 plans 모듈 후속 커밋으로 잠갔다 — `planrevise.py`의
