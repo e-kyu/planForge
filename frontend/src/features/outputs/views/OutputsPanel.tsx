@@ -79,7 +79,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
           <>
             {docs.length > 1 && (
               <select aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
-                <option value="">전체 문서(plan 첫 문서)</option>
+                <option value="">plan 첫 문서</option>
                 {docs.map((d) => (
                   <option key={d} value={d}>
                     {d}
