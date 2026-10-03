@@ -608,3 +608,27 @@ def test_user_message_is_sent_once_per_turn(sclient, fake_llm):
     rows = [m for m in sclient.get(f"/api/interview/sessions/{sid}/messages").json()
             if m["role"] == "user" and "[라운드 답변]" in m["content"]]
     assert len(rows) == 1
+
+
+def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
+    """시스템 프롬프트는 퓨샷(완성 예시) 섹션 + 매턴 리마인더를 모두 실어 보낸다.
+
+    형태 강제의 프롬프트 쪽 근거: interview.md의 완성 예시 섹션이 본문에, agent.py
+    _remind_ask 리마인더가 컨텍스트(응답 직전 위치) 끝에 존재한다. round_summary의
+    라운드 번호는 서버가 sess.round_no + 1로 계산해 주입한다 — 모델이 지어내지
+    않도록 (kick 시 round_no=0 → 라운드 1).
+    """
+    sid = _setup(sclient)
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    sys1 = fake_llm.calls[0][0]["content"]
+    assert sys1.startswith("# 인터뷰 에이전트")  # interview.md 전문이 앞쪽
+    assert "## ask_questions 인자 형식 (완성 예시)" in sys1
+    assert '"allow_free": true' in sys1  # 완성 예시 JSON이 실려 있다
+    assert "## 이번 턴 ask_questions 리마인더" in sys1
+    assert "라운드 1 목표" in sys1
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "경영진"}]})
+    sys2 = fake_llm.calls[1][0]["content"]
+    assert "라운드 2 목표" in sys2  # 라운드 진행 → 서버 계산 번호 증가

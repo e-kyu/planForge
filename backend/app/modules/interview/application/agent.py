@@ -81,7 +81,22 @@ class InterviewAgent:
     def _system_prompt(self) -> str:
         base = (PROMPTS_DIR / "interview.md").read_text(encoding="utf-8-sig")
         ctx = self._turn_context()
-        return base + "\n\n## 이번 턴 주입 컨텍스트 (소스·확립 팩트 — 임의 추측 금지)\n\n" + ctx
+        return (base + "\n\n## 이번 턴 주입 컨텍스트 (소스·확립 팩트 — 임의 추측 금지)\n\n" + ctx
+                + "\n\n## 이번 턴 ask_questions 리마인더 (완성 예시를 그대로 모방한다)\n\n"
+                + self._remind_ask())
+
+    def _remind_ask(self) -> str:
+        """매턴 ask_questions 리마인더 — 시스템 프롬프트 끝(응답 직전 위치)에서 퓨샷을
+        다시 가리킨다. 라운드 번호는 서버 확정 값이라 여기서 계산해 얹는다 — 모델이
+        round_summary의 번호를 지어내는 지점을 제거한다."""
+        nxt = self.sess.round_no + 1
+        return (
+            "- 질문 제시는 반드시 `ask_questions(round_summary, questions)` 도구 호출로만 한다.\n"
+            "- 객관형 문항은 options에 {label, description}을 2개 이상, 서술형 문항은 options 없이 "
+            "allow_free=true — 선택지를 질문 본문에 나열하지 않는다 (본문은 질문 한 문장).\n"
+            "- 'ask_questions 인자 형식 (완성 예시)' 섹션을 그대로 모방한다. round_summary는 "
+            f"'라운드 {nxt} 목표: …' 형태로 쓴다 (이번 ask_questions 성공 시 라운드 {nxt})."
+        )
 
     def _turn_context(self) -> str:
         parts: list[str] = []

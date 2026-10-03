@@ -37,6 +37,12 @@
   (`frontend/src/features/interview/views/InterviewPanel.tsx`) — 본문 마크다운을
   파싱하는 경로는 존재하지 않으므로, 본문 나열은 "본문엔 보이고 버튼은 없는" 결함이
   된다 (이 계약이 그 출발점이다).
+- 계약 서술의 원문 두 곳: `interview.md`의 `## ask_questions 인자 형식 (완성 예시)`
+  섹션(객관형+서술형 혼합 실물 JSON — 그대로 모방하도록 리드)과 `_system_prompt`가
+  매턴 시스템 프롬프트 끝에 부착하는 `이번 턴 ask_questions 리마인더`(`round_summary`
+  의 라운드 번호는 `sess.round_no + 1`로 서버가 계산해 주입 — 프롬프트 퓨샷 예시의
+  번호를 복사하지 않도록 각주 포함). 스키마의 권위는 여전히 `tools.py`의
+  `INTERVIEW_TOOLS`다.
 
 ## 검증과 재시도 의미
 
