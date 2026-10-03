@@ -19,7 +19,13 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session as DBSession
 
-from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from planforge.plan import (
+    PlanError,
+    SkeletonError,
+    filter_slides,
+    parse_plan_text,
+    validate_skeleton,
+)
 
 from app.agents.tools import ToolError, validate_tool_args
 from app.modules.facts.facade import append_facts, list_active_facts
@@ -42,6 +48,27 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 MAX_TOOL_TURNS = 8   # 한 턴 내 LLM 호출 한도 (도구 루프 폭주 방지)
 MAX_ROUNDS = 8       # 세션 전체 라운드 한도
 PLAN_FIX_ATTEMPTS = 3  # write_plan 검증 실패 재시도 한도 (포맷 오류 2회 연속 사고 대응)
+
+# write_plan 포맷 검증 실패 시 ERROR 피드백에 붙는 치료안 — 파서 메시지는 결정론 파이프라인
+# 공용(derive·numcheck·CLI)이라 파서를 건드리지 않고, LLM 대면 피드백만 앱 계층에서 관리한다.
+# 교정 예 두 건은 실세션 수업 기반(docs/interview-turn-contract.md 실패 수업 참조): 목차를
+# `- 내용:`, 표 데이터 행을 `- 행:`으로 쓴 임의 키 위반이 동일 반복돼 PLAN_FIX_ATTEMPTS를
+# 소진했다 — ask_questions 검증기(결정 18)와 같은 "원문+치료안" 형태로 재시도 1회 수렴을 노린다.
+PLAN_BULLET_CHEATSHEET = (
+    "불릿 허용 키 치트시트 — 슬라이드 본문의 최상위 불릿 키는 아래 이름만 해석된다 (임의 키는 거부):\n"
+    "- `핵심문장:` — 전 유형 공통. 목차 슬라이드는 이 키 한 줄: "
+    "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` (슬래시(/) 구분, 라벨은 01..NN)\n"
+    "- `근거/출처:` 또는 `출처:` — 전 유형 공통\n"
+    "- 유형별 표기 헤더: `- 좌 (소제목):` / `- 우 (소제목):` / `- 표: [헤더 | 헤더 | 헤더]` / "
+    "`- 차트:` / `- 구성:`\n"
+    "- 데이터 행은 헤더 아래 들여쓰기 + `- `만 붙이고 키를 만들지 않는다 — 표 `  - 셀 | 셀 | 셀`, "
+    "차트 `  - 범주: 라벨, 라벨`·`  - 계열명 | 값, 값`, 구성 `  - 계층명 | 박스, 박스`, "
+    "2단 `  - 라벨 | 설명`\n"
+    "교정 예: `- 내용: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과` → "
+    "`- 핵심문장: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과` / "
+    "`- 행: 파일 업로드 | 텍스트 및 PDF 중심 | 확정` → `- 표: [항목 | 형식 | 상태]` 헤더 아래 "
+    "`  - 파일 업로드 | 텍스트 및 PDF 중심 | 확정`"
+)
 
 
 class TurnError(RuntimeError):
@@ -290,11 +317,22 @@ class InterviewAgent:
             plan = parse_plan_text(md)
             if len(plan.key_messages) != 3:
                 return f"ERROR: 핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)"
-            for doc in plan.docs:
-                slides = filter_slides(plan.slides, doc)
-                validate_skeleton(slides)  # 원칙 8 — 미달 시 중단
         except PlanError as e:
-            return f"ERROR: plan 포맷 검증 실패 — {e}"
+            # 치료안(허용 키·모범 표기)은 LLM 대면 소관 — 파서 원문은 그대로 보내고 뒤에 붙인다
+            # (프롬프트만으로 임의 키 위반이 저지되지 않은 실세션 수업의 서버 쪽 대응).
+            return (f"ERROR: plan 포맷 검증 실패 — {e}\n{PLAN_BULLET_CHEATSHEET}\n"
+                    "이 표기를 그대로 모방해 write_plan을 다시 호출하라")
+        # 골격 검증 (원칙 8) — SkeletonError는 PlanError가 아니므로 문서별로 잡아 ERROR
+        # 피드백으로 되돌린다 (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다).
+        # 문서별 루프라 어느 문서가 미달인지 함께 알려 재시도 1회에 수렴시킨다.
+        for doc in plan.docs:
+            try:
+                validate_skeleton(filter_slides(plan.slides, doc))
+            except SkeletonError as e:
+                return (f"ERROR: plan 골격 검증 실패 — 문서 '{doc}': {e}\n"
+                        "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
+                        "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
+                        "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
 
         # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당
         p = create_generation(self.db, self.sess.project_id, markdown=md, docs=plan.docs,

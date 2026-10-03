@@ -651,3 +651,110 @@ def test_round_summary_persisted_and_replayed(sclient, fake_llm):
     rows = [m for m in sclient.get(f"/api/interview/sessions/{sid}/messages").json()
             if m["kind"] == "questions"]
     assert len(rows) == 1 and rows[0]["payload"]["summary"] == "뼈대 확인"
+
+
+TOC_BAD_KEY_MARKDOWN = (
+    "# 기획 (치트시트 검증)\n"
+    "\n## 메타\n- 목적: x\n"
+    "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+    "\n## 슬라이드 목록\n"
+    "\n### 1. [유형: 표지] 표지\n- 핵심문장: 표지다\n"
+    "\n### 2. [유형: 목차] 목차\n- 내용: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과\n"
+    "\n### 3. [유형: 마무리] 마무리\n- 핵심문장: 끝\n"
+)
+
+
+def test_plan_format_feedback_carries_remedy(sclient, fake_llm):
+    """실세션 위반(목차를 `- 내용:` 임의 키로) 재현 — 포맷 실패 피드백에 파서 원문 +
+    치료안 치트시트가 붙고, 재시도 1회에 수렴한다 (계약: 실패 수업 참조)."""
+    fake_llm.turns = [
+        ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
+        ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
+        ("", [("confirm_key_messages", {"messages": ["a", "b", "c"]})]),
+        ("", [("write_plan", {"markdown": TOC_BAD_KEY_MARKDOWN})]),   # 검증 실패
+        ("", [("write_plan", {"markdown": plan_sample_markdown()})]),
+    ]
+    sid = _setup(sclient)
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "답"}]})
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    assert len(fake_llm.calls) == 5                       # 실패 1회 → 재시도 1회에 수렴
+    fb = [m["content"] for m in fake_llm.calls[4] if m["role"] == "tool"][-1]
+    assert fb.startswith("ERROR: plan 포맷 검증 실패")
+    assert "슬라이드 2: 해석할 수 없는 불릿입니다: 내용:" in fb  # 파서 원문 그대로 (변경 없음)
+    assert "치트시트" in fb
+    assert "핵심문장: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과" in fb  # 모범 표기
+    assert "- 표: [항목 | 형식 | 상태]" in fb              # 표 행 교정 예 — 치트시트에서만 나온다
+    assert "plan_draft" in [n for n, _ in events]
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["error"] is None
+
+
+SKELETON_MISSING_MARKDOWN = (
+    "# 기획 (골격 미달)\n"
+    "\n## 메타\n- 목적: x\n"
+    "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+    "\n## 슬라이드 목록\n"
+    "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
+)
+
+
+def test_plan_skeleton_error_feedback_loops_back(sclient, fake_llm):
+    """골격 미달(SkeletonError)도 ERROR 피드백으로 돌아와 재시도에 참여한다 — 과거에는
+    except PlanError가 놓쳐 피드백 없이 세션이 즉시 FAILED였다."""
+    fake_llm.turns = [
+        ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
+        ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
+        ("", [("confirm_key_messages", {"messages": ["a", "b", "c"]})]),
+        ("", [("write_plan", {"markdown": SKELETON_MISSING_MARKDOWN})]),  # 골격 미달
+        ("", [("write_plan", {"markdown": plan_sample_markdown()})]),
+    ]
+    sid = _setup(sclient)
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "답"}]})
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    assert len(fake_llm.calls) == 5
+    fb = [m["content"] for m in fake_llm.calls[4] if m["role"] == "tool"][-1]
+    assert fb.startswith("ERROR: plan 골격 검증 실패")
+    assert "문서 '제안서'" in fb                      # 메타에 산출 문서 생략 → docs 기본값
+    assert "표지, 목차, 마무리" in fb                # validate_skeleton 원문 유지 (filter.py)
+    assert "write_plan을 다시 호출하라" in fb        # 재시도 참여 안내
+    assert "plan_draft" in [n for n, _ in events]
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["error"] is None
+
+
+def test_plan_retry_exhaustion_marks_session_failed(sclient, fake_llm):
+    """write_plan 실패 3회 소진 — 4번째 write_plan 호출에서 dispatch_blocking 가드가
+    TurnError로 세션 FAILED를 남긴다 (SSE error 이벤트 + 세션 error 문자열)."""
+    bad = "# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n\n## 슬라이드 목록\n"
+    fake_llm.turns = [
+        ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
+        ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
+        ("", [("confirm_key_messages", {"messages": ["a", "b", "c"]})]),
+        ("", [("write_plan", {"markdown": bad})]),   # 실패 1
+        ("", [("write_plan", {"markdown": bad})]),   # 실패 2
+        ("", [("write_plan", {"markdown": bad})]),   # 실패 3
+        ("", [("write_plan", {"markdown": bad})]),   # 4호출 — plan_fixes 가드 → TurnError
+    ]
+    sid = _setup(sclient)
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "답"}]})
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    names = [n for n, _ in events]
+    assert "plan_draft" not in names
+    err = next(p for n, p in events if n == "error")
+    assert err["message"] == "plan 검증 재시도 한도 초과"
+    assert len(fake_llm.calls) == 7  # 게이트 3회 + write_plan 4회 — MAX_TOOL_TURNS(8) 이내, plan 가드가 먼저 끊는다
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "failed" and s["status"] == "aborted"
+    assert "plan 검증 재시도 한도 초과" in (s["error"] or "")

@@ -57,6 +57,13 @@
   MAX_TOOL_TURNS=8 — 초과 시 TurnError → FAILED (사용자가 재실행한다).
 - 위반 피드백은 위반 문항 번호·위반 줄 원문 인용·치료안(options 이동 / 나열 제거+
   allow_free)을 한 번에 알린다 — 소형 모델도 재시도 1회에 고칠 수 있도록.
+- `write_plan` 포맷 실패 피드백은 **불릿 허용 키·모범 표기 치트시트**(`agent.py`
+  `PLAN_BULLET_CHEATSHEET`, 교정 예 포함)를 함께 되돌린다 — 파서 메시지는 결정론
+  파이프라인 공용(derive·numcheck·CLI)이라 건드리지 않고, 치료안은 앱 계층(`_write_plan`)
+  이 붙인다. 임의 키(`내용:`·`행:`) 위반이 동일 반복돼 재시도를 소진한 실세션 수업의
+  대응이다. write_plan 검증 실패는 턴 한도와 별개로 `PLAN_FIX_ATTEMPTS=3`까지 재시도하며
+  4번째 write_plan 호출에서 TurnError → 세션 FAILED. 골격 미달(SkeletonError)도
+  "plan 골격 검증 실패"(문서명 포함) ERROR 피드백으로 같은 재시도 루프에 참여한다.
 - 이 문서는 **구조만** 잠근다. 하드 규칙(임의 추측 금지·모순 처리 등 콘텐츠 품질)은
   `interview.md` 프롬프트의 소관이다.
 - 이력(interview_messages)에는 원본(raw) 도구 인자가 남는다 — 정규화(strip 등)는
@@ -84,7 +91,9 @@
 4. 실세션 수동 관찰(개발 서버 또는 e2e-smoke): 질문 카드에 options 버튼·직접 입력
    노출, ERROR 피드백 뒤 같은 턴 내 재시도.
 5. 아래 참조에 없는 반복 위반이 관찰되면 계약 4종을 한 커밋에 갱신한다 — 검증 추가 +
-   피드백 문구 + 테스트 잠금.
+   피드백 문구 + 테스트 잠금. 적용 사례: 목차 `- 내용:`·표 행 `- 행:` 임의 키 위반이
+   동일 반복돼 세션 FAILED — 치료안 치트시트·SkeletonError 피드백·임의 키 금지 프롬프트
+   문구를 이 갱신으로 반영했다.
 
 ## 실패 수업 참조 (모델 교체 디버깅)
 
@@ -97,4 +106,12 @@
 | options 라벨 비어 있음 | "label이 비어 있습니다" | `tools.py validate_tool_args` |
 | 인자가 비-object(list/str/int) | "도구 인자는 JSON object여야" | `tools.py validate_tool_args` |
 | 인자 JSON 파싱 실패 | "도구 인자 JSON 파싱 실패" | `agent.py _dispatch` |
-| plan 마크다운 포맷·핵심 메시지 3개 위반 | "plan 포맷 검증 실패" 등 | `agent.py _write_plan` |
+| plan 마크다운 포맷·핵심 메시지 3개 위반 | "plan 포맷 검증 실패" 등 — 치료안 치트시트 첨부 | `agent.py _write_plan` |
+| 목차 슬라이드를 `- 내용: 01 … / 02 …` 임의 키로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: `- 핵심문장: 01 …`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
+| 표 데이터 행을 `- 행: …`(키 붙인 최상위 불릿)으로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: 들여쓰기 + 키 없는 `셀\|셀\|셀`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
+| plan 포맷은 통과했으나 표지·목차·마무리·내용 슬라이드 누락 (SkeletonError) | "plan 골격 검증 실패 — 문서명 포함" ERROR 피드백 → 재시도 참여 | `agent.py _write_plan` |
+| plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도 초과" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
+
+참고: `plans/application/planrevise.py`의 자체 검증 루프에도 같은 병행 결함이 있다 — 골격
+미달 plan 수정 시 SkeletonError가 루프 밖으로 전파돼 job이 원문 예외로 실패(피드백 0회).
+plans 모듈 후속 커밋에서 잡을 예정 (`planforge/plan`에 SkeletonError export 추가됨).
