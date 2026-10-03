@@ -73,6 +73,15 @@ def test_revise_invalid_markdown_422(client, app):
     assert r.status_code == 422
     assert "핵심 메시지는 정확히 3개" in r.json()["detail"]
 
+    # 파싱은 통과하지만 골격이 미달이면 422 — 단일 권위가 SkeletonError를 문서명 포함
+    # PlanError로 감싼다 (전파되면 500이 됐던 결함의 잠금)
+    skel = ("# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+            "\n## 슬라이드 목록\n\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n")
+    r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": skel})
+    assert r.status_code == 422
+    assert "plan 골격 검증 실패" in r.json()["detail"]
+    assert "문서 '제안서'" in r.json()["detail"]
+
 
 def test_plan_404(client):
     assert client.get("/api/plans/999").status_code == 404

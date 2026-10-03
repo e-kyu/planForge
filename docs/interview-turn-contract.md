@@ -112,6 +112,8 @@
 | plan 포맷은 통과했으나 표지·목차·마무리·내용 슬라이드 누락 (SkeletonError) | "plan 골격 검증 실패 — 문서명 포함" ERROR 피드백 → 재시도 참여 | `agent.py _write_plan` |
 | plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도 초과" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
 
-참고: `plans/application/planrevise.py`의 자체 검증 루프에도 같은 병행 결함이 있다 — 골격
-미달 plan 수정 시 SkeletonError가 루프 밖으로 전파돼 job이 원문 예외로 실패(피드백 0회).
-plans 모듈 후속 커밋에서 잡을 예정 (`planforge/plan`에 SkeletonError export 추가됨).
+참고: 같은 수업의 병행 결함은 plans 모듈 후속 커밋으로 잠갔다 — `planrevise.py`의
+`validate_plan_markdown`(단일 권위)이 SkeletonError를 "plan 골격 검증 실패 — 문서 '…'"
+PlanError로 감싸 revise 루프의 `except PlanError` 재시도에 참여시켰고, revise API가
+500 대신 422로 답하는 것과 job 오류 분류(SCHEMA→VALIDATION)도 한 번에 정상화됐다.
+파서·filter 원문은 결정론 파이프라인 공용(derive·numcheck·CLI)이라 건드리지 않는다.

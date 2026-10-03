@@ -21,7 +21,13 @@ from pathlib import Path
 
 from planforge.llm.loops import run_tool_loop
 from planforge.plan import Plan as ParsedPlan
-from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from planforge.plan import (
+    PlanError,
+    SkeletonError,
+    filter_slides,
+    parse_plan_text,
+    validate_skeleton,
+)
 
 from app.agents.tools import WRITE_PLAN_TOOL
 
@@ -35,12 +41,24 @@ class PlanReviseError(ValueError):
 
 
 def validate_plan_markdown(markdown: str) -> ParsedPlan:
-    """plan 포맷 + 골격 검증 (원칙 8 — 미달 시 PlanError). presentation/api.py가 위임하는 단일 권위."""
-    plan = parse_plan_text(markdown)
+    """plan 포맷 + 골격 검증 (원칙 8). presentation/api.py가 위임하는 단일 권위.
+
+    검증 실패는 전부 PlanError로 통일해 던진다 — 골격 미달(SkeletonError)은 문서명을
+    포함해 감싼다. 이전에는 그냥 전파돼 호출자별 `except PlanError`가 놓치면 job이
+    원문 예외로 죽었고(피드백 0회), revise API도 500으로 응답했다. 라벨이 여기서
+    통일되므로 호출자는 except PlanError만 두거나 전역 핸들러(422)에 맡긴다.
+    """
+    try:
+        plan = parse_plan_text(markdown)
+    except PlanError as e:
+        raise PlanError(f"plan 포맷 검증 실패 — {e}") from e
     if len(plan.key_messages) != 3:
         raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
     for doc in plan.docs:
-        validate_skeleton(filter_slides(plan.slides, doc))
+        try:
+            validate_skeleton(filter_slides(plan.slides, doc))
+        except SkeletonError as e:
+            raise PlanError(f"plan 골격 검증 실패 — 문서 '{doc}': {e}") from e
     return plan
 
 
@@ -83,7 +101,8 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
             parsed = validate_plan_markdown(md)
         except PlanError as e:
             last_error = e
-            return ("retry", "plan 포맷 검증 실패 — 아래 오류를 해소해 write_plan 도구를 다시 "
+            # {e}는 단일 권위가 라벨링한 원문(포맷/골격) — 헤더는 지시문만 갖는다
+            return ("retry", "plan 검증 실패 — 아래 오류를 해소해 write_plan 도구를 다시 "
                              f"호출하라:\n{e}")
         if md == (base_markdown or "").strip():
             last_error = PlanError("LLM 결과에 변경이 없습니다 — 발견사항이 반영되지 않았습니다")
