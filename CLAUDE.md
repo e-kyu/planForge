@@ -80,6 +80,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   바이트 동일 이식본 — **로직 변경 금지**, 경로/워크스페이스 주입만 어댑터로 처리.
 - LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider 어댑터 계층으로만 한다
   (`chat_fn`/`stream_fn` dict 계약 유지). anthropic SDK 사용 금지.
+- 인터뷰 턴 계약(도구 전용 출력·ask_questions 스키마·검증 재시도):
+  `docs/interview-turn-contract.md` — 계약 파일(interview.md 프롬프트·tools.py
+  스키마/검증·이 문서·테스트)은 동시 점검·수정한다 (토큰 4종 세트 절차와 동일 —
+  하나만 고치는 PR은 반려).
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
   legacy `_sanitize_title` 규칙 유지.
 - 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/planforge/config.json`
