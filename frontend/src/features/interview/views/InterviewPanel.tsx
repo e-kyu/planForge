@@ -3,7 +3,6 @@ import { Bot } from "lucide-react";
 import type { Message } from "../../../api/client";
 import { Banner, Button, Empty } from "../../../shared/components/ui";
 import { useInterview } from "../viewmodels/useInterview";
-import { CompactCard } from "./CompactCard";
 import { FactSidePanel } from "./FactSidePanel";
 import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
 
@@ -45,7 +44,7 @@ function progressLabel(status: string, phase: string): string {
 }
 
 /** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
- *  서버 상태·SSE 턴 머신은 useInterview, 압축 제안은 useCompact, 팩트 목록은 useFactsPanel이 보유한다. */
+ *  서버 상태·SSE 턴 머신은 useInterview, 팩트 목록은 useFactsPanel이 보유한다 (압축 카드는 FactSidePanel 소속). */
 export default function InterviewPanel({ pid }: { pid: number }) {
   const {
     sid,
@@ -203,8 +202,6 @@ export default function InterviewPanel({ pid }: { pid: number }) {
             }
           />
         )}
-
-        <CompactCard pid={pid} />
 
         <div className={isKick ? "chat-input chat-input-kick" : "chat-input"}>
           <textarea

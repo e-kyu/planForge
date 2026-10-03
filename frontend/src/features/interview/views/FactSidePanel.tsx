@@ -3,6 +3,7 @@ import { Database, PanelRightClose, PanelRightOpen } from "lucide-react";
 import type { Fact } from "../../../api/client";
 import { Banner } from "../../../shared/components/ui";
 import { useFactsPanel } from "../viewmodels/useFactsPanel";
+import { CompactCard } from "./CompactCard";
 
 const FACT_FILTERS = [
   { id: "all", label: "전체" },
@@ -18,8 +19,9 @@ const ORIGIN_LABEL: Record<string, string> = {
   manual: "수동",
 };
 
-/** 팩트 저장소 사이드 패널 — 조회 전용 (설계 D4).
- *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다(원칙 4 게이트 우회 금지).
+/** 팩트 저장소 사이드 패널 — 팩트 확정(승인·적립)은 게이트 전용(설계 D4·원칙 4),
+ *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다.
+ *  중복 팩트 정리(팩트 압축 FR-6.1) 카드는 이 패널에서 제안·적용한다.
  *  미확정 필터는 백엔드 UNCONFIRMED 컨벤션("(미확정" 접두 마커)과 동일한 클라이언트 판별(설계 D5). */
 export function FactSidePanel({
   pid,
@@ -124,7 +126,10 @@ export function FactSidePanel({
 
       <p className="fact-side-note">
         팩트 확정(승인·적립)은 인터뷰의 [팩트 확인] 단계에서만 수행됩니다 — 게이트 우회 기록은 허용되지 않습니다.
+        중복 정리는 하단 [팩트 압축]을 사용하세요.
       </p>
+
+      <CompactCard pid={pid} />
 
       <div className="fact-rail">
         <button
