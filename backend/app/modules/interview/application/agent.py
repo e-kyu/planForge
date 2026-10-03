@@ -136,10 +136,12 @@ class InterviewAgent:
         # 첫 토큰 전 지연 대부분이 컨텍스트 조립(read_sources_context 등)이라 state_event
         # (조립 끝난 뒤 방출)보다 앞서 진행을 알린다 — emit-only라 이력을 오염하지 않는다.
         events.add(progress_event("context"))
+        # user 행 적립은 run_turn이 단일 권위다 — 모든 호출자(/kick·/turn·/answers·게이트
+        # resume)는 선행 적립하지 않는다. _history()가 autoflush로 이 행을 포함해 모델
+        # 컨텍스트가 이력과 정확히 1:1이 된다 (동일 user 메시지 2회 전송 금지).
         self._append(MessageRole.USER, MessageKind.TEXT, content=user_message)
         messages = [{"role": "system", "content": self._system_prompt()}]
         messages += self._history()
-        messages.append({"role": "user", "content": user_message})
 
         try:
             events.add(state_event(self.sess.phase.value, self.sess.round_no,

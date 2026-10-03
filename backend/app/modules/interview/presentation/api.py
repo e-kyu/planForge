@@ -27,14 +27,13 @@ from app.shared.workspace import workspace_path
 
 from ..application.agent import InterviewAgent
 from ..domain.events import error_event
-from ..facade import MessageKind, MessageRole, require_session
+from ..facade import require_session
 from ..infrastructure.models import (
     InterviewMessage,
     InterviewSession,
     SessionPhase,
     SessionStatus,
 )
-from ..infrastructure.transcript import append_message
 from .schemas import (
     AnswersCreate,
     FactsConfirmCreate,
@@ -217,8 +216,7 @@ def answers(session_id: int, body: AnswersCreate, request: Request,
                 raise http_409(f"답변이 비어 있습니다: 질문 {a.index}")
         lines.append(f"{a.index + 1}. {q.get('text', '')}\n→ {choice}")
     message = "[라운드 답변]\n" + "\n".join(lines)
-    append_message(db, session_id, MessageRole.USER, MessageKind.TEXT, content=message)
-    db.commit()  # 스트림 시작 전 커밋 — 워커 스레드 세션과 (session_id, seq) 충돌 방지
+    # user 행 적립은 run_turn(agent)이 단일 권위 — 선행 적립·커밋 없이 그대로 넘긴다.
     return _stream_turn(_settings(request), request, session_id, message)
 
 

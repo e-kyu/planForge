@@ -583,3 +583,28 @@ def test_ask_questions_non_dict_arguments_retry_not_fail(raw_client, rawargs_llm
 
     s = raw_client.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "awaiting_answers" and s["error"] is None
+
+
+def test_user_message_is_sent_once_per_turn(sclient, fake_llm):
+    """user 메시지는 run_turn이 단일 권위로 적립해 모델 컨텍스트에 1회만 실린다.
+
+    과거 결함: run_turn이 행을 적립한 뒤 autoflush로 _history에 포함되고, 다시
+    messages에 재부착해 동일 user 메시지를 모델에 2회 전송했다 (/answers는 선행
+    적립까지 겹쳐 이력 행도 2행이었다). 중복은 약한 모델의 직접적인 혼돈 요인이다.
+    """
+    sid = _setup(sclient)
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    kicked = [m for m in fake_llm.calls[0]
+              if m["role"] == "user" and m["content"].startswith("인터뷰를 시작한다")]
+    assert len(kicked) == 1
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "경영진 — 도입 승인 판단"}]})
+    answered = [m for m in fake_llm.calls[1]
+                if m["role"] == "user" and "[라운드 답변]" in m["content"]]
+    assert len(answered) == 1
+
+    rows = [m for m in sclient.get(f"/api/interview/sessions/{sid}/messages").json()
+            if m["role"] == "user" and "[라운드 답변]" in m["content"]]
+    assert len(rows) == 1
