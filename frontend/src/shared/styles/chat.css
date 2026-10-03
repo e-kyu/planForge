@@ -210,6 +210,7 @@
 .q-text {
   font-weight: 600;
   margin-bottom: 6px;
+  white-space: pre-wrap; /* 질문 본문 개행 보존 — 붕괴(한 줄 압축) 방지 */
 }
 
 .options {
@@ -236,6 +237,19 @@
   border-color: var(--blue);
   background: rgba(46, 109, 180, 0.12);
   box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+/* 옵션 버튼 내부 — 라벨(굵게)과 근거(description, 보조 톤)를 위아래로 쌓는다 */
+.option-label {
+  display: block;
+  font-weight: 600;
+}
+
+.option-desc {
+  display: block;
+  color: var(--text-sub);
+  font-size: var(--fs-caption);
+  margin-top: 2px;
 }
 
 .free-input,

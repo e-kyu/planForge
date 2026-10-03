@@ -73,7 +73,9 @@ export function useInterview(pid: number) {
   }
 
   /** POST → SSE 소비 공용 경로. 종료 후 세션·이력·팩트를 무효화해 다시 당겨온다.
-   *  반환값: 실제로 턴이 시작됐는지 — 시작됐다면 View가 입력(답변·초안)을 비운다. */
+   *  반환값: 오류 없이 끝났는지 — true일 때만 View가 입력(답변·초안)을 비운다
+   *  (오류 시 유지 — 재제출 대비). error 이벤트는 스트림 정상 종료로 도착하므로
+   *  catch만으로는 잡히지 않는다 — 이벤트에서도 ok를 끈다. */
   async function run(path: string, body: unknown): Promise<boolean> {
     if (!sid || busy) return false;
     setBusy(true);
@@ -81,6 +83,7 @@ export function useInterview(pid: number) {
     setStatus("context"); // optimistic — 첫 progress 이벤트 전 네트워크 왕복 구간도 커버
     setActive(false);
     setError(null);
+    let ok = true; // error 이벤트·예외에서 false — false면 View가 입력을 유지한다 (재제출 대비)
     try {
       await apiSSE(path, body, (ev) => {
         if (ev.name === "token") {
@@ -91,6 +94,7 @@ export function useInterview(pid: number) {
           setActive(false); // 단계가 바뀌면 토큰 재대기 — 타이핑 버블로 전환
         } else if (ev.name === "error") {
           setError(String(ev.payload.message ?? ev.payload.code));
+          ok = false; // error 이벤트는 스트림 정상 종료로 도착하므로 catch만으로 부족
         }
         // 카드/상태 이벤트는 done 후 쿼리 무효화로 정리한다 (이력이 권위)
       });
@@ -99,10 +103,10 @@ export function useInterview(pid: number) {
         qc.invalidateQueries({ queryKey: ["interview", "messages", sid] }),
         qc.invalidateQueries({ queryKey: ["facts", pid] }),
       ]);
-      return true;
+      return ok;
     } catch (e) {
       setError(errMsg(e));
-      return true; // 시작은 됐음 — 입력 초기화는 원본과 동일하게 진행
+      return false; // 오류 시 답변·초안을 유지해 재제출하도록 한다
     } finally {
       setStreaming("");
       setStatus(null);

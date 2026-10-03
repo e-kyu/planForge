@@ -70,10 +70,10 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     feed.current?.scrollTo({ top: feed.current.scrollHeight });
   }, [messages, streaming, status, active]);
 
-  /** 턴 제출 래퍼 — 시작됐으면 입력(답변·초안)을 비운다 (원본 run() finally 동작). */
+  /** 턴 제출 래퍼 — 오류 없이 끝났을 때만 입력(답변·초안)을 비운다 (오류 시 유지 — 재제출 대비). */
   async function turn(path: string, body: unknown) {
-    const started = await run(path, body);
-    if (started) {
+    const ok = await run(path, body);
+    if (ok) {
       setAnswers({});
       setDraft("");
     }
@@ -361,7 +361,9 @@ function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
   );
 }
 
-/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다. */
+/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다.
+ *  선택↔입력은 상호배타다 — 입력하면 선택이 해제, 선택하면 입력이 지워진다
+ *  (과거에는 옵션 선택 중 입력값이 제출에서 조용히 폐기됐다). */
 function AnswersCard(props: {
   questions: QuestionCard[];
   answers: Record<number, { option?: number; free?: string }>;
@@ -388,10 +390,10 @@ function AnswersCard(props: {
                   <button
                     key={j}
                     className={`option ${props.answers[i]?.option === j ? "option-picked" : ""}`}
-                    onClick={() => props.onPick(i, { option: j })}
+                    onClick={() => props.onPick(i, { option: j, free: undefined })}
                   >
-                    {o.label}
-                    {o.description ? <span className="hint"> — {o.description}</span> : null}
+                    <span className="option-label">{o.label}</span>
+                    {o.description ? <span className="option-desc">{o.description}</span> : null}
                   </button>
                 ))}
               </div>
@@ -401,7 +403,7 @@ function AnswersCard(props: {
                 className="free-input"
                 placeholder="직접 입력 (선택지 대신)"
                 value={props.answers[i]?.free ?? ""}
-                onChange={(e) => props.onPick(i, { free: e.target.value })}
+                onChange={(e) => props.onPick(i, { option: undefined, free: e.target.value })}
               />
             )}
           </li>

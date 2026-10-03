@@ -261,6 +261,50 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       수 있다 — 프로필별 옵트인+기본 auto로 피해를 한정하고 되돌리는 절차를
       config.example.json·계약 문서 체크리스트에 명시.
 
+19. **인터뷰 질문 품질 안정화 2차 — 퓨샷 강제 + 프론트 선택지 렌더 정돈** (2026-10-03, `for-gemma4-26b`)
+    - 배경: 결정 18의 서버 검증·재시도·tool_choice 이후에도 모델 교체마다 질문 구조가
+      흔들린다는 관찰 — 남은 원인 3곳. (1) `interview.md`에 ask_questions JSON 예시가
+      0개 — 형태 강제가 명령형 문장 3중뿐이며, write_plan의 "그대로 모방한다" 완성
+      예시 블록·derive 프롬프트의 스키마 예시와 달리 ask_questions만 퓨샷이 빠져
+      있었다. (2) 프론트 혼돈 근원 — 객관형 문항에도 직접 입력이 기본 병기되고 옵션
+      선택 중 입력값이 제출 시 조용히 폐기되며, 질문 본문 개행이 붕괴되고, 오류가 나도
+      답변이 클리어되며, 라운드 목표(round_summary)는 SSE payload에만 존재해 화면
+      어디에도 없다. (3) 부수 결함 — 같은 user 메시지가 모델 컨텍스트에 2회 중복 전송
+      (`run_turn` 적립 → autoflush로 `_history` 포함 → 재부착)되고, /answers가 DB
+      user 행을 이중 적립한다.
+    - 변경 1 (퓨샷 + 매턴 리마인더): `interview.md`에 `## ask_questions 인자 형식
+      (완성 예시)` 섹션 신설 — 객관형 2문항(options 3개/2개, description 근거) +
+      서술형 1문항(allow_free만) 실물 JSON. "둘 다 있는" 문항은 예시에 싣지 않는다
+      (소형 모델의 항상 병기 경향 유발 방지). `agent.py`의 `_system_prompt`는 매턴
+      시스템 프롬프트 끝(응답 직전 위치)에 `## 이번 턴 ask_questions 리마인더`를
+      부착하며 round_summary의 라운드 번호는 `sess.round_no + 1`로 서버가 계산해
+      주입 — 모델이 번호를 지어내는 지점을 제거한다 (예시 번호 복사 방지 각주 포함).
+    - 변경 2 (round_summary 영속): 세션 행 `pending_round_summary`(nullable Text,
+      alembic 9c1f4e7b8a20) 영속 → `SessionOut` 노출 → 이력 questions EVENT payload에도
+      summary 포함 — 재접속 리플레이에 라운드 목표 보존. 프론트 답변 카드·정적 이력
+      카드 부제 "라운드 N — 목표: …" (구세션 행은 summary 부재 → 폴백 제목).
+    - 변경 3 (user 적립 단일 권위): `run_turn`의 선행 적립분만 남기고 재부착 삭제,
+      /answers의 선행 적립+커밋 삭제 — 모든 호출자(/kick·/turn·/answers·게이트)는
+      선행 적립 없이 message를 넘기고 `_history()` 결과가 이력과 1:1이 된다. 구세션의
+      중복 user 이력 행(리플레이 버블 2개)은 백필 없이 방치(사용자 결정).
+    - 변경 4 (렌더 정돈): 옵션 클릭↔직접 입력 상호배타(onPick 패치가 반대값을 명시적
+      해제) — 제출 계약(AnswerItem 1문항 1값)과 정합하며 "free 조용히 폐기" 암묵
+      결함이 시각적 해제로 드러난다. 옵션 버튼은 label·description을 분리 span으로
+      쌓는다(.option-label/.option-desc). `.q-text` pre-wrap(개행 보존). `run()`은
+      오류(error 이벤트·예외)에서 false 반환 — `turn()`은 오류 없이 끝났을 때만
+      답변·초안을 비운다(오류 시 유지 — 재제출 대비).
+    - 불변: `tools.py` 스키마·`validate_tool_args`(권위), `chat_fn`/`stream_fn` dict
+      계약, EVENT seq·`_history` role 필터(USER/ASSISTANT/TOOL만), AnswerItem 1문항
+      1값, 직접 입력 기본 병기(`allow_free ?? true`), openapi 계약은
+      `pending_round_summary` 추가 1개(diff 확인) — `npm run gen:types` 동반.
+    - 리스크 수용: (1) 완성 예시+리마인더로 턴당 system 토큰 ≈+0.6k — 8턴 세션 기준
+      수용(강제 우선, 사용자 결정). (2) 소형 모델이 예시의 "라운드 3"을 그대로 복사할
+      수 있음 — 리마인더의 서버 계산 값으로 방어하고, 관찰되면 예시 번호를 자리표화.
+      (3) 정적 이력 카드의 옵션 표기(description inline hint)는 인터랙티브 카드와
+      압축 표기가 다르다 — 참조 전용이라 의도로 유지. (4) 서술형을 객관형으로 나열
+      하는 모델은 여전히 결정 18의 검증 거부→재시도에 의존한다 — 퓨샷 위반 억제가
+      1차, 검증이 2차 방어선.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.
