@@ -43,6 +43,8 @@ class ProfileConfig:
     api_key_env: str = "OPENAI_API_KEY"
     azure_endpoint: str = ""  # azure 전용 — 빈 값이면 AZURE_OPENAI_ENDPOINT 환경변수
     api_version: str = ""     # azure 전용 — 빈 값이면 OPENAI_API_VERSION 환경변수
+    tool_choice: str = "auto"  # 도구 강제 모드 — auto|any|required|none. 도구 호출이
+                               # 흔들리는(텍스트 전용 응답) 모델은 required로 옵트인한다
 
 
 def load_config(path: str | Path) -> dict:
@@ -64,6 +66,7 @@ def load_config(path: str | Path) -> dict:
             api_key_env=p.get("api_key_env", default_key_env),
             azure_endpoint=p.get("azure_endpoint", ""),
             api_version=p.get("api_version", ""),
+            tool_choice=p.get("tool_choice", "auto"),
         )
     return profiles
 
@@ -130,6 +133,12 @@ class OpenAICompatProvider:
         if not profile.model:
             raise ValueError("모델이 설정되지 않았습니다 (config의 profiles.<단계>.model 지정 필수)")
         self.model = profile.model
+        # 계약 외 값은 생성 시점에 거부한다 — langchain이 모르는 문자열을 조용히 relay에
+        # 전달해 요청 400으로 번지는 것을 여기서 잡는다
+        if profile.tool_choice not in ("auto", "any", "required", "none"):
+            raise ValueError(f"tool_choice는 auto|any|required|none 중 하나여야 합니다 "
+                             f"(현재 {profile.tool_choice!r})")
+        self.tool_choice = profile.tool_choice
         # max_retries=0 필수 — 계약상 자동 재시도 금지 (failed로 기록, 사용자가 재실행)
         if profile.provider == "azure":
             from langchain_openai import AzureChatOpenAI  # ChatOpenAI와 동일 BaseChatOpenAI 계열
@@ -183,7 +192,7 @@ class OpenAICompatProvider:
                      {"type": "tool_call", "name": str, "arguments": dict-or-str}  (인덱스별 완성 시 1회)
         """
         lc_msgs = _to_lc_messages(messages)
-        llm = self._llm.bind_tools(tools, tool_choice="auto") if tools else self._llm
+        llm = self._llm.bind_tools(tools, tool_choice=self.tool_choice) if tools else self._llm
         t_start = time.monotonic()
         deadline = t_start + STREAM_DEADLINE
         pending: dict[int, dict] = {}  # tool_call index → {name, arguments}

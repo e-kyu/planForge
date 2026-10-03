@@ -230,6 +230,37 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       즉시 자동 검수 → 검수 동엔진 재판정(빠짐 없음) → findings 영속 기록 → FR-4.3 재생성
       루프. 채번은 덮어쓰기 없으므로 과거 버전 추적 가능(원칙 5).
 
+18. **인터뷰 턴 계약 강화 — 본문 선택지 나열 탐지 + 프로필 tool_choice 강제** (2026-10-03, `for-gemma4-26b`)
+    - 배경: 모델 교체(특히 소형 모델)마다 인터뷰 질문 구조가 흔들린다. (1) 선택지를
+      options 배열이 아니라 질문 본문에 서술형 `예:` 줄로 나열하면 options 없이
+      allow_free=true만으로 검증을 통과하고, 프론트는 `options.length` 기준으로
+      버튼을 렌더하므로 "본문엔 보이고 버튼은 없다"(직접 입력만) 상태가 된다.
+      (2) 도구 호출이 흔들리는 모델은 텍스트 전용 출력 → nudge 1회 → TurnError
+      (세션 FAILED)로 끝난다. 검토 과정에서 비-object 도구 인자(list/str)가
+      AttributeError로 세션 FAILED 되는 보호 구멍도 함께 확인됐다.
+    - 변경: (1) `validate_tool_args` — 본문 옵션 유사 줄(`예:`·`예)`·`보기:`·`답:`·
+      `1.`·`2)`·`①..⑳`·`가)…차)`·`(1)`·`(가)`(A)·불릿) 2줄 이상이면 계약 위반으로
+      거부 — options 유무와 무관(선택지는 options 배열로만 전달하는 계약). 피드백은
+      위반 문항 번호·원문 줄 인용·이동안(options 이동 / 나열 제거+allow_free)을 한 번에
+      알려 재시도 1회로 수렴시킨다. 인자 비-object는 AttributeError 대신 ToolError
+      재시도 피드백으로, JSON 파싱 실패는 한국어 피드백으로. options 라벨은 strip
+      정규화·빈 라벨 거부, description은 문자열 검사. (2) provider — `ProfileConfig
+      .tool_choice`(기본 auto) → `bind_tools` 전달(하드코딩 "auto" 대체; "required"는
+      도구 미호출 모델이 도구만 호출하게 강제). 계약 외 값은 생성 시점 ValueError.
+      계약 문서 `docs/interview-turn-contract.md` 신설(계약 4종 동시 점검 + 모델 교체
+      체크리스트 — CLAUDE.md 규칙 절차 참조).
+    - 불변: `chat_fn`/`stream_fn` dict 계약·이벤트 포맷·`_to_lc_messages` 위치·
+      `max_retries=0`·anthropic 금지·OpenAPI/프론트 무변경(`pending_questions`
+      unknown[] 유지, `npm run gen:types` 불필요). ERROR 피드백 재시도 경로
+      (`route_after_blocking`)·MAX_TOOL_TURNS·recursion_limit 상수 무변경. 이력에는
+      원본(raw) 도구 인자가 남고 정규화는 pending_questions·questions 이벤트에만
+      적용 — 기존 검증기와 동일 관행.
+    - 리스크 수용: (1) 본문 불릿 나열이 하위 기준 나열인 정상 질문이어도 위반 취급된다
+      — 구조 정돈 유도가 목적이며, 오탐 실관측 시 정규식 불릿 arm만 제거한다. (2) 일부
+      OpenAI 호환 릴레이는 required를 무시(동작 변화 없음 — auto와 동일)하거나 거부할
+      수 있다 — 프로필별 옵트인+기본 auto로 피해를 한정하고 되돌리는 절차를
+      config.example.json·계약 문서 체크리스트에 명시.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.
