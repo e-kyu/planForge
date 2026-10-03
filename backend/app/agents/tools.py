@@ -62,6 +62,14 @@ INTERVIEW_TOOLS: list[dict] = [
                                     },
                                 },
                                 "allow_free": {"type": "boolean"},
+                                "suggestions": {
+                                    "type": "array",
+                                    "maxItems": 3,
+                                    "items": {"type": "string"},
+                                    "description": ("추천 후보 답변 (최대 3개, 한 줄 문장). "
+                                                    "소스·확립 팩트에서 도출한 것만 담는다. "
+                                                    "추측이면 (미확정)을 문장에 포함한다."),
+                                },
                             },
                             "required": ["text"],
                         },
@@ -156,6 +164,10 @@ BLOCKING_TOOLS = {"ask_questions", "save_facts", "confirm_key_messages", "write_
 
 MAX_QUESTIONS = 4  # FR-2.3: 한 라운드 최대 4문항
 
+MAX_SUGGESTIONS = 3  # 문항당 추천 후보 상한 (답변 카드의 추천 칩)
+
+SUGGESTION_MAX_LEN = 120  # 추천 후보 한 줄 길이 상한
+
 PROSE_OPTION_THRESHOLD = 2  # 본문에서 옵션 유사 줄이 이 수 이상이면 "선택지 나열"로 판정
 
 # 질문 본문 안의 선택지 나열 탐지 — 라인 선두 마커. `예시:`(예 뒤 글자가 시)·한 줄
@@ -199,6 +211,31 @@ def validate_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(q, dict):
                 raise ToolError(f"문항 {i}: 문항은 object여야 합니다")
             prose_bad.append((i, _prose_option_lines(q.get("text") or "")))
+            # 추천 후보 칩 계약(선택 필드 — 없는 문항 통과). options 분기의 continue가
+            # 이 검증을 우회하지 않도록 options 처리 앞에서 검증한다.
+            sugs = q.get("suggestions")
+            if sugs is not None:
+                if not isinstance(sugs, list):
+                    raise ToolError(f"문항 {i}: suggestions는 문자열 배열이어야 합니다 "
+                                    f"(현재 {type(sugs).__name__}) — 추천 후보 문장들의 배열로")
+                for k, s in enumerate(sugs, 1):
+                    if not isinstance(s, str):
+                        raise ToolError(f"문항 {i} 추천 후보 {k}: 후보는 문자열이어야 합니다")
+                    if not s.strip():
+                        raise ToolError(f"문항 {i} 추천 후보 {k}: 후보가 비어 있습니다 — "
+                                        f"빈 후보를 제거하거나 문장을 채워라")
+                    if "\n" in s or "\\n" in s:
+                        raise ToolError(f"문항 {i} 추천 후보 {k}: 추천 후보는 한 줄 문장이다 — "
+                                        f'"{s[:60]}…" (개행 제거 후 칩 한 줄로 요약)')
+                if len(sugs) > MAX_SUGGESTIONS:
+                    raise ToolError(f"문항 {i}: 추천 후보는 최대 {MAX_SUGGESTIONS}개다 "
+                                    f"(현재 {len(sugs)}개) — 가장 설득력 있는 "
+                                    f"{MAX_SUGGESTIONS}개만 남겨라")
+                if any(len(s.strip()) > SUGGESTION_MAX_LEN for s in sugs):
+                    long_one = next(s for s in sugs if len(s.strip()) > SUGGESTION_MAX_LEN)
+                    raise ToolError(f"문항 {i}: 추천 후보는 {SUGGESTION_MAX_LEN}자 이내 한 줄이다 "
+                                    f'("{long_one.strip()[:30]}…") — 근거 요약으로 짧게')
+                q["suggestions"] = [s.strip() for s in sugs]
             opts = q.get("options") or []
             if not opts:
                 if q.get("allow_free") is not True:

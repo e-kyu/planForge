@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from app.agents.tools import MAX_SUGGESTIONS
 from fakes import (
     FakeLLM,
     FakeStreamLLM,
@@ -628,6 +629,9 @@ def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
     assert '"allow_free": true' in sys1  # 완성 예시 JSON이 실려 있다
     assert "## 이번 턴 ask_questions 리마인더" in sys1
     assert "라운드 1 목표" in sys1
+    assert "suggestions" in sys1          # 추천 후보 계약 서술 (질문 설계 규칙 + 예시)
+    assert "모름 답변 처리" in sys1         # 모름 절 신설 (프롬프트 쪽 모름 인지·추천 근거)
+    assert "추천 후보" in sys1             # _remind_ask 리마인더 1줄
 
     _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
@@ -758,3 +762,180 @@ def test_plan_retry_exhaustion_marks_session_failed(sclient, fake_llm):
     s = sclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "failed" and s["status"] == "aborted"
     assert "plan 검증 재시도 한도 초과" in (s["error"] or "")
+
+
+# ---------------------------------------------------------------------------
+# 답변 추천(모름 처리) — 문항 suggestions 칩 + 미제출 (모름) 마킹 + (미확정) 팩트 적립
+
+
+RECOMMENDED_FACT = ("주요 고객: 사내 경영진·현업 부서 (미확정) — "
+                    "소스 '보고 개선안'의 '매출·실무 부서 대상' 표기에 근거")
+
+
+@pytest.fixture()
+def sg_llm():
+    return FakeStreamLLM([
+        # 턴1 kick: 2문항 — 문항1 서술형+suggestions, 문항2 객관형
+        ("가설 초안: 보고 업무 자동화.", [
+            ("ask_questions", {"round_summary": "뼈대 확인",
+                               "questions": [
+                                   {"text": "주요 고객은 누구인가?", "allow_free": True,
+                                    "suggestions": ["사내 경영진·현업 부서 (미확정)",
+                                                    "외부 고객사 (미확정)"]},
+                                   {"text": "언제까지 제출해야 하나요?", "options": [
+                                       {"label": "4월 말"},
+                                       {"label": "5월 말"}]},
+                               ]}),
+        ]),
+        # 턴2 (라운드 답변에 (모름) 있음): 근거 기반 추천 후보를 (미확정) 팩트로 save_facts —
+        # interview.md "모름 답변 처리" 절이 유도하는 동작
+        ("", [
+            ("save_facts", {"facts": [
+                {"content": RECOMMENDED_FACT, "source": "인터뷰 추천"}]}),
+        ]),
+        # 턴3 (팩트 승인 후): 남은 항목을 이어서 진행 (라운드 2)
+        ("", [
+            ("ask_questions", {"round_summary": "라운드 2 목표: 일정 확정",
+                               "questions": [{"text": "제출 일정은 어떻게 되나요?",
+                                              "allow_free": True}]}),
+        ]),
+    ])
+
+
+@pytest.fixture()
+def sg_app(db_env, test_engine, sg_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": sg_llm})
+
+
+@pytest.fixture()
+def sg_client(sg_app):
+    from fastapi.testclient import TestClient
+
+    with TestClient(sg_app) as c:
+        yield c
+
+
+def test_suggestions_flow_to_card_payload(sg_client):
+    """suggestions는 pending_questions(SessionOut)와 questions 이벤트 payload로
+    프론트 답변 카드까지 전달된다 (unknown[] 타입이라 openapi 계약은 무변경)."""
+    sid = _setup(sg_client)
+
+    events = _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
+    qev = next(p for n, p in events if n == "questions")
+    assert qev["questions"][0]["suggestions"] == ["사내 경영진·현업 부서 (미확정)",
+                                                  "외부 고객사 (미확정)"]
+    s = sg_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["pending_questions"][0]["suggestions"] == ["사내 경영진·현업 부서 (미확정)",
+                                                        "외부 고객사 (미확정)"]
+    assert s["pending_questions"][1].get("suggestions") is None  # 선택 필드 — 미제시 통과
+
+
+def test_answers_lines_are_index_sorted_and_unanswered_marked(sg_client, sg_llm):
+    """답변 라인은 인덱스 오름차순으로 정렬되고, 제출 순서와 무관하다."""
+    sid = _setup(sg_client)
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
+
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 1, "option": 0},
+                             {"index": 0, "free_text": "사내 경영진"}]})
+    answered = [m["content"] for m in sg_llm.calls[1]
+                if m["role"] == "user" and "[라운드 답변]" in m["content"]]
+    assert len(answered) == 1
+    assert "1. 주요 고객은 누구인가?\n→ 사내 경영진" in answered[0]
+    assert "2. 언제까지 제출해야 하나요?\n→ 4월 말" in answered[0]
+    assert answered[0].index("1. ") < answered[0].index("2. ")  # 역순 제출 → 정렬 조립
+    assert "→ (모름)" not in answered[0]
+
+
+def test_unanswered_question_marked_and_recommended_fact_staged(sg_client, sg_llm, db_env):
+    """모름 경로 e2e — 미제출 문항은 → (모름) 마킹, 다음 턴에서 근거 기반 추천이
+    (미확정) 팩트(fact_gate)로 제시되고, 승인 시 팩트 저장소에 origin=interview로
+    적립되며 라운드가 이어진다."""
+    sid = _setup(sg_client)
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
+
+    # 문항 1 (인덱스 0)은 무응답 — 서버가 → (모름) 마킹
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 1, "option": 0}]})
+    answered = [m["content"] for m in sg_llm.calls[1]
+                if m["role"] == "user" and "[라운드 답변]" in m["content"]]
+    assert "1. 주요 고객은 누구인가?\n→ (모름)" in answered[0]
+    assert "2. 언제까지 제출해야 하나요?\n→ 4월 말" in answered[0]
+
+    # 추천 팩트 제시 → fact_gate에서 '인터뷰 추천' 출처가 그대로 노출된다
+    s = sg_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "fact_gate"
+    assert s["pending_facts"][0]["source"] == "인터뷰 추천"
+    assert "(미확정)" in s["pending_facts"][0]["content"]
+
+    # 승인 시에만 적립 (원칙 4) — content·source 원문 보존
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    facts = sg_client.get("/api/projects/1/facts").json()
+    listed = [f for f in facts if f["source"] == "인터뷰 추천"]
+    assert len(listed) == 1 and listed[0]["origin"] == "interview"
+    assert listed[0]["content"] == RECOMMENDED_FACT  # 한 글자도 다르게 복사되지 않는다
+
+    # 추천 후보가 다음 턴을 막지 않는다 — 승인 스트림 내에서 다음 턴이 실행돼 라운드 2 질문이 진행된다
+    s = sg_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 2
+
+
+def test_empty_answers_rejected_with_409(sg_client, sg_llm):
+    """빈 answers 배열은 409 — LLM 턴이 열리지 않고 세션 상태가 보존된다
+    (프론트 1개 이상 강제의 서버 쪽 대응)."""
+    sid = _setup(sg_client)
+    _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
+
+    before = len(sg_llm.calls)
+    r = sg_client.post(f"/api/interview/sessions/{sid}/answers", json={"answers": []})
+    assert r.status_code == 409
+    s = sg_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    assert s["error"] is None
+    assert len(sg_llm.calls) == before  # LLM 턴 미개시
+
+
+@pytest.fixture()
+def sug_retry_llm():
+    return FakeStreamLLM([
+        # 턴1 1호출 — 추천 후보 4개 (validate_tool_args 실패 → ERROR)
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "고객은 누구인가?", "allow_free": True,
+                                                "suggestions": ["a", "b", "c", "d"]}]})]),
+        # 턴1 2호출 — ERROR 피드백을 받아 2개로 줄여 재호출
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "고객은 누구인가?", "allow_free": True,
+                                                "suggestions": ["a", "b"]}]})]),
+    ])
+
+
+@pytest.fixture()
+def sug_retry_app(db_env, test_engine, sug_retry_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": sug_retry_llm})
+
+
+@pytest.fixture()
+def sug_retry_client(sug_retry_app):
+    from fastapi.testclient import TestClient
+
+    with TestClient(sug_retry_app) as c:
+        yield c
+
+
+def test_ask_questions_suggestions_contract_triggers_retry(sug_retry_client, sug_retry_llm):
+    sid = _setup(sug_retry_client)
+
+    events = _sse_events(sug_retry_client, f"/api/interview/sessions/{sid}/kick")
+    assert "questions" in [n for n, _ in events]
+    assert len(sug_retry_llm.calls) == 2  # 추천 후보 위반 → ERROR 피드백 → 같은 턴 내 재호출
+    tool_feedback = [m["content"] for m in sug_retry_llm.calls[1] if m["role"] == "tool"]
+    assert len(tool_feedback) == 1 and tool_feedback[0].startswith("ERROR:")
+    assert f"최대 {MAX_SUGGESTIONS}개" in tool_feedback[0]
+
+    s = sug_retry_client.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    assert s["pending_questions"][0]["suggestions"] == ["a", "b"]

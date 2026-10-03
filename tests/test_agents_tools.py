@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.tools import (MAX_QUESTIONS, ToolError, _prose_option_lines,
+from app.agents.tools import (MAX_QUESTIONS, MAX_SUGGESTIONS,
+                              SUGGESTION_MAX_LEN, ToolError, _prose_option_lines,
                               validate_tool_args)
 
 
@@ -149,3 +150,60 @@ def test_prose_detection_coexists_with_options():
     with pytest.raises(ToolError, match="선택지 나열"):
         validate_tool_args("ask_questions", {"questions": [
             {"text": bad_text, "options": [{"label": "A"}, {"label": "B"}]}]})
+
+
+# ---------------------------------------------------------------------------
+# 추천 후보 칩 계약 — 문항별 suggestions(선택 필드): 문자열 배열, 1~3개, 한 줄
+
+
+def test_suggestions_optional_and_normalized():
+    out = validate_tool_args("ask_questions", {"questions": [
+        _q(allow_free=True, suggestions=["  후보 A  ", "후보 B", "후보 C"])]})
+    assert out["questions"][0]["suggestions"] == ["후보 A", "후보 B", "후보 C"]  # strip 정규화
+    for n in (1, 2):  # 1개·2개도 된다
+        out2 = validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions=[f"후보 {k}" for k in range(1, n + 1)])]})
+        assert len(out2["questions"][0]["suggestions"]) == n
+    # 객관형 문항에도 실 수 있다 (추천이 옵션 라벨과 같아도 무해 — 중복 금지 없음)
+    both = {"questions": [_q(options=[{"label": "a"}, {"label": "b"}],
+                             suggestions=["후보 A"])]}
+    assert validate_tool_args("ask_questions", both) == both
+
+
+def test_suggestions_empty_string_rejected():
+    with pytest.raises(ToolError, match="후보가 비어"):
+        validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions=["후보 A", "   "])]})
+
+
+def test_suggestions_non_string_item_rejected():
+    with pytest.raises(ToolError, match="문자열이어야"):
+        validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions=["후보 A", 5])]})
+
+
+def test_suggestions_over_max_rejected():
+    sugs = [f"후보 {k}" for k in range(MAX_SUGGESTIONS + 1)]  # 4개
+    with pytest.raises(ToolError, match=f"최대 {MAX_SUGGESTIONS}개"):
+        validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions=sugs)]})
+
+
+def test_suggestions_newline_rejected_literal_and_escaped():
+    for sug in ("후보 A\n후보 B", "후보 A\\n후보 B"):
+        with pytest.raises(ToolError, match="한 줄"):
+            validate_tool_args("ask_questions", {"questions": [
+                _q(allow_free=True, suggestions=[sug])]})
+
+
+def test_suggestions_too_long_rejected():
+    sug = "가" * (SUGGESTION_MAX_LEN + 1)
+    with pytest.raises(ToolError, match=f"{SUGGESTION_MAX_LEN}자 이내"):
+        validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions=[sug])]})
+
+
+def test_suggestions_non_list_rejected():
+    with pytest.raises(ToolError, match="문자열 배열이어야"):
+        validate_tool_args("ask_questions", {"questions": [
+            _q(allow_free=True, suggestions="후보 A")]})

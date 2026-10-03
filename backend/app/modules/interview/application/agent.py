@@ -121,6 +121,8 @@ class InterviewAgent:
             "- 질문 제시는 반드시 `ask_questions(round_summary, questions)` 도구 호출로만 한다.\n"
             "- 객관형 문항은 options에 {label, description}을 2개 이상, 서술형 문항은 options 없이 "
             "allow_free=true — 선택지를 질문 본문에 나열하지 않는다 (본문은 질문 한 문장).\n"
+            "- 모름 계열 답변((모름) 마킹 또는 '모름/몰라/모르겠다')에는 근거가 있는 추천 후보를 "
+            "(미확정) 팩트로 save_facts에 제시하고, 추천이 없으면 다음 라운드에서 다시 묻는다.\n"
             "- 'ask_questions 인자 형식 (완성 예시)' 섹션을 그대로 모방한다. round_summary는 "
             f"'라운드 {nxt} 목표: …' 형태로 쓴다 (이번 ask_questions 성공 시 라운드 {nxt})."
         )

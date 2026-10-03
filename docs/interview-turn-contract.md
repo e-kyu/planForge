@@ -47,6 +47,31 @@
   `SessionOut`으로 노출되고, 이력 `questions` EVENT 행 payload에도 `summary`가
   포함된다 — 재접속 리플레이에 라운드 목표가 보존된다 (구세션 행은 summary 부재 →
   프론트 폴백 제목).
+- **suggestions(추천 후보) — 문항 단위 선택 필드**: `string[]`(최대 3개,
+  각 120자 이내·strip 정규화·빈 값·개행(리터럴 `\n`·이스케이프 `\\n`) 금지 —
+  검증은 `validate_tool_args`, 거부 피드백은 위반 번호·원문 인용을 함께 알린다).
+  서버는 프론트 답변 카드에 "추천 칩"으로 노출한다 — 칩 클릭은 자유 입력 채움이며
+  사용자가 수정한 뒤 [답변 제출]로 제출한다 (즉시 제출 아님). "소스·확립 팩트에서
+  도출한 것만 담는다"는 콘텐츠 규칙과 "추측이면 (미확정) 포함" 유도는 결정론 검증
+  불가(의미 판단)라 `interview.md`의 소관이다.
+
+## 모름 답변과 추천 적립
+
+- `/answers` 라인 조립은 결정론이다 — **제출하지 않은(미제출) 문항은 `→ (모름)`
+  마킹 라인으로 채워** 사용자 원문과 함께 인덱스 오름차순으로 전달한다 (무응답
+  인덱스가 메시지에서 소실돼 LLM이 추론해야 했던 지점 차단). 답변이 0건인 빈 배열은
+  409다 — "전부 모름" 제출은 받지 않고 문항별 "모름" 입력·추천 칩으로 커버한다.
+- "모름·몰라·모르겠다" 계열 free_text는 **그대로 전달한다** — 정규식 마킹은
+  부분답변("모르지만 대안 검토가 필요하다") 오표기 위험이 있고 원칙 3(원문 보존)과
+  충돌한다. 모름 인지와 추천 생성은 `interview.md` "모름 답변 처리" 절의 소관이다.
+- 추천의 적립은 `save_facts` 경유로만 한다 — content에 `(미확정)`·근거를 명시하고
+  source는 "인터뷰 추천", origin은 기존 `interview` 그대로다. **fact_gate 승인
+  (사용자 수정 가능)이 유일한 채택 승인 지점**이고, 승인 후 interview-log 미러 →
+  plan 근거로 이어진다. save_facts는 라운드를 소모하지 않는다 (ask_questions만
+  `round_no +1`) — 모름 문항이 여러 개면 한 번의 호출에 모두 제시한다.
+- save_facts는 blocking 도구 — **추천 제시와 다음 질문을 같은 턴에 함께 호출하지
+  않는다**. 첫 blocking만 실행되고 뒤 호출은 소실되며(turn_graph `dispatch_blocking`),
+  소실되는 쪽이 ask_questions라 안전측이다. 승인 다음 턴에서 이어서 진행한다.
 
 ## 검증과 재시도 의미
 
@@ -104,6 +129,10 @@
 | options가 1개뿐 | "선택지는 2개 이상이어야" | `tools.py validate_tool_args` |
 | 선택지를 본문에 `예:` 등으로 나열 | "질문 본문에 선택지 나열이 있습니다" | `tools.py validate_tool_args` |
 | options 라벨 비어 있음 | "label이 비어 있습니다" | `tools.py validate_tool_args` |
+| 추천 후보(suggestions)를 4개 이상 제시 | "추천 후보는 최대 3개다" | `tools.py validate_tool_args` |
+| 추천 후보가 빈 문자열 | "추천 후보가 비어 있습니다" | `tools.py validate_tool_args` |
+| 추천 후보에 개행(리터럴·이스케이프) 포함 | "추천 후보는 한 줄 문장이다" | `tools.py validate_tool_args` |
+| 추천 후보가 120자 초과 | "추천 후보는 120자 이내 한 줄이다" | `tools.py validate_tool_args` |
 | 인자가 비-object(list/str/int) | "도구 인자는 JSON object여야" | `tools.py validate_tool_args` |
 | 인자 JSON 파싱 실패 | "도구 인자 JSON 파싱 실패" | `agent.py _dispatch` |
 | plan 마크다운 포맷·핵심 메시지 3개 위반 | "plan 포맷 검증 실패" 등 — 치료안 치트시트 첨부 | `agent.py _write_plan` |
