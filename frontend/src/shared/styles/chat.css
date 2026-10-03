@@ -252,6 +252,39 @@
   margin-top: 2px;
 }
 
+/* 추천 후보 칩 — 소스·팩트 기반 1줄 후보. 클릭하면 자유 입력에 채워진다
+   (인터뷰 모름 답변 추천, 결정 20). */
+.suggest-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.suggest-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--blue);
+}
+
+.suggest-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-sub);
+  color: var(--text-sub);
+  font-size: var(--fs-caption);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color var(--speed), color var(--speed), background var(--speed);
+}
+
+.suggest-chip:hover {
+  border-color: var(--blue);
+  color: var(--navy);
+  background: var(--surface);
+}
+
 .free-input,
 .fact-edit {
   border: 1px solid var(--line);

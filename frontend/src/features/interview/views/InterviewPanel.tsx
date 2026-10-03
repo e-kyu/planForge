@@ -11,6 +11,7 @@ type QuestionCard = {
   text: string;
   options?: { label: string; description?: string }[];
   allow_free?: boolean;
+  suggestions?: string[]; // 추천 후보 칩 (소스·팩트 기반 — 클릭 시 자유 입력에 채움)
 };
 type FactCard = { content: string; source?: string };
 
@@ -78,12 +79,13 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     }
   }
 
-  async function submitAnswers() {
+  async function submitAnswers(override?: Record<number, { option?: number; free?: string }>) {
     if (!session) return;
+    const src = override ?? answers; // 전체제출 시 setAnswers로 채운 상태를 그대로 넘긴다 (stale closure 회피)
     const qs = session.pending_questions ?? [];
     const items: { index: number; option?: number; free_text?: string }[] = [];
     for (let i = 0; i < qs.length; i++) {
-      const a = answers[i];
+      const a = src[i];
       if (!a) continue;
       if (a.option !== undefined) items.push({ index: i, option: a.option });
       else if (a.free?.trim()) items.push({ index: i, free_text: a.free.trim() });
@@ -93,6 +95,30 @@ export default function InterviewPanel({ pid }: { pid: number }) {
       return;
     }
     await turn(`/api/interview/sessions/${sid}/answers`, { answers: items });
+  }
+
+  /** 추천 전체제출 — 미답변 문항을 문항별 suggestions[0]으로 채워 한 번에 제출한다 (결정론).
+   *  suggestions 없는 문항은 미답변 유지 — 서버가 → (모름) 마킹으로 전달한다 (계약 문서). */
+  function submitAllWithSuggestions() {
+    if (!session) return;
+    const qs = (session.pending_questions as QuestionCard[]) ?? [];
+    let filled = 0;
+    const next: Record<number, { option?: number; free?: string }> = { ...answers };
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      const sug = q?.suggestions?.[0]; // 첫 후보 고정 — 사용자가 칩·입력으로 수정하는 여지는 유지
+      // 칩 표시 조건과 동일한 채움 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 미기입 → (모름))
+      if (!next[i] && sug && (q.allow_free ?? true)) {
+        next[i] = { option: undefined, free: sug };
+        filled++;
+      }
+    }
+    if (filled === 0 && Object.keys(answers).length === 0) {
+      setError("답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)");
+      return;
+    }
+    setAnswers(next); // 실패 시에도 채워진 상태가 화면에 남는다 (사용자 수정 여지)
+    void submitAnswers(next);
   }
 
   if (restoring) {
@@ -179,6 +205,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
             summary={session.pending_round_summary}
             onPick={(i, patch) => setAnswers((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }))}
             onSubmit={() => void submitAnswers()}
+            onSubmitAll={submitAllWithSuggestions}
             busy={busy}
           />
         )}
@@ -368,8 +395,13 @@ function AnswersCard(props: {
   summary?: string | null;
   onPick: (i: number, patch: { option?: number; free?: string }) => void;
   onSubmit: () => void;
+  onSubmitAll: () => void;
   busy: boolean;
 }) {
+  // 추천 칩·전체제출의 공통 표시 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 제외)
+  const canFill = (q: QuestionCard) =>
+    (q.suggestions ?? []).length > 0 && (q.allow_free ?? true);
+  const hasSuggestions = props.questions.some(canFill);
   return (
     <div className="card chat-card chat-card-active">
       <div className="chat-card-title">
@@ -381,6 +413,20 @@ function AnswersCard(props: {
         {props.questions.map((q, i) => (
           <li key={i}>
             <div className="q-text">{q.text}</div>
+            {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
+              <div className="suggest-row">
+                <span className="suggest-label">추천</span>
+                {q.suggestions!.map((sug, k) => (
+                  <button
+                    key={k}
+                    className="suggest-chip"
+                    onClick={() => props.onPick(i, { option: undefined, free: sug })}
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+            )}
             {q.options && q.options.length > 0 && (
               <div className="options">
                 {q.options.map((o, j) => (
@@ -407,6 +453,16 @@ function AnswersCard(props: {
         ))}
       </ol>
       <div className="center-actions">
+        {hasSuggestions && (
+          <Button
+            variant="ghost"
+            disabled={props.busy}
+            title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
+            onClick={props.onSubmitAll}
+          >
+            추천으로 전체 제출
+          </Button>
+        )}
         <Button onClick={props.onSubmit} disabled={props.busy}>
           답변 제출
         </Button>
