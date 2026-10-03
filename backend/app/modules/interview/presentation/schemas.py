@@ -14,6 +14,7 @@ class SessionOut(BaseModel):
     round_no: int
     status: str
     pending_questions: list | None
+    pending_round_summary: str | None
     pending_facts: list | None
     pending_key_messages: list | None
     checklist: list | None

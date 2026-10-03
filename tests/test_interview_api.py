@@ -377,6 +377,7 @@ def test_interview_design_arc_full_flow_to_plan_approval(dclient, design_llm, db
     assert "questions" in [n for n, _ in events]
     s = dclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    assert s["pending_round_summary"] == "라운드 1 목표: 아키텍처 스타일·기술 스택 확정"
     assert any(i["area"] == "개발설계서" for i in s["checklist"])
     # 보강된 프롬프트(설계 결정 설문)가 시스템 프롬프트로 주입됐는지
     first_call = design_llm.calls[0]
@@ -632,3 +633,21 @@ def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
     sys2 = fake_llm.calls[1][0]["content"]
     assert "라운드 2 목표" in sys2  # 라운드 진행 → 서버 계산 번호 증가
+
+
+def test_round_summary_persisted_and_replayed(sclient, fake_llm):
+    """라운드 목표(round_summary)는 세션에 영속·SessionOut으로 노출되고, 이력
+    questions EVENT 행 payload에도 summary가 실린다 — 재접속 리플레이(D6)에서
+    라운드 목표가 보존된다 (과거에는 이력 행에서 유실됐다)."""
+    sid = _setup(sclient)
+
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    qev = next(p for n, p in events if n == "questions")
+    assert qev["summary"] == "뼈대 확인"  # 라이브 SSE payload
+
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["pending_round_summary"] == "뼈대 확인"  # 세션 영속 → SessionOut 노출
+
+    rows = [m for m in sclient.get(f"/api/interview/sessions/{sid}/messages").json()
+            if m["kind"] == "questions"]
+    assert len(rows) == 1 and rows[0]["payload"]["summary"] == "뼈대 확인"

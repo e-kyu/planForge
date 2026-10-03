@@ -16,6 +16,7 @@ def test_create_session_starts_hypothesis(client):
     assert body["phase"] == "hypothesis"
     assert body["round_no"] == 0 and body["status"] == "active"
     assert body["pending_questions"] is None
+    assert body["pending_round_summary"] is None  # 라운드 목표 미제시 상태
 
 
 def test_session_404(client):

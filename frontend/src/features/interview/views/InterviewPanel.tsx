@@ -176,6 +176,8 @@ export default function InterviewPanel({ pid }: { pid: number }) {
           <AnswersCard
             questions={session.pending_questions as QuestionCard[]}
             answers={answers}
+            round={session.round_no}
+            summary={session.pending_round_summary}
             onPick={(i, patch) => setAnswers((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }))}
             onSubmit={() => void submitAnswers()}
             busy={busy}
@@ -255,12 +257,16 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         return <Bubble key={m.seq} side="right" text={m.content} />;
       case "assistant:text":
         return m.content.trim() ? <Bubble key={m.seq} side="left" text={m.content} /> : null;
-      case "event:questions":
+      case "event:questions": {
+        const round = typeof p.round === "number" ? p.round : null;
+        const summary = typeof p.summary === "string" && p.summary ? p.summary : null;
         return (
-          <StaticCard key={m.seq} title={`라운드 ${p.round ?? "?"} 질문`}>
+          <StaticCard key={m.seq}
+            title={summary ? `라운드 ${round ?? "?"} — 목표: ${summary}` : `라운드 ${round ?? "?"} 질문`}>
             <StaticQuestions questions={(p.questions ?? []) as QuestionCard[]} />
           </StaticCard>
         );
+      }
       case "event:facts": {
         const facts = (p.facts ?? []) as FactCard[];
         const conflicts = (p.conflicts ?? []) as { note?: string }[];
@@ -355,17 +361,23 @@ function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
   );
 }
 
-/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. */
+/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다. */
 function AnswersCard(props: {
   questions: QuestionCard[];
   answers: Record<number, { option?: number; free?: string }>;
+  round?: number;
+  summary?: string | null;
   onPick: (i: number, patch: { option?: number; free?: string }) => void;
   onSubmit: () => void;
   busy: boolean;
 }) {
   return (
     <div className="card chat-card chat-card-active">
-      <div className="chat-card-title">라운드 답변 — 선택지를 고르거나 직접 적어 주세요</div>
+      <div className="chat-card-title">
+        {props.summary
+          ? `라운드 ${props.round ?? "?"} — 목표: ${props.summary}`
+          : "라운드 답변 — 선택지를 고르거나 직접 적어 주세요"}
+      </div>
       <ol className="question-list">
         {props.questions.map((q, i) => (
           <li key={i}>

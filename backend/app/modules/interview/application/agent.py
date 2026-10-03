@@ -245,14 +245,16 @@ class InterviewAgent:
             return ("ERROR: 세션 라운드 한도(8)에 도달했습니다. 부족한 항목은 (미확정)으로 명시하고 "
                     "write_plan으로 마무리하라.")
         self.sess.round_no += 1
+        summary = (args.get("round_summary") or "").strip()
         self.sess.pending_questions = args["questions"]
+        self.sess.pending_round_summary = summary or None
         self.sess.phase = SessionPhase.AWAITING_ANSWERS
         events.add(Event(name="questions", kind=MessageKind.QUESTIONS,
-                         payload={"round": self.sess.round_no,
-                                  "summary": args.get("round_summary", ""),
+                         payload={"round": self.sess.round_no, "summary": summary,
                                   "questions": args["questions"]}))
         self._append(MessageRole.EVENT, MessageKind.QUESTIONS,
-                     payload={"round": self.sess.round_no, "questions": args["questions"]})
+                     payload={"round": self.sess.round_no, "summary": summary,
+                              "questions": args["questions"]})  # 이력 행에도 summary — 재접속 리플레이에서 라운드 목표 보존
         events.add(state_event(self.sess.phase.value, self.sess.round_no, self.sess.checklist))
         return "OK: 질문 카드를 제시했다. 사용자 답변을 기다린다."
 

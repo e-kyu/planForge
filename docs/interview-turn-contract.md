@@ -43,6 +43,10 @@
   의 라운드 번호는 `sess.round_no + 1`로 서버가 계산해 주입 — 프롬프트 퓨샷 예시의
   번호를 복사하지 않도록 각주 포함). 스키마의 권위는 여전히 `tools.py`의
   `INTERVIEW_TOOLS`다.
+- `round_summary`는 세션 행 `pending_round_summary`(nullable Text)로 영속돼
+  `SessionOut`으로 노출되고, 이력 `questions` EVENT 행 payload에도 `summary`가
+  포함된다 — 재접속 리플레이에 라운드 목표가 보존된다 (구세션 행은 summary 부재 →
+  프론트 폴백 제목).
 
 ## 검증과 재시도 의미
 

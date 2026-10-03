@@ -71,6 +71,7 @@ class InterviewSession(UpdatedAtMixin, Base):
         _enum(SessionStatus), default=SessionStatus.ACTIVE, server_default="active"
     )
     pending_questions: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
+    pending_round_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     pending_facts: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
     pending_key_messages: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)
     checklist: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)

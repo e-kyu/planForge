@@ -283,7 +283,10 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
 
 ## 계약 export 환경 (주의)
 
-`python scripts/export_openapi.py`(backend/에서, 시스템 python)로 export한 결과가 커밋 계약이다.
-`backend/.venv`의 fastapi/pydantic 신버전은 `UploadFile`을 `contentMediaType: application/octet-stream`으로,
-ValidationError에 `input`/`ctx`를 추가로 렌더링한다 — venv로 export하면 계약 diff가 발생한다.
-venv를 의도적으로 업그레이드했다면 별도 커밋에서 계약을 재생성·커밋할 것(프론트 `npm run gen:types` 동반).
+`python scripts/export_openapi.py`(backend/에서)로 export한 결과가 커밋 계약이다.
+(2026-10-03 실측 갱신 — **venv python이 현재 커밋 계약 렌더링과 일치한다:**
+venv fastapi 0.141.1+pydantic 2.13.5는 `UploadFile`을 `contentMediaType: application/octet-stream`으로,
+ValidationError에 `input`/`ctx`를 렌더링한다. 시스템 python(fastapi 0.115.11+pydantic 2.12.3)은
+`format: binary`·input/ctx 제거 렌더링이라 export하면 계약 diff가 유발된다 — 문서 초작성 당시와
+환경이 반전됐다. 세션마다 export 전 2환경 중 커밋 계약과 일치하는 쪽을 `git diff`로 확인할 것.)
+export 환경을 의도적으로 업그레이드했다면 별도 커밋에서 계약을 재생성·커밋할 것(프론트 `npm run gen:types` 동반).

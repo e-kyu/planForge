@@ -1024,6 +1024,8 @@ export interface components {
             status: string;
             /** Pending Questions */
             pending_questions: unknown[] | null;
+            /** Pending Round Summary */
+            pending_round_summary: string | null;
             /** Pending Facts */
             pending_facts: unknown[] | null;
             /** Pending Key Messages */
