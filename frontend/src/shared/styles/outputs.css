@@ -1,9 +1,24 @@
 /* 산출물 갤러리 (PR-5) — 목업 리스타일: ext 칩 + 산출물 카드 + 작업 큐 타임라인 */
-.panel-actions select {
+
+/* 대상 문서 셀렉트 — .btn 행과 높이·라운드·서체를 맞춘 중립 컨트롤. 네이티브 화살표는
+   appearance:none으로 지우고 chevron SVG를 대신 놓는다 (data URI 안엔 var() 불가 —
+   #666666는 --text-sub 미러 값). hover는 .btn-ghost:hover 팔레트 재사용. */
+.doc-select {
+  appearance: none;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 9px 34px 9px 16px;
+  background: var(--surface) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 13px center;
+  color: var(--text);
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--speed), background-color var(--speed);
+}
+
+.doc-select:hover:not(:disabled) {
+  border-color: var(--blue);
+  background-color: var(--surface-sub);
 }
 
 .output-list {

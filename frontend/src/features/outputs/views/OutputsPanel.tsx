@@ -56,6 +56,9 @@ export default function OutputsPanel({ pid }: { pid: number }) {
 
   const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
   const docs = (approvedPlan?.docs ?? []) as string[];
+  // 대상 문서 미선택 해석 — 다중 문서 plan에서만 셀렉트가 보이므로 거기서는 실제 문서 선택을
+  // 요구하고 생성 버튼을 잠근다 (단일 문서는 백엔드가 plan.docs[0]로 해석 — derive_build.py).
+  const docRequired = docs.length > 1 && !docSel;
   const visibleFailed = failedLatest.filter((j) => j.id !== failedDismissId);
   const recentJobs = [...jobs].reverse().slice(0, 5);
   // 수치 위반 잔여 배너 — job.result.findings의 측정값만 표현한다 (판정은 검수 단계, 결정 17)
@@ -78,8 +81,10 @@ export default function OutputsPanel({ pid }: { pid: number }) {
         {approvedPlan ? (
           <>
             {docs.length > 1 && (
-              <select aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
-                <option value="">plan 첫 문서</option>
+              <select className="doc-select" aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
+                <option value="" disabled>
+                  문서유형선택
+                </option>
                 {docs.map((d) => (
                   <option key={d} value={d}>
                     {d}
@@ -87,16 +92,16 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                 ))}
               </select>
             )}
-            <Button onClick={() => enqueue("slides", docSel || undefined)} disabled={busy}>
+            <Button onClick={() => enqueue("slides", docSel || undefined)} disabled={docRequired || busy}>
               PPT 생성 (슬라이드)
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["md"])} disabled={busy}>
+            <Button onClick={() => enqueue("report", docSel || undefined, ["md"])} disabled={docRequired || busy}>
               MD 생성
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["html"])} disabled={busy}>
+            <Button onClick={() => enqueue("report", docSel || undefined, ["html"])} disabled={docRequired || busy}>
               HTML 생성
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["docx"])} disabled={busy}>
+            <Button onClick={() => enqueue("report", docSel || undefined, ["docx"])} disabled={docRequired || busy}>
               DOCX 생성
             </Button>
           </>
