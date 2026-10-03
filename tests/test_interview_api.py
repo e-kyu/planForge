@@ -433,3 +433,53 @@ def test_interview_design_arc_full_flow_to_plan_approval(dclient, design_llm, db
     arch = next(s for s in plan.slides if s.type == "arch")
     assert len(arch.arch) == 3
     validate_skeleton(filter_slides(plan.slides, "개발설계서"))  # 골격 검증 (원칙 8)
+
+
+# ---------------------------------------------------------------------------
+# 질문 선택지 계약 강제 — 누락 시 ERROR 피드백 → 재호출 (turn_graph route_after_blocking)
+
+
+@pytest.fixture()
+def retry_llm():
+    return FakeStreamLLM([
+        # 턴1 1호출 — 선택지가 누락된 ask_questions (validate_tool_args 실패 → ERROR)
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "청중은 누구인가?"}]})]),
+        # 턴1 2호출 — ERROR 피드백을 받아 options를 채워 재호출
+        ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                                 "questions": [{"text": "청중은 누구인가?", "options": [
+                                     {"label": "경영진", "description": "도입 승인 판단"},
+                                     {"label": "실무팀", "description": "현업 작성자"}]}]})]),
+    ])
+
+
+@pytest.fixture()
+def rapp(db_env, test_engine, retry_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": retry_llm})
+
+
+@pytest.fixture()
+def rclient(rapp):
+    from fastapi.testclient import TestClient
+
+    with TestClient(rapp) as c:
+        yield c
+
+
+def test_ask_questions_options_contract_triggers_retry(rclient, retry_llm):
+    sid = _setup(rclient)
+
+    events = _sse_events(rclient, f"/api/interview/sessions/{sid}/kick")
+    names = [n for n, _ in events]
+    assert "questions" in names and "done" in names
+    assert len(retry_llm.calls) == 2  # 검증 실패 → ERROR 피드백 → 같은 턴 내 재호출 1회
+    tool_feedback = [m["content"] for m in retry_llm.calls[1] if m["role"] == "tool"]
+    assert len(tool_feedback) == 1 and tool_feedback[0].startswith("ERROR:")
+    assert "선택지" in tool_feedback[0]
+
+    s = rclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    q = s["pending_questions"][0]
+    assert q["options"][0]["label"] == "경영진"

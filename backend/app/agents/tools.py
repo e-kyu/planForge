@@ -34,8 +34,9 @@ INTERVIEW_TOOLS: list[dict] = [
         "function": {
             "name": "ask_questions",
             "description": ("다음 인터뷰 라운드의 질문을 제시한다 (라운드당 최대 4문항). "
-                            "선택지는 상호배타적·실제 사례 기반으로 하고 근거를 설명에 포함한다. "
-                            "서술형 주제는 allow_free=true."),
+                            "각 문항은 options 2개 이상 또는 allow_free=true 중 하나를 "
+                            "반드시 갖는다 (둘 다 있어도 된다. 둘 다 없으면 서버가 거부한다). "
+                            "선택지는 상호배타적·실제 사례 기반으로 하고 근거를 설명에 포함한다."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -49,6 +50,7 @@ INTERVIEW_TOOLS: list[dict] = [
                                 "text": {"type": "string"},
                                 "options": {
                                     "type": "array",
+                                    "minItems": 2,
                                     "items": {
                                         "type": "object",
                                         "properties": {
@@ -167,6 +169,20 @@ def validate_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
         if len(qs) > MAX_QUESTIONS:
             raise ToolError(f"라운드당 최대 {MAX_QUESTIONS}문항입니다 (현재 {len(qs)}개) — "
                             f"{MAX_QUESTIONS}개만 남기고 나머지는 다음 라운드로")
+        # 문항별 선택지 계약: options 2개 이상 또는 allow_free=true (둘 다 없으면 거부)
+        for i, q in enumerate(qs, 1):
+            if not isinstance(q, dict):
+                raise ToolError(f"문항 {i}: 문항은 object여야 합니다")
+            opts = q.get("options") or []
+            if not opts:
+                if q.get("allow_free") is not True:
+                    raise ToolError(f"문항 {i}: 선택지가 없습니다 — 객관형이면 options를 "
+                                    f"2개(라벨+설명) 이상 채우고, 서술형 주제면 options 없이 "
+                                    f"allow_free=true를 명시하라")
+                continue
+            if len(opts) < 2:
+                raise ToolError(f"문항 {i}: 선택지는 2개 이상이어야 합니다 (현재 {len(opts)}개) — "
+                                f"서술형 주제면 options를 빼고 allow_free=true로")
         return args
     if name == "save_facts":
         facts = args.get("facts") or []
