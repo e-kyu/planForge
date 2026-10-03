@@ -106,6 +106,14 @@ def cmd_derive(args) -> int:
     res = d.derive(args.plan, args.kind, args.doc)
     print(f"OK: {res.work_path} (시도 {res.attempts}회, "
           + (f"슬라이드 {res.slides_count}개" if args.kind == "slides" else f"섹션 {res.sections_count}개") + ")")
+    if res.findings:
+        # 결정 17 — 측정만 하고 진행한다(생성 실패 아님). 판정 권위는 검수 단계.
+        reds = sum(1 for f in res.findings if f.severity == "red")
+        print(f"주의: 수치 무결성 대조에서 미달 {len(res.findings)}건 (🔴 {reds}건)")
+        for f in res.findings:
+            print(f"  - {f}")
+        print("수치 판정은 검수 단계 소관입니다 (결정 17) — 위반 여부 게이트는 "
+              "`python -m planforge numcheck`(exit 1 계약)로 별행하세요.")
     if res.unconfirmed:
         print(f"주의: (미확정) 표기 슬라이드 {res.unconfirmed} — 산출물에 그대로 유지됩니다")
     if args.no_build:

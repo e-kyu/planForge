@@ -29,6 +29,7 @@ from app.shared.workspace import read_sources_context, write_interview_log_mirro
 from ..domain.events import Event, done_event, error_event, notice_event, progress_event, state_event
 from ..infrastructure.models import (
     InterviewMessage,
+    InterviewSession,
     MessageKind,
     MessageRole,
     SessionPhase,
@@ -64,11 +65,11 @@ class _EventSink(list):
 class InterviewAgent:
     """세션 1개에 바인딩된 턴 실행기. stream_fn(messages, tools)은 provider.stream 계약.
 
-    emit(events[Event])를 주입하면 이벤트가 수집과 동시에 SSE로 흘러나간다.
+    emit(events[Event])를 run_turn에 주입하면 이벤트가 수집과 동시에 SSE로 흘러나간다.
     """
 
     def __init__(self, db: DBSession, session: "InterviewSession", stream_fn,
-                 sources_dirs: list[Path], settings=None, emit=None):
+                 sources_dirs: list[Path], settings=None):
         self.db = db
         self.sess = session
         self.stream_fn = stream_fn

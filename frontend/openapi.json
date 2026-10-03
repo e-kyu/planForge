@@ -364,6 +364,150 @@
         }
       }
     },
+    "/api/projects/{project_id}/overview": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Get Overview",
+        "description": "개요 문서 조회 — 파일 부재는 오류가 아니라 exists=False (에디터의 빈 뼈대 시작용).",
+        "operationId": "get_overview_api_projects__project_id__overview_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Save Overview",
+        "description": "개요 문서 업서트 — 덮어쓰기가 허용되는 유일한 소스 경로 (개요 문서 docstring 참조).",
+        "operationId": "save_overview_api_projects__project_id__overview_put",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverviewSave"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{project_id}/sources/{name}/download": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Download Source",
+        "description": "소스 대역파일 다운로드 — DELETE /sources/{name}과 대칭 (파일 경로 검증 공유).",
+        "operationId": "download_source_api_projects__project_id__sources__name__download_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sources": {
       "get": {
         "tags": [
@@ -382,6 +526,47 @@
                   },
                   "type": "array",
                   "title": "Response List Global Sources Api Sources Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sources/{name}/download": {
+      "get": {
+        "tags": [
+          "sources"
+        ],
+        "summary": "Download Global Source",
+        "description": "글로벌 소스 다운로드 — 쓰기·삭제 없는 읽기 전용 경로 (프로젝트 download와 검증 공유).",
+        "operationId": "download_global_source_api_sources__name__download_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2479,6 +2664,55 @@
           "created_at"
         ],
         "title": "MessageOut"
+      },
+      "OverviewOut": {
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "mtime": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mtime"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exists",
+          "content",
+          "size",
+          "mtime"
+        ],
+        "title": "OverviewOut",
+        "description": "소스 탭 웹 작성 개요 문서 (sources/overview.md — 파일이 곧 SSOT)."
+      },
+      "OverviewSave": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "OverviewSave"
       },
       "PlanOut": {
         "properties": {

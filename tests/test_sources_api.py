@@ -2,6 +2,12 @@
 """소스 API (FR-2.1 + §5 업로드 검증) 테스트."""
 from __future__ import annotations
 
+from urllib.parse import unquote
+
+from app.shared.workspace import read_sources_context
+
+OVERVIEW = "overview.md"  # shared.workspace.OVERVIEW_NAME — 하드코딩으로 계약 고정
+
 
 def _mk(client, slug="src-demo"):
     r = client.post("/api/projects", json={"slug": slug, "title": "소스 데모"})
@@ -109,3 +115,164 @@ def test_global_sources_readonly_listing(client, db_env, monkeypatch):
     # 글로벌에는 쓰기/삭제 경로가 없다 — 프로젝트 소스로만 조작 가능
     r = client.delete("/api/sources/공용-메뉴얼.txt")
     assert r.status_code in (404, 405)
+
+
+# ---------------------------------------------------------------- 개요 문서 (sources/overview.md)
+
+def _overview_path(db_env, slug="src-demo"):
+    return db_env / slug / "sources" / OVERVIEW
+
+
+def test_overview_missing_returns_empty(client, db_env):
+    pid = _mk(client)
+    r = client.get(f"/api/projects/{pid}/overview")
+    assert r.status_code == 200, r.text
+    assert r.json() == {"exists": False, "content": "", "size": 0, "mtime": None}
+    # 부재 조회로 파일은 만들어지지 않는다
+    assert not _overview_path(db_env).exists()
+
+
+def test_overview_put_creates_lf_no_bom(client, db_env):
+    pid = _mk(client)
+    r = client.put(f"/api/projects/{pid}/overview", json={"content": "# 프로젝트 개요\n\n## 목적"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["exists"] is True
+    raw = _overview_path(db_env).read_bytes()
+    assert raw == "# 프로젝트 개요\n\n## 목적".encode("utf-8")
+    assert b"\r\n" not in raw  # 개행 LF 고정
+    assert not raw.startswith(b"\xef\xbb\xbf")  # BOM 없음
+
+
+def test_overview_put_overwrites_and_normalizes_newlines(client, db_env):
+    pid = _mk(client)
+    r1 = client.put(f"/api/projects/{pid}/overview", json={"content": "# v1"})
+    assert r1.status_code == 200, r1.text
+    # 소스 업로드의 409-무덮어쓰기와 달리 개요는 업서트가 유일한 쓰기 경로
+    r2 = client.put(f"/api/projects/{pid}/overview", json={"content": "# v2\r\n본문\r텍스트"})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["content"] == "# v2\n본문\n텍스트"
+    assert _overview_path(db_env).read_text(encoding="utf-8") == "# v2\n본문\n텍스트"
+
+
+def test_overview_get_roundtrip(client, db_env):
+    pid = _mk(client)
+    content = "# 프로젝트 개요\n\n인터뷰 기본자료"
+    client.put(f"/api/projects/{pid}/overview", json={"content": content})
+    r = client.get(f"/api/projects/{pid}/overview")
+    body = r.json()
+    assert body["exists"] is True
+    assert body["content"] == content
+    assert body["size"] == len(content.encode("utf-8"))
+    assert isinstance(body["mtime"], float)
+
+
+def test_overview_put_rejects_empty(client, db_env):
+    pid = _mk(client)
+    for content in ("", "   \n  "):
+        r = client.put(f"/api/projects/{pid}/overview", json={"content": content})
+        assert r.status_code == 409
+        assert "비어" in r.json()["detail"]
+    assert not _overview_path(db_env).exists()  # 첫 저장 차단 — 빈 파일 방치 방지
+
+
+def test_overview_put_rejects_oversize(client):
+    pid = _mk(client)
+    r = client.put(f"/api/projects/{pid}/overview",
+                   json={"content": "a" * (2 * 1024 * 1024 + 1)})
+    assert r.status_code == 409
+    assert "너무 큽니다" in r.json()["detail"]
+
+
+def test_overview_unknown_project_404(client):
+    r = client.get("/api/projects/9999/overview")
+    assert r.status_code == 404
+    r = client.put("/api/projects/9999/overview", json={"content": "# x"})
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------- 소스 다운로드 (DELETE와 대칭)
+
+def test_source_download_roundtrip(client, db_env):
+    pid = _mk(client)
+    client.put(f"/api/projects/{pid}/overview", json={"content": "# 개요 본문"})
+    client.post(f"/api/projects/{pid}/sources",
+                files={"file": ("메뉴얼.txt", "일반 소스 본문".encode("utf-8"), "text/plain")})
+
+    r = client.get(f"/api/projects/{pid}/sources/{OVERVIEW}/download")
+    assert r.status_code == 200, r.text
+    assert r.content == "# 개요 본문".encode("utf-8")
+    assert r.headers["content-type"].startswith("text/markdown")
+    assert OVERVIEW in r.headers["content-disposition"]
+
+    r = client.get(f"/api/projects/{pid}/sources/메뉴얼.txt/download")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/plain")
+
+
+def test_source_download_missing_404(client):
+    pid = _mk(client)
+    r = client.get(f"/api/projects/{pid}/sources/{OVERVIEW}/download")
+    assert r.status_code == 404
+
+
+def test_source_delete_and_download_reject_traversal(client, db_env):
+    pid = _mk(client)
+    plan = db_env / "src-demo" / "plan.md"  # sources/ 밖 — 접근 불가해야 한다
+    plan.write_text("# plan", encoding="utf-8")
+    # httpx는 URL의 '.' 세그먼트를 클라이언트에서 정규화해 버리므로(앱 미도달),
+    # 서버 도착값이 '..'이 되는 인코딩 변형으로 앱의 가드를 직접 검증한다.
+    for encoded in ("..%2Fplan.md", "..%5Cplan.md", "%2E%2E"):
+        r = client.get(f"/api/projects/{pid}/sources/{encoded}/download")
+        assert r.status_code == 404, encoded
+        r = client.delete(f"/api/projects/{pid}/sources/{encoded}")
+        assert r.status_code == 404, encoded
+    assert plan.read_text(encoding="utf-8") == "# plan"
+
+
+# ---------------------------------------------------------------- 글로벌 소스 다운로드 (읽기 전용)
+
+def test_global_source_download_roundtrip(client, db_env, monkeypatch):
+    glob = db_env / "global-sources"
+    glob.mkdir(parents=True)
+    (glob / "공용-메뉴얼.txt").write_text("공용 소스 본문", encoding="utf-8")
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
+
+    r = client.get("/api/sources/공용-메뉴얼.txt/download")
+    assert r.status_code == 200, r.text
+    assert r.content == "공용 소스 본문".encode("utf-8")
+    assert r.headers["content-type"].startswith("text/plain")
+    # 비ASCII 파일명 — RFC 5987 filename*으로 인코딩되어 실린다
+    cd = r.headers["content-disposition"]
+    assert unquote(cd.split("utf-8''")[1]) == "공용-메뉴얼.txt"
+    # 다운로드는 파일을 변하지 않게 한다 — 글로벌 소스는 읽기 전용이다
+    assert (glob / "공용-메뉴얼.txt").read_text(encoding="utf-8") == "공용 소스 본문"
+
+
+def test_global_source_download_missing_and_traversal(client, db_env, monkeypatch):
+    glob = db_env / "global-sources"
+    glob.mkdir(parents=True)
+    (glob / "공용.txt").write_text("x", encoding="utf-8")
+    outside = db_env / "outside.md"  # global-sources/ 밖 — 접근 불가해야 한다
+    outside.write_text("# outside", encoding="utf-8")
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
+
+    r = client.get("/api/sources/없는파일.txt/download")
+    assert r.status_code == 404
+    for encoded in ("..%2Foutside.md", "..%5Coutside.md", "%2E%2E"):
+        r = client.get(f"/api/sources/{encoded}/download")
+        assert r.status_code == 404, encoded
+    assert outside.read_text(encoding="utf-8") == "# outside"
+
+
+def test_overview_in_sources_list_and_interview_context(client, db_env):
+    pid = _mk(client)
+    content = "# 프로젝트 개요\n\n인터뷰 기본자료로 활용된다"
+    client.put(f"/api/projects/{pid}/overview", json={"content": content})
+
+    r = client.get(f"/api/projects/{pid}/sources")
+    assert OVERVIEW in [s["name"] for s in r.json()]  # 일반 소스로 목록 표시
+
+    # 인터뷰 턴의 소스 주입(self.sources_dirs → read_sources_context)에 자동 포함
+    ctx = read_sources_context([db_env / "src-demo" / "sources"])
+    assert "인터뷰 기본자료로 활용된다" in ctx

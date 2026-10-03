@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Download, Layout } from "lucide-react";
 import type { Job } from "../../../api/client";
 import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
+import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOutputs } from "../viewmodels/useOutputs";
-import { elapsedText, progressText } from "../../../shared/lib/jobs";
+import { navigate } from "../../../shared/lib/hashRoute";
+import { elapsedText, jobStateText, progressText, JOB_TYPE_LABEL } from "../../../shared/lib/jobs";
+import type { DeriveFinding } from "../../../shared/lib/jobs";
 
 const EXT_LABEL: Record<string, string> = {
   pptx: "PPTX",
@@ -15,26 +18,13 @@ const EXT_LABEL: Record<string, string> = {
 
 type JobCounts = { slides?: number; sections?: number; attempts?: number };
 
-const JOB_TYPE_LABEL: Record<string, string> = {
-  derive_build: "파생물 생성",
-  review: "검수",
-  plan_revise: "plan 반영",
-};
-
+/** 잡 타입·상태 레이블 — 타입 레이블은 공용 셀렉터(jobs.ts)에서 import한다. */
 const JOB_STATUS: Record<string, { icon: string; label: string }> = {
   queued: { icon: "○", label: "대기" },
   running: { icon: "⟳", label: "진행" },
   done: { icon: "✓", label: "완료" },
   failed: { icon: "✕", label: "실패" },
   cancelled: { icon: "−", label: "취소" },
-};
-
-const ERROR_CLASS_LABEL: Record<string, string> = {
-  validation: "스키마/포맷 문제",
-  schema: "스키마/포맷 문제",
-  llm: "LLM 변환 문제",
-  builder: "빌더 문제",
-  internal: "내부 오류",
 };
 
 /** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드). */
@@ -44,7 +34,10 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     plans,
     jobs,
     failedLatest,
+    residualJob,
     activeJob,
+    jobsError,
+    now,
     error,
     notice,
     busy,
@@ -57,6 +50,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
   const [docSel, setDocSel] = useState<string>("");
   // 배너 dismiss — 닫은 job id를 기억해 새 실패가 오면 배너가 다시 나타난다
   const [failedDismissId, setFailedDismissId] = useState<number | null>(null);
+  const [residualDismissId, setResidualDismissId] = useState<number | null>(null);
 
   if (builds === null) return <Empty>불러오는 중…</Empty>;
 
@@ -64,6 +58,15 @@ export default function OutputsPanel({ pid }: { pid: number }) {
   const docs = (approvedPlan?.docs ?? []) as string[];
   const visibleFailed = failedLatest.filter((j) => j.id !== failedDismissId);
   const recentJobs = [...jobs].reverse().slice(0, 5);
+  // 수치 위반 잔여 배너 — job.result.findings의 측정값만 표현한다 (판정은 검수 단계, 결정 17)
+  const residualFindings = (residualJob?.result?.findings ?? []) as DeriveFinding[];
+  const residual = residualJob && residualDismissId !== residualJob.id
+    ? {
+        id: residualJob.id,
+        total: residualFindings.length,
+        reds: residualFindings.filter((f) => f.severity === "red").length,
+      }
+    : undefined;
 
   return (
     <section>
@@ -102,22 +105,35 @@ export default function OutputsPanel({ pid }: { pid: number }) {
         )}
       </PageHeader>
 
+      {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
-      {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시 */}
+      {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시.
+          진행 문구·경과는 useTickingNow 틱으로 매초 갱신 — 폴링만으론 동일 페이로드에서 리렌더가 없다 */}
       {busy && (
         <Banner kind="info">
           {activeJob?.status === "running"
-            ? `${JOB_TYPE_LABEL[activeJob.type] ?? activeJob.type} — ${progressText(activeJob) ?? "처리 중"}${
-                elapsedText(activeJob, Date.now()) ? ` · ${elapsedText(activeJob, Date.now())}` : ""
-              }`
+            ? (jobStateText(activeJob, now) ?? "파생물 생성 — 처리 중")
             : "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)"}
+        </Banner>
+      )}
+
+      {residual && (
+        <Banner kind="info" onDismiss={() => setResidualDismissId(residual.id)}>
+          {/* 수치 위반이 남은 채 생성 완료 — 실패가 아니라 검수 자동 큐잉 (결정 17).
+              최신 클린 생성이 이 배너를 대체한다 (latestDoneDeriveWithReds 규약). */}
+          생성 완료 — 수치 무결성 미달 {residual.total}건 (🔴 {residual.reds}건) — 검수가
+          자동 실행되어 대조합니다.
+          <Button variant="ghost" onClick={() => navigate(`/projects/${pid}/review`)}>
+            검수로 이동
+          </Button>
         </Banner>
       )}
 
       {visibleFailed.length > 0 && (
         <Banner kind="error" onDismiss={() => setFailedDismissId(visibleFailed[visibleFailed.length - 1]!.id)}>
-          실패한 작업 {visibleFailed.length}건 — {jobDetail(visibleFailed[visibleFailed.length - 1]!)}
+          {/* 저장된 오류 전문(job.error)에 실린 진단 목록을 잃지 않게 토글로 펼친다 (결정 16) */}
+          <JobErrorDetail job={visibleFailed[visibleFailed.length - 1]!} title={`실패한 작업 ${visibleFailed.length}건`} />
         </Banner>
       )}
 
@@ -196,7 +212,6 @@ export default function OutputsPanel({ pid }: { pid: number }) {
           <ul className="job-list">
             {recentJobs.map((j) => {
               const st = JOB_STATUS[j.status];
-              const now = Date.now();
               return (
                 <li key={j.id} className={`job-item job-${j.status}`}>
                   <div className="job-head">
@@ -211,6 +226,8 @@ export default function OutputsPanel({ pid }: { pid: number }) {
                       {progressText(j) ?? "처리 중"}
                       {elapsedText(j, now) ? ` · ${elapsedText(j, now)}` : ""}
                     </div>
+                  ) : j.status === "failed" ? (
+                    <JobErrorDetail job={j} />
                   ) : (
                     <div className="job-detail">{jobDetail(j)}</div>
                   )}
@@ -228,12 +245,9 @@ function fmtVersion(n: number): string {
   return `v${String(n).padStart(2, "0")}`;
 }
 
-/** 작업 상세줄 — 실패는 오류 한 줄, 타입별 결과 요약 (result 스키마는 worker.py 참조). */
+/** 작업 상세줄 — 실패는 JobErrorDetail 공용 컴포넌트가 담당, 타입별 결과 요약
+ * (result 스키마는 worker.py 참조). */
 function jobDetail(j: Job): string {
-  if (j.status === "failed") {
-    const cls = j.error_class ? (ERROR_CLASS_LABEL[j.error_class] ?? "내부 오류") : "오류";
-    return `${cls} — ${j.error?.split("\n")[0] ?? ""}`;
-  }
   if (j.type === "review") {
     const c = j.result?.counts as { red?: number; yellow?: number; white?: number } | undefined;
     return c ? `🔴 ${c.red ?? 0} · 🟡 ${c.yellow ?? 0} · ⚪ ${c.white ?? 0}` : "결과 대기 중";
@@ -244,5 +258,9 @@ function jobDetail(j: Job): string {
   }
   const kind = (j.payload as { kind?: string }).kind ?? "-";
   const c = j.result?.counts as JobCounts | undefined;
-  return c ? `${kind} · 슬라이드 ${c.slides ?? "-"}/섹션 ${c.sections ?? "-"}` : kind;
+  const base = c ? `${kind} · 슬라이드 ${c.slides ?? "-"}/섹션 ${c.sections ?? "-"}` : kind;
+  // 수치 측정값 영속 기록 — 발견사항 수 요약 (판정은 검수 리포트가 담당 — 결정 17)
+  const f = (j.result?.findings ?? null) as DeriveFinding[] | null;
+  if (!f?.length) return base;
+  return `${base} · 위반 ${f.length}건(🔴 ${f.filter((x) => x.severity === "red").length}건)`;
 }

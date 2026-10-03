@@ -12,7 +12,7 @@
       "cwd": "${workspaceFolder}/backend",
       "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "env": { "PYTHONUTF8": "1" },
-      "console": "internalConsole"
+      "console": "integratedTerminal"
     },
     {
       "name": "Backend: uvicorn (--reload)",
@@ -23,7 +23,7 @@
       "cwd": "${workspaceFolder}/backend",
       "python": "${workspaceFolder}/backend/.venv/Scripts/python.exe",
       "env": { "PYTHONUTF8": "1" },
-      "console": "internalConsole"
+      "console": "integratedTerminal"
     },
     {
       "name": "Frontend: Vite (dev)",

@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Job } from "../../../api/client";
-import { enqueueReview, fetchJobs, fetchPlans, fetchReviews, reviseFromReview } from "../models/reviewApi";
+import { enqueueReview, fetchPlans, fetchReviews, reviseFromReview } from "../models/reviewApi";
 import { latestByType } from "../../../shared/lib/jobs";
+import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
+import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { errMsg } from "../../../shared/lib/errMsg";
 
 /* 검수 리포트 (FR-4, FR-5) — 리포트·plan·job 목록 + 검수 실행 + 반영 잡 1회 통지.
- * 검수·반영 잡이 활성인 동안 1.5초 폴링(refetchInterval) — OutputsPanel과 같은 패턴. */
+ * 잡 폴링 소유자는 공용 useActiveJobs (헤더 ActivityPill·OutputsPanel과 같은 캐시) —
+ * 검수 탭이 아닐 때도 폴링이 계속된다(헤더가 소유자). */
 
-const hasActive = (jobs: Job[]) =>
+/** 검수 feature 관점의 활성 판정 — review/plan_revise 타입만 (추적성: 검수 배너 게이트). */
+const hasReviewActive = (jobs: Job[]) =>
   jobs.some(
     (j) =>
       (j.type === "review" || j.type === "plan_revise") &&
@@ -19,13 +23,9 @@ export function useReviews(pid: number) {
   const qc = useQueryClient();
   const reviewsQ = useQuery({ queryKey: ["reviews", pid], queryFn: () => fetchReviews(pid) });
   const plansQ = useQuery({ queryKey: ["plans", pid], queryFn: () => fetchPlans(pid) });
-  const jobsQ = useQuery({
-    queryKey: ["jobs", pid],
-    queryFn: () => fetchJobs(pid),
-    refetchInterval: (q) => (hasActive(q.state.data ?? []) ? 1500 : false),
-  });
+  const jobsS = useActiveJobs(pid);
 
-  // 검수 enqueue API 즉시 실패용 — 반영 잡 실패는 최신 job에서 파생(reviseError)한다
+  // 검수 enqueue API 즉시 실패용 — 반영 잡 실패는 최신 job 객체에서 파생 한다(error 원문 보존)
   const [enqueueError, setEnqueueError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -33,9 +33,11 @@ export function useReviews(pid: number) {
   const reviseSeenRef = useRef<Set<number>>(new Set());
   const bootstrappedRef = useRef(false);
 
-  const jobs = jobsQ.data ?? [];
-  const busy = pending || hasActive(jobs);
-  const active = hasActive(jobs);
+  const jobs = jobsS.jobs;
+  const busy = pending || hasReviewActive(jobs);
+  const active = hasReviewActive(jobs);
+  // 경과 갱신 틱 — 조건은 some(running) (activeJob 기준이면 여러 잡일 때 멈춘다)
+  const now = useTickingNow(jobs.some((j) => j.status === "running"));
 
   // 활성 → 비활성 전환(검수·반영 잡 완료) 시 리포트·plan 갱신 — 원본 폴링 완료 경로 동작 보존
   const prevActiveRef = useRef(false);
@@ -59,9 +61,9 @@ export function useReviews(pid: number) {
   // 실패 배너는 state가 아니라 최신 job 상태에서 파생(reviseError) — 과거 실패 잔존 방지.
   useEffect(() => {
     // 첫 데이터 도착 시 이미 종료된 plan_revise 잡은 통지 대상에서 제외 — 탭 재진입 재표시 방지
-    if (jobsQ.data !== undefined && !bootstrappedRef.current) {
+    if (jobsS.loaded && !bootstrappedRef.current) {
       bootstrappedRef.current = true;
-      for (const j of jobsQ.data) {
+      for (const j of jobs) {
         if (j.type === "plan_revise" && j.status !== "queued" && j.status !== "running") {
           reviseSeenRef.current.add(j.id);
         }
@@ -78,14 +80,15 @@ export function useReviews(pid: number) {
         reviseSeenRef.current.add(j.id);
       }
     }
-  }, [jobs, jobsQ.data]);
+  }, [jobs, jobsS.loaded]);
 
-  // 마지막 반영 잡이 실패한 경우에만 배너 — 새 잡이 큐에 들어오면 자동 소멸
+  // 마지막 반영 잡이 실패한 경우에만 배너 — 새 잡이 큐에 들어오면 자동 소멸.
+  // 문자열 가공은 View 공용 JobErrorDetail이 담당하므로 job 객체만 흘린다 (결정 16).
   const latestRevise = useMemo(() => latestByType(jobs, "plan_revise"), [jobs]);
-  const reviseError =
-    latestRevise?.status === "failed"
-      ? `plan 반영 실패: ${(latestRevise.error ?? "원인 불명").split("\n")[0]}`
-      : null;
+  const failedReviseJob = useMemo(
+    () => (latestRevise && latestRevise.status === "failed" ? latestRevise : null),
+    [latestRevise],
+  );
 
   function enqueue() {
     setEnqueueError(null);
@@ -106,7 +109,10 @@ export function useReviews(pid: number) {
     reports: reviewsQ.data ?? null,
     plans: plansQ.data ?? [],
     jobs,
-    error: enqueueError ?? reviseError,
+    jobsError: jobsS.jobsError,
+    now,
+    error: enqueueError,
+    failedReviseJob,
     notice,
     busy,
     reviseDone,

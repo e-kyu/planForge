@@ -1,10 +1,8 @@
 import { apiGet, apiPost, type Build, type Job, type Plan } from "../../../api/client";
 
-/* 산출물 API 호출 계층 (§2 Model). */
+/* 산출물 API 호출 계층 (§2 Model). fetchJobs의 유일한 정의는 shared/lib/useActiveJobs에 있다. */
 
 export const fetchBuilds = (pid: number) => apiGet<Build[]>(`/api/projects/${pid}/outputs`);
-
-export const fetchJobs = (pid: number) => apiGet<Job[]>(`/api/projects/${pid}/jobs`);
 
 export const fetchPlans = (pid: number) => apiGet<Plan[]>(`/api/projects/${pid}/plans`);
 

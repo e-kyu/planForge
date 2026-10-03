@@ -52,7 +52,11 @@ def run_plan_revise_job(ctx, session, job) -> dict:
         except Exception:
             print(f"[plan_revise] job #{job.id} 진행 기록 실패", flush=True)
 
-    report_progress(session, job, "llm")
+    # 초기 진행 기록 — DB 오류가 작업 자체를 죽이지 않게 방어한다 (facade 계약: caller 방어).
+    try:
+        report_progress(session, job, "llm")
+    except Exception:
+        print(f"[plan_revise] job #{job.id} 진행 기록 실패", flush=True)
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
     try:
         chat_fn = registry.chat_fn("plan_revise")

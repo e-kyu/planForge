@@ -153,6 +153,28 @@ def validate_source_file(name: str, data: bytes) -> str:
     return cleaned
 
 
+OVERVIEW_NAME = "overview.md"  # 워크스페이스 sources/ 의 웹 작성 개요 문서 — 단일 출처 (FR-2.1)
+
+
+def validate_overview_content(content: str) -> str:
+    """개요 문서 업서트 검증: 개행 LF 정규화 + 빈 내용·용량·UTF-8 검사. 정규화된 콘텐츠 반환.
+
+    파일명은 OVERVIEW_NAME 고정이라 이름 정규화가 없고, 덮어쓰기(업서트)는 허용된다
+    (소스 업로드의 409 규칙 예외 — 편집 자체가 쓰기의 유일한 경로). exists 불변식
+    "파일이 존재하면 내용이 있다"를 위해 빈 내용은 저장을 거부한다.
+    """
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n")
+    if not normalized.strip():
+        raise SourceError("개요 내용이 비어 있습니다 — 빈 문서는 저장하지 않습니다")
+    try:
+        data = normalized.encode("utf-8")
+    except UnicodeEncodeError as e:
+        raise SourceError("UTF-8로 인코딩할 수 없는 문자가 포함되어 있습니다") from e
+    if len(data) > MAX_SOURCE_BYTES:
+        raise SourceError(f"파일이 너무 큽니다 (최대 {MAX_SOURCE_BYTES // (1024 * 1024)}MB)")
+    return normalized
+
+
 def read_sources_context(sources_dirs: list[Path],
                          max_chars: int = MAX_SOURCE_FILE_CHARS,
                          total_chars: int = MAX_SOURCE_TOTAL_CHARS) -> str:

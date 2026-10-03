@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .infrastructure.models import Job, JobErrorClass, JobStatus, JobType
 
 __all__ = ["JobType", "JobStatus", "JobErrorClass", "enqueue", "has_busy_jobs",
-           "delete_project_jobs", "report_progress"]
+           "list_active", "delete_project_jobs", "report_progress"]
 
 
 def enqueue(db: Session, project_id: int | None, job_type: JobType, payload: dict) -> Job:
@@ -34,6 +34,19 @@ def has_busy_jobs(db: Session, project_id: int) -> bool:
         )
     )
     return bool(busy)
+
+
+def list_active(db: Session, project_id: int, job_type: JobType) -> list[Job]:
+    """대기/실행 중인 특정 타입 잡 목록 — 자동 큐잉 중복 방지 등 파이프라인 정책용
+    조회 (잡 테이블 접근을 이 퍼사드 안에 둔다)."""
+    jobs = db.scalars(
+        select(Job).where(
+            Job.project_id == project_id,
+            Job.type == job_type,
+            Job.status.in_([JobStatus.QUEUED, JobStatus.RUNNING]),
+        )
+    ).all()
+    return list(jobs)
 
 
 def delete_project_jobs(db: Session, project_id: int) -> None:

@@ -63,6 +63,46 @@
   opacity: 1;
 }
 
+/* 실패 job 오류 상세 — 요약 행 + "자세히" 토글로 저장된 전체 오류(Traceback 포함) pre.
+ * 기존 토큰만 사용 (새 토큰 없음 — 원칙 7 4종 세트 절차 대상 아님). */
+.job-error {
+  min-width: 0;
+}
+.job-error-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.job-error-head > span {
+  min-width: 0;
+  word-break: keep-all;
+}
+.job-error-toggle {
+  flex: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: var(--fs-caption);
+  text-decoration: underline;
+  padding: 0 2px;
+}
+.job-error-toggle:hover {
+  opacity: 0.75;
+}
+.job-error-full {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-mono);
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+}
+
 .banner-error {
   background: #fdf1ef;
   border-color: rgba(192, 57, 43, 0.3);
@@ -485,6 +525,14 @@
   color: var(--navy);
 }
 
+/* 확인 모달 하단 버튼 행 (취소 + 삭제) */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
 @media (max-width: 480px) {
   .modal {
     padding: 16px;
@@ -672,6 +720,21 @@
   flex-wrap: wrap;
 }
 
+/* 카드 하단 액션 행 — 좌측 설명 힌트 · 우측 버튼 (업로드 · 개요) */
+.panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+/* 하단 좌측 설명 힌트 — auto 마진이 버튼들을 우측 끝으로 밀어냄 */
+.sources-foot-desc {
+  margin-right: auto;
+}
+
 /* 페이지헤더 카드 (PageHeader) */
 .page-head {
   display: flex;
@@ -711,6 +774,30 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* 소스 탭 — PageHeader를 카드 헤더로 통합 (page-head-text 레시피 계열) */
+.sources-head-text {
+  flex: 1 1 auto; /* 유일 자식 확장 — 건수 힌트를 카드 우측 끝까지 밀기 */
+}
+
+.sources-head-text h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sources-head-text h4 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--blue);
+}
+
+/* 건수 힌트 — (헤드 텍스트 블록 내) 별도 줄, 우측 끝 정렬 */
+.sources-head-text .hint {
+  display: block;
+  margin-top: 4px;
+  text-align: right;
 }
 
 /* 소스 테이블 */
@@ -816,6 +903,45 @@
 .row-del:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 작업 열 아이콘 가로 정렬 래퍼 (다운로드 + 삭제) */
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* row 다운로드 링크 — .row-del 미러 (a 태그 기본 스타일 리셋 포함) */
+.row-dl {
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.row-dl svg {
+  width: 14px;
+  height: 14px;
+}
+
+.row-dl:hover {
+  color: var(--blue);
+  background: rgba(46, 109, 180, 0.08); /* --blue #2e6db4 틴트 — .row-del danger 틴트와 동일 수법 */
+}
+
+/* panel-foot 내 .btn 아이콘 — upload-label svg(14px)와 동일 크기로 버튼 높이 정렬
+   (lucide 기본 24px가 flex content를 밀어 .btn이 .upload-label보다 높아지는 것 방지) */
+.panel-foot .btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 업로드 라벨 버튼 (숨김 input 감쌈) — .btn-primary와 동일 톤 */

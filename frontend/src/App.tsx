@@ -3,6 +3,7 @@ import { Bot } from "lucide-react";
 import { routeParam, useHashRoute } from "./shared/lib/hashRoute";
 import { useApiHealth } from "./shared/lib/useApiHealth";
 import HeaderMetrics from "./features/project/views/HeaderMetrics";
+import ActivityPill from "./features/project/views/ActivityPill";
 import ProjectsPage from "./features/projects/views/ProjectsPage";
 import ProjectPage, { type ProjectTab } from "./features/project/views/ProjectPage";
 
@@ -45,6 +46,7 @@ export default function App() {
           <h1 className="app-title">PlanForge</h1>
         </a>
         <span className="spacer" />
+        {pid > 0 && hasTab && <ActivityPill pid={pid} />}
         {pid > 0 && hasTab && <HeaderMetrics pid={pid} />}
         <span className={`health health-${health}`}>
           {health === "ok" ? "API 연결됨" : health === "down" ? "API 연결 안 됨" : "확인 중…"}

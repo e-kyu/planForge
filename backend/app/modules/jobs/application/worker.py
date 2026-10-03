@@ -9,6 +9,9 @@
 - derive_build → app.modules.derivatives.application.derive_build
 - review       → app.modules.review.application.run_review
 - plan_revise  → app.modules.plans.application.plan_revise_job
+
+derive_build 핸들러는 수치 위반 red 잔여 시 review 잡을 같은 커밋에 큐잉한다
+(review facade enqueue_auto_review — 결정 17) — 자동 잡도 이 직렬 루프가 처리한다.
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from planforge.derive import DeriveError
+from planforge.derive import DeriveError, DeriveSchemaError
 from planforge.plan import PlanError
 
 from ..infrastructure.models import Job, JobErrorClass, JobStatus
@@ -85,6 +88,8 @@ def _classify(e: Exception) -> JobErrorClass:
 
     if isinstance(e, PlanError):
         return JobErrorClass.VALIDATION
+    if isinstance(e, DeriveSchemaError):  # DeriveError 하위형 — 스키마 위반 지속: LLM 판정 전에
+        return JobErrorClass.SCHEMA
     if isinstance(e, DeriveError):
         return JobErrorClass.LLM
     if isinstance(e, PlanReviseError):  # ValueError 상속 — ValueError 판정 전에

@@ -8,7 +8,8 @@ import {
 } from "../models/sourcesApi";
 import { errMsg } from "../../../shared/lib/errMsg";
 
-/* 소스 관리 (FR-2.1) — 프로젝트 sources/(업로드·삭제) + 글로벌 sources/(읽기 전용). */
+/* 소스 관리 (FR-2.1) — 프로젝트 sources/(업로드·삭제) + 글로벌 sources/(읽기 전용).
+ * 삭제는 확인 모달을 거친다 (useProjects의 delTarget 패턴과 동일). */
 
 export const MAX_MB = 2;
 
@@ -45,12 +46,36 @@ export function useSources(pid: number) {
     },
   });
 
-  const removeM = useMutation({
-    mutationFn: (name: string) => deleteSource(pid, name),
-    onSuccess: () => setError(null),
-    onError: (e) => setError(errMsg(e)),
-    onSettled: () => void refresh(),
-  });
+  const [delTarget, setDelTarget] = useState<string | null>(null);
+  const [delBusy, setDelBusy] = useState(false);
+  const [delError, setDelError] = useState<string | null>(null);
+
+  function openDelete(name: string) {
+    setDelTarget(name);
+    setDelError(null);
+    setError(null);
+  }
+
+  function closeDelete() {
+    if (delBusy) return; // 작업 중에는 닫지 않음
+    setDelTarget(null);
+    setDelError(null);
+  }
+
+  async function confirmDelete() {
+    if (!delTarget || delBusy) return;
+    setDelBusy(true);
+    setDelError(null);
+    try {
+      await deleteSource(pid, delTarget);
+      setDelTarget(null);
+      await refresh();
+    } catch (e) {
+      setDelError(errMsg(e));
+    } finally {
+      setDelBusy(false);
+    }
+  }
 
   return {
     files: ownQ.data ?? null,
@@ -61,10 +86,12 @@ export function useSources(pid: number) {
       setError(null);
       uploadM.mutate(fileList);
     },
-    remove: (name: string) => {
-      setError(null);
-      removeM.mutate(name);
-    },
+    delTarget,
+    delBusy,
+    delError,
+    openDelete,
+    closeDelete,
+    confirmDelete,
     fileInput,
   };
 }

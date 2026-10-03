@@ -2,10 +2,11 @@
 """파생물 생성 오케스트레이터 (make-ppt·make-doc 이식).
 
 LLM/코드 역할 분리:
-- 결정론(코드): 문서 필터·골격 검증·스키마 검증(builder.validate)·수치 무결성 대조(numcheck)·
+- 결정론(코드): 문서 필터·골격 검증·스키마 검증(builder.validate)·numcheck 측정·
   파일 기록·빌더 실행·채번.
-- LLM: plan 표기 → slides.json/report.json 콘텐츠 변환 (도구 호출 1회). 수치 무결성 위반 시
-  발견사항을 되돌려 재변환 요청 (최대 N회) — 코드가 판정하고 LLM이 고친다.
+- LLM: plan 표기 → slides.json/report.json 콘텐츠 변환 (도구 호출 1회). 스키마 위반만
+  재변환 요청 (최대 N회). 수치 무결성은 스키마 통과 후 1회 측정해 findings로 보고한다 —
+  게이트·재시도는 하지 않는다(판정 권위는 검수 단계, 결정 17).
 """
 from __future__ import annotations
 
@@ -55,7 +56,17 @@ REPORT_TOOL = {
 
 
 class DeriveError(ValueError):
-    """파생물 생성 실패 (LLM 미응답·스키마 위반 지속·수치 무결성 미달 지속)."""
+    """파생물 생성 실패 (LLM이 도구 호출 없이 소진). 수치 위반은 실패가 아니라 numcheck
+    측정 기록이며 판정은 검수 단계가 한다(결정 17) — 스키마 위반 지속은 하위형."""
+
+
+class DeriveSchemaError(DeriveError):
+    """파생물 생성 실패 — LLM 결과가 스키마 검증(builder.validate)을 반복 통과하지 못함.
+
+    소진 오류에 실제 실패 종류를 라벨링하기 위한 하위형 — worker가
+    JobErrorClass.SCHEMA로 분류한다. isinstance(e, DeriveError) 계약은 유지:
+    기존 catch 사이트(워커·CLI)는 하위 호환.
+    """
 
 
 @dataclass
@@ -64,7 +75,7 @@ class DeriveResult:
     slides_count: int = 0
     sections_count: int = 0
     unconfirmed: list[int] = field(default_factory=list)  # (미확정) 표기가 남은 슬라이드 번호
-    findings: list[Finding] = field(default_factory=list)   # 최종 승인 시 남은 yellow 등
+    findings: list[Finding] = field(default_factory=list)   # numcheck 측정값 — 게이트 아님, 판정은 검수 (결정 17)
     attempts: int = 1
 
 
@@ -148,7 +159,7 @@ class Deriver:
         return (PROMPTS_DIR / fname).read_text(encoding="utf-8-sig")
 
     def _run_llm(self, kind: str, plan: Plan, slides, doc: str,
-                 on_attempt=None) -> tuple[dict, int]:
+                 on_attempt=None) -> tuple[dict, int, list[Finding]]:
         tool = SLIDES_TOOL if kind == "slides" else REPORT_TOOL
         tool_name = tool["function"]["name"]
         user_text = render_slides_text(plan, slides, doc)
@@ -157,26 +168,23 @@ class Deriver:
             {"role": "user", "content": user_text},
         ]
 
-        last_findings: list[Finding] = []
+        last_kind = ""    # 마지막 검증 실패 종류: "schema" ("" = 판정 없음 — 도구 미호출 소진)
+        last_detail = ""  # 해당 실패의 진단 본문 — builder 스키마 오류문
+        validated = 0     # 검증 판정이 이루어진 시도 수 (소진 총계와의 차 = nudge 소비분)
 
         def validate(args: dict) -> tuple[str, object]:
+            nonlocal last_kind, last_detail, validated
+            validated += 1
             payload = dict(args)
             self._snap_literals(slides, payload)  # 수치 리터럴 표기 보정 (원칙 3)
             try:
-                findings = self._check(kind, plan, slides, payload)
-                reds = [f for f in findings if f.severity == "red"]
+                self._validate_schema(kind, payload)
             except ValueError as e:  # 스키마 위반 — 빌더 검증 오류를 그대로 되돌려 재변환
+                last_kind, last_detail = "schema", f"  - {e}"
                 return ("retry",
                         f"스키마 검증 실패 — 아래 오류를 해소해 {tool_name} 도구를 다시 호출하라:\n{e}")
-            if not reds:
-                return ("ok", payload)
-            last_findings[:] = findings
-            return ("retry",
-                    "수치 무결성 검증 실패(🔴). 아래 발견사항을 모두 해소해 "
-                    f"{tool_name} 도구를 다시 호출하라. 수치 토큰은 plan 표기를 문자열 "
-                    "그대로 복사한다 — 소수점 자리·단위·기호를 정규화하지 않는다 "
-                    "(15.0→15 금지, '15.0억 원'→'15.0억' 금지):\n"
-                    + "\n".join(str(f) for f in reds))
+            # 수치 위반은 여기서 막지 않는다 — 측정해 검수 단계에 이관 (결정 17)
+            return ("ok", payload)
 
         # 재변환 루프 — LangGraph tool 루프 (편차 11, planforge/llm/loops.py)
         # 도구 누락 nudge·재시도 피드백(assistant.tool_calls → tool 응답 쌍 — ollama cloud
@@ -188,18 +196,46 @@ class Deriver:
                               validate=validate, messages=messages,
                               on_attempt=on_attempt)
         if final["result"] is None:
-            raise DeriveError(
-                f"수치 무결성 위반이 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
-                "(수치·표·차트는 plan과 한 글자도 같아야 합니다):\n"
-                + "\n".join(str(f) for f in last_findings))
-        return final["result"], final["attempts"], last_findings
+            raise self._final_error(tool_name, final, last_kind, last_detail, validated)
+        payload = final["result"]
+        # numcheck 1회 측정 — 게이트가 아니다: 수치 판정 권위는 검수 단계(결정 17).
+        # 측정값은 DeriveResult·job.result로 보고되고 red 잔여는 검수를 자동 큐잉한다.
+        findings = self._numcheck(kind, plan, slides, payload)
+        return payload, final["attempts"], findings
+
+    def _final_error(self, tool_name: str, final: dict, last_kind: str,
+                     last_detail: str, validated: int) -> DeriveError:
+        """소진 오류 — 마지막으로 관측된 실패 종류에 맞는 라벨·진단 본문으로 만든다.
+
+        소진되는 실패는 스키마 위반 지속이 유일하다(결정 17 — 수치는 측정 후 진행).
+        검증 판정 없이 소진되면(도구 미호출) 그 사실을 본문에 고지한다.
+        (결정 16 — 소진 오류에 실제 라벨·진단. 재시도 피드백 문구는 불변.)
+        """
+        msg: str
+        misses = final["attempts"] - validated  # 도구 없이 텍스트로만 끝난 응답 수
+        if last_kind == "schema":
+            msg = (f"스키마 검증 실패가 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
+                   f"— LLM 결과가 {tool_name} 스키마 요구 구조를 만족하지 못했습니다:\n"
+                   + last_detail)
+        else:
+            # 검증 판정 없이 소진 — LLM이 끝까지 도구를 호출하지 않음 (nudge 소진)
+            preview = final.get("resp_content") or ""
+            if len(preview) > 500:
+                preview = preview[:500] + "…"
+            msg = (f"LLM이 {final['attempts']}회 응답 동안 {tool_name} 도구를 호출하지 않았습니다 "
+                   "— 변환 결과가 도구 호출로 전달되지 않았습니다.\n"
+                   f"마지막 응답(앞 500자): {preview or '(텍스트 응답 없음)'}")
+        if validated and misses:
+            msg += (f"\n\n(참고: 마지막 {misses}회 응답은 {tool_name} 도구 호출 없이 "
+                    "텍스트로만 반응했다 — 재시도가 무응답으로 끝났다)")
+        return DeriveSchemaError(msg) if last_kind == "schema" else DeriveError(msg)
 
     def _snap_literals(self, slides, payload: dict) -> None:
         """LLM이 정규화한 수치 리터럴(15.0→15)을 plan 표기로 되돌린다 (결정론 보정).
 
         chart/data 값이 plan의 어떤 수치와 **값이 같을 때만** plan의 리터럴
         (int/float 구분 — 파서가 원본 표기 보존)로 교체한다. 값이 다르면 건드리지
-        않는다 — 그런 위반은 numcheck가 red로 잡아 재변환을 유도한다 (원칙 3).
+        않는다 — 그런 위반은 numcheck가 red로 기록해 검수 단계 판정으로 넘긴다 (원칙 3, 결정 17).
         """
         plan_lits: dict[float, object] = {}
         for s in slides:
@@ -236,13 +272,22 @@ class Deriver:
                             if isinstance(sr, dict):
                                 sr["values"] = [snap(v) for v in sr.get("values", [])]
 
-    def _check(self, kind: str, plan: Plan, slides, payload: dict) -> list[Finding]:
+    def _validate_schema(self, kind: str, payload: dict) -> None:
+        """builder 스키마 검증 — 위반은 ValueError로 올려 validate 클로저가 재변환을 유도한다."""
         if kind == "slides":
             from .builders import build_ppt
-            build_ppt.validate(payload)  # 스키마 위반은 검증 오류로 재시도 유도 아님 — 예외 전파
+            build_ppt.validate(payload)
+        else:
+            from .builders import build_doc
+            build_doc.validate(payload)
+
+    def _numcheck(self, kind: str, plan: Plan, slides, payload: dict) -> list[Finding]:
+        """수치 무결성 측정 — 판정 게이트가 아니라 기록이다 (결정 17: 권위는 검수 단계).
+
+        스키마 통과 payload에만 호출된다. 검수(run_review)가 같은 엔진을 파생물 d.json에
+        재적용하므로 이 측정값과 검수 리포트 발견사항이 일치한다."""
+        if kind == "slides":
             return check_slides(slides, plan.key_messages, payload)
-        from .builders import build_doc
-        build_doc.validate(payload)
         return check_report(slides, plan.key_messages, payload)
 
     # ---- 파생물 생성
@@ -254,7 +299,7 @@ class Deriver:
         if kind not in ("slides", "report"):
             raise DeriveError(f"kind는 slides|report 중 하나여야 합니다: {kind}")
         plan, doc, slides, unconfirmed = self._prepare(plan_path, doc)
-        payload, attempt, _ = self._run_llm(kind, plan, slides, doc, on_attempt=on_attempt)
+        payload, attempt, findings = self._run_llm(kind, plan, slides, doc, on_attempt=on_attempt)
 
         # 결정론 보정 — meta.title은 대상 문서 표지 슬라이드 제목 (make-ppt/make-doc 규칙)
         cover = next((s for s in slides if s.type == "cover"), None)
@@ -268,7 +313,8 @@ class Deriver:
         self.workspace.joinpath("work").mkdir(parents=True, exist_ok=True)
         work_path = self.workspace / "work" / ("slides.json" if kind == "slides" else "report.json")
         work_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        res = DeriveResult(work_path=work_path, attempts=attempt, unconfirmed=unconfirmed)
+        res = DeriveResult(work_path=work_path, attempts=attempt, unconfirmed=unconfirmed,
+                           findings=findings)
         if kind == "slides":
             res.slides_count = len(payload["slides"])
         else:
