@@ -36,6 +36,9 @@ def enqueue_review(project_id: int, db: Session = Depends(get_db)):
     if not has_any(db, project_id):
         raise http_409("검수할 파생물이 없습니다 — 먼저 산출물을 생성하세요")
     job = enqueue(db, project_id, JobType.REVIEW, {"plan_id": plan.id})
+    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다 (get_db teardown 커밋은
+    # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).
+    db.commit()
     return JobOut.model_validate(job)
 
 
