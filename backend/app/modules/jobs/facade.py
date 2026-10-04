@@ -18,7 +18,11 @@ __all__ = ["JobType", "JobStatus", "JobErrorClass", "enqueue", "has_busy_jobs",
 
 
 def enqueue(db: Session, project_id: int | None, job_type: JobType, payload: dict) -> Job:
-    """큐 진입 — 커밋은 호출자 트랜잭션에서 (단일 워커가 클레임한다)."""
+    """큐 진입 — 커밋은 호출자 트랜잭션에서 (단일 워커가 클레임한다).
+
+    POST 엔드포인트 호출자는 반환 전 커밋이 계약이다 — get_db teardown 커밋은
+    FastAPI 특성상 응답 전송 후에 실행되어 202 직후 /jobs 조회에 잡이 보이지 않는다.
+    """
     job = Job(project_id=project_id, type=job_type, payload=payload)
     db.add(job)
     db.flush()

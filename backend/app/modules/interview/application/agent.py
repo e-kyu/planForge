@@ -19,7 +19,13 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session as DBSession
 
-from planforge.plan import PlanError, filter_slides, parse_plan_text, validate_skeleton
+from planforge.plan import (
+    PlanError,
+    SkeletonError,
+    filter_slides,
+    parse_plan_text,
+    validate_skeleton,
+)
 
 from app.agents.tools import ToolError, validate_tool_args
 from app.modules.facts.facade import append_facts, list_active_facts
@@ -42,6 +48,27 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 MAX_TOOL_TURNS = 8   # 한 턴 내 LLM 호출 한도 (도구 루프 폭주 방지)
 MAX_ROUNDS = 8       # 세션 전체 라운드 한도
 PLAN_FIX_ATTEMPTS = 3  # write_plan 검증 실패 재시도 한도 (포맷 오류 2회 연속 사고 대응)
+
+# write_plan 포맷 검증 실패 시 ERROR 피드백에 붙는 치료안 — 파서 메시지는 결정론 파이프라인
+# 공용(derive·numcheck·CLI)이라 파서를 건드리지 않고, LLM 대면 피드백만 앱 계층에서 관리한다.
+# 교정 예 두 건은 실세션 수업 기반(docs/interview-turn-contract.md 실패 수업 참조): 목차를
+# `- 내용:`, 표 데이터 행을 `- 행:`으로 쓴 임의 키 위반이 동일 반복돼 PLAN_FIX_ATTEMPTS를
+# 소진했다 — ask_questions 검증기(결정 18)와 같은 "원문+치료안" 형태로 재시도 1회 수렴을 노린다.
+PLAN_BULLET_CHEATSHEET = (
+    "불릿 허용 키 치트시트 — 슬라이드 본문의 최상위 불릿 키는 아래 이름만 해석된다 (임의 키는 거부):\n"
+    "- `핵심문장:` — 전 유형 공통. 목차 슬라이드는 이 키 한 줄: "
+    "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` (슬래시(/) 구분, 라벨은 01..NN)\n"
+    "- `근거/출처:` 또는 `출처:` — 전 유형 공통\n"
+    "- 유형별 표기 헤더: `- 좌 (소제목):` / `- 우 (소제목):` / `- 표: [헤더 | 헤더 | 헤더]` / "
+    "`- 차트:` / `- 구성:`\n"
+    "- 데이터 행은 헤더 아래 들여쓰기 + `- `만 붙이고 키를 만들지 않는다 — 표 `  - 셀 | 셀 | 셀`, "
+    "차트 `  - 범주: 라벨, 라벨`·`  - 계열명 | 값, 값`, 구성 `  - 계층명 | 박스, 박스`, "
+    "2단 `  - 라벨 | 설명`\n"
+    "교정 예: `- 내용: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과` → "
+    "`- 핵심문장: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과` / "
+    "`- 행: 파일 업로드 | 텍스트 및 PDF 중심 | 확정` → `- 표: [항목 | 형식 | 상태]` 헤더 아래 "
+    "`  - 파일 업로드 | 텍스트 및 PDF 중심 | 확정`"
+)
 
 
 class TurnError(RuntimeError):
@@ -81,7 +108,24 @@ class InterviewAgent:
     def _system_prompt(self) -> str:
         base = (PROMPTS_DIR / "interview.md").read_text(encoding="utf-8-sig")
         ctx = self._turn_context()
-        return base + "\n\n## 이번 턴 주입 컨텍스트 (소스·확립 팩트 — 임의 추측 금지)\n\n" + ctx
+        return (base + "\n\n## 이번 턴 주입 컨텍스트 (소스·확립 팩트 — 임의 추측 금지)\n\n" + ctx
+                + "\n\n## 이번 턴 ask_questions 리마인더 (완성 예시를 그대로 모방한다)\n\n"
+                + self._remind_ask())
+
+    def _remind_ask(self) -> str:
+        """매턴 ask_questions 리마인더 — 시스템 프롬프트 끝(응답 직전 위치)에서 퓨샷을
+        다시 가리킨다. 라운드 번호는 서버 확정 값이라 여기서 계산해 얹는다 — 모델이
+        round_summary의 번호를 지어내는 지점을 제거한다."""
+        nxt = self.sess.round_no + 1
+        return (
+            "- 질문 제시는 반드시 `ask_questions(round_summary, questions)` 도구 호출로만 한다.\n"
+            "- 객관형 문항은 options에 {label, description}을 2개 이상, 서술형 문항은 options 없이 "
+            "allow_free=true — 선택지를 질문 본문에 나열하지 않는다 (본문은 질문 한 문장).\n"
+            "- 모름 계열 답변((모름) 마킹 또는 '모름/몰라/모르겠다')에는 근거가 있는 추천 후보를 "
+            "(미확정) 팩트로 save_facts에 제시하고, 추천이 없으면 다음 라운드에서 다시 묻는다.\n"
+            "- 'ask_questions 인자 형식 (완성 예시)' 섹션을 그대로 모방한다. round_summary는 "
+            f"'라운드 {nxt} 목표: …' 형태로 쓴다 (이번 ask_questions 성공 시 라운드 {nxt})."
+        )
 
     def _turn_context(self) -> str:
         parts: list[str] = []
@@ -136,10 +180,12 @@ class InterviewAgent:
         # 첫 토큰 전 지연 대부분이 컨텍스트 조립(read_sources_context 등)이라 state_event
         # (조립 끝난 뒤 방출)보다 앞서 진행을 알린다 — emit-only라 이력을 오염하지 않는다.
         events.add(progress_event("context"))
+        # user 행 적립은 run_turn이 단일 권위다 — 모든 호출자(/kick·/turn·/answers·게이트
+        # resume)는 선행 적립하지 않는다. _history()가 autoflush로 이 행을 포함해 모델
+        # 컨텍스트가 이력과 정확히 1:1이 된다 (동일 user 메시지 2회 전송 금지).
         self._append(MessageRole.USER, MessageKind.TEXT, content=user_message)
         messages = [{"role": "system", "content": self._system_prompt()}]
         messages += self._history()
-        messages.append({"role": "user", "content": user_message})
 
         try:
             events.add(state_event(self.sess.phase.value, self.sess.round_no,
@@ -201,8 +247,10 @@ class InterviewAgent:
             if isinstance(args, str):
                 args = json.loads(args)
             args = validate_tool_args(name, args)
-        except (ToolError, json.JSONDecodeError) as e:
+        except ToolError as e:
             return f"ERROR: {e}"
+        except json.JSONDecodeError as e:
+            return f"ERROR: 도구 인자 JSON 파싱 실패 — {e}"
 
         if name == "ask_questions":
             return self._ask_questions(args, events)
@@ -226,14 +274,16 @@ class InterviewAgent:
             return ("ERROR: 세션 라운드 한도(8)에 도달했습니다. 부족한 항목은 (미확정)으로 명시하고 "
                     "write_plan으로 마무리하라.")
         self.sess.round_no += 1
+        summary = (args.get("round_summary") or "").strip()
         self.sess.pending_questions = args["questions"]
+        self.sess.pending_round_summary = summary or None
         self.sess.phase = SessionPhase.AWAITING_ANSWERS
         events.add(Event(name="questions", kind=MessageKind.QUESTIONS,
-                         payload={"round": self.sess.round_no,
-                                  "summary": args.get("round_summary", ""),
+                         payload={"round": self.sess.round_no, "summary": summary,
                                   "questions": args["questions"]}))
         self._append(MessageRole.EVENT, MessageKind.QUESTIONS,
-                     payload={"round": self.sess.round_no, "questions": args["questions"]})
+                     payload={"round": self.sess.round_no, "summary": summary,
+                              "questions": args["questions"]})  # 이력 행에도 summary — 재접속 리플레이에서 라운드 목표 보존
         events.add(state_event(self.sess.phase.value, self.sess.round_no, self.sess.checklist))
         return "OK: 질문 카드를 제시했다. 사용자 답변을 기다린다."
 
@@ -269,11 +319,22 @@ class InterviewAgent:
             plan = parse_plan_text(md)
             if len(plan.key_messages) != 3:
                 return f"ERROR: 핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)"
-            for doc in plan.docs:
-                slides = filter_slides(plan.slides, doc)
-                validate_skeleton(slides)  # 원칙 8 — 미달 시 중단
         except PlanError as e:
-            return f"ERROR: plan 포맷 검증 실패 — {e}"
+            # 치료안(허용 키·모범 표기)은 LLM 대면 소관 — 파서 원문은 그대로 보내고 뒤에 붙인다
+            # (프롬프트만으로 임의 키 위반이 저지되지 않은 실세션 수업의 서버 쪽 대응).
+            return (f"ERROR: plan 포맷 검증 실패 — {e}\n{PLAN_BULLET_CHEATSHEET}\n"
+                    "이 표기를 그대로 모방해 write_plan을 다시 호출하라")
+        # 골격 검증 (원칙 8) — SkeletonError는 PlanError가 아니므로 문서별로 잡아 ERROR
+        # 피드백으로 되돌린다 (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다).
+        # 문서별 루프라 어느 문서가 미달인지 함께 알려 재시도 1회에 수렴시킨다.
+        for doc in plan.docs:
+            try:
+                validate_skeleton(filter_slides(plan.slides, doc))
+            except SkeletonError as e:
+                return (f"ERROR: plan 골격 검증 실패 — 문서 '{doc}': {e}\n"
+                        "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
+                        "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
+                        "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
 
         # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당
         p = create_generation(self.db, self.sess.project_id, markdown=md, docs=plan.docs,

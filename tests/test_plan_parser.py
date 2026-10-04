@@ -156,3 +156,66 @@ def test_rejects_arch_over_6_layers():
     )
     with pytest.raises(Exception, match="계층은 최대 6개"):
         parse_plan_text(text)
+
+
+# ------------------------------------------------- 다중 문서 메타 교차검증 (계약)
+
+def test_rejects_tagged_multidoc_without_meta_docs():
+    """메타 '산출 문서' 누락 + 태그된 다중 문서 plan → PlanError. 슬라이드 태그가 정확해도
+    디폴트 ["제안서"] 무음 치환은 derive가 나머지 문서 슬라이드를 버리는 사고 경로다.
+    (실세션 수업: 인터뷰에서 제안서+개발설계서 선택 → 슬라이드 태그 정상 → 메타 누락
+    → 제안서 1종만 산출.)"""
+    from planforge.plan import parse_plan_text
+    text = PLAN.read_text(encoding="utf-8").replace("- 산출 문서: 제안서, 개발설계서\n", "")
+    with pytest.raises(Exception, match="슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'"):
+        parse_plan_text(text)
+
+
+def test_rejects_tag_outside_meta_docs():
+    """태그 어휘 불일치 — 슬라이드 [문서: ...] 태그가 메타 '산출 문서'에 정의되지 않은
+    문서를 가리키면 PlanError (검수에서만 잡히던 것을 파싱 시점으로 앞당김)."""
+    from planforge.plan import parse_plan_text
+    text = PLAN.read_text(encoding="utf-8").replace(
+        "- 산출 문서: 제안서, 개발설계서", "- 산출 문서: 제안서")
+    with pytest.raises(Exception, match="개발설계서"):
+        parse_plan_text(text)
+
+
+def test_rejects_multi_docs_without_tagged_slides():
+    """메타가 복수 문서인데 [문서: ...] 태그 슬라이드가 하나도 없으면 PlanError —
+    문서별 표지·목차·마무리 별도 태그 계약의 파서 수준 최소 강제."""
+    from planforge.plan import parse_plan_text
+    text = (
+        "# 기획 (태그 누락)\n\n"
+        "## 메타\n- 산출 문서: 제안서, 개발설계서\n- 목적: x\n"
+        "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n\n"
+        "## 슬라이드 목록\n\n"
+        "### 1. [유형: 표지] 표지\n- 핵심문장: 표지다\n"
+    )
+    with pytest.raises(Exception, match="태그 슬라이드가 없습니다"):
+        parse_plan_text(text)
+
+
+def test_default_single_doc_still_works_without_meta():
+    """하위호환 — 메타 누락 + 태그 없는 단일 문서 plan은 기존 동작 유지 (docs=["제안서"])."""
+    from planforge.plan import parse_plan_text
+    text = (
+        "# 기획 (단일 문서)\n\n"
+        "## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n\n"
+        "## 슬라이드 목록\n\n"
+        "### 1. [유형: 표지] 표지\n- 핵심문장: 표지다\n"
+    )
+    plan = parse_plan_text(text)
+    assert plan.docs == ["제안서"]
+
+
+def test_meta_and_tag_accept_comma_and_plus_separators():
+    """구분자 정규화 — 메타는 쉼표가 관례, 태그는 +가 관례이지만 둘 다 실수를 흡수한다."""
+    from planforge.plan import parse_plan_text
+    base = PLAN.read_text(encoding="utf-8")
+    meta_plus = parse_plan_text(base.replace(
+        "- 산출 문서: 제안서, 개발설계서", "- 산출 문서: 제안서+개발설계서"))
+    assert meta_plus.docs == ["제안서", "개발설계서"]
+    tag_comma = parse_plan_text(base.replace(
+        "[문서: 제안서+개발설계서]", "[문서: 제안서, 개발설계서]"))
+    assert slide_by_no(tag_comma, 6).docs == ["제안서", "개발설계서"]

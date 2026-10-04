@@ -3,7 +3,6 @@ import { Bot } from "lucide-react";
 import type { Message } from "../../../api/client";
 import { Banner, Button, Empty } from "../../../shared/components/ui";
 import { useInterview } from "../viewmodels/useInterview";
-import { CompactCard } from "./CompactCard";
 import { FactSidePanel } from "./FactSidePanel";
 import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
 
@@ -12,6 +11,7 @@ type QuestionCard = {
   text: string;
   options?: { label: string; description?: string }[];
   allow_free?: boolean;
+  suggestions?: string[]; // 추천 후보 칩 (소스·팩트 기반 — 클릭 시 자유 입력에 채움)
 };
 type FactCard = { content: string; source?: string };
 
@@ -45,7 +45,7 @@ function progressLabel(status: string, phase: string): string {
 }
 
 /** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
- *  서버 상태·SSE 턴 머신은 useInterview, 압축 제안은 useCompact, 팩트 목록은 useFactsPanel이 보유한다. */
+ *  서버 상태·SSE 턴 머신은 useInterview, 팩트 목록은 useFactsPanel이 보유한다 (압축 카드는 FactSidePanel 소속). */
 export default function InterviewPanel({ pid }: { pid: number }) {
   const {
     sid,
@@ -70,21 +70,22 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     feed.current?.scrollTo({ top: feed.current.scrollHeight });
   }, [messages, streaming, status, active]);
 
-  /** 턴 제출 래퍼 — 시작됐으면 입력(답변·초안)을 비운다 (원본 run() finally 동작). */
+  /** 턴 제출 래퍼 — 오류 없이 끝났을 때만 입력(답변·초안)을 비운다 (오류 시 유지 — 재제출 대비). */
   async function turn(path: string, body: unknown) {
-    const started = await run(path, body);
-    if (started) {
+    const ok = await run(path, body);
+    if (ok) {
       setAnswers({});
       setDraft("");
     }
   }
 
-  async function submitAnswers() {
+  async function submitAnswers(override?: Record<number, { option?: number; free?: string }>) {
     if (!session) return;
+    const src = override ?? answers; // 전체제출 시 setAnswers로 채운 상태를 그대로 넘긴다 (stale closure 회피)
     const qs = session.pending_questions ?? [];
     const items: { index: number; option?: number; free_text?: string }[] = [];
     for (let i = 0; i < qs.length; i++) {
-      const a = answers[i];
+      const a = src[i];
       if (!a) continue;
       if (a.option !== undefined) items.push({ index: i, option: a.option });
       else if (a.free?.trim()) items.push({ index: i, free_text: a.free.trim() });
@@ -94,6 +95,30 @@ export default function InterviewPanel({ pid }: { pid: number }) {
       return;
     }
     await turn(`/api/interview/sessions/${sid}/answers`, { answers: items });
+  }
+
+  /** 추천 전체제출 — 미답변 문항을 문항별 suggestions[0]으로 채워 한 번에 제출한다 (결정론).
+   *  suggestions 없는 문항은 미답변 유지 — 서버가 → (모름) 마킹으로 전달한다 (계약 문서). */
+  function submitAllWithSuggestions() {
+    if (!session) return;
+    const qs = (session.pending_questions as QuestionCard[]) ?? [];
+    let filled = 0;
+    const next: Record<number, { option?: number; free?: string }> = { ...answers };
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      const sug = q?.suggestions?.[0]; // 첫 후보 고정 — 사용자가 칩·입력으로 수정하는 여지는 유지
+      // 칩 표시 조건과 동일한 채움 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 미기입 → (모름))
+      if (!next[i] && sug && (q.allow_free ?? true)) {
+        next[i] = { option: undefined, free: sug };
+        filled++;
+      }
+    }
+    if (filled === 0 && Object.keys(answers).length === 0) {
+      setError("답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)");
+      return;
+    }
+    setAnswers(next); // 실패 시에도 채워진 상태가 화면에 남는다 (사용자 수정 여지)
+    void submitAnswers(next);
   }
 
   if (restoring) {
@@ -176,8 +201,11 @@ export default function InterviewPanel({ pid }: { pid: number }) {
           <AnswersCard
             questions={session.pending_questions as QuestionCard[]}
             answers={answers}
+            round={session.round_no}
+            summary={session.pending_round_summary}
             onPick={(i, patch) => setAnswers((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }))}
             onSubmit={() => void submitAnswers()}
+            onSubmitAll={submitAllWithSuggestions}
             busy={busy}
           />
         )}
@@ -201,8 +229,6 @@ export default function InterviewPanel({ pid }: { pid: number }) {
             }
           />
         )}
-
-        <CompactCard pid={pid} />
 
         <div className={isKick ? "chat-input chat-input-kick" : "chat-input"}>
           <textarea
@@ -255,12 +281,16 @@ export default function InterviewPanel({ pid }: { pid: number }) {
         return <Bubble key={m.seq} side="right" text={m.content} />;
       case "assistant:text":
         return m.content.trim() ? <Bubble key={m.seq} side="left" text={m.content} /> : null;
-      case "event:questions":
+      case "event:questions": {
+        const round = typeof p.round === "number" ? p.round : null;
+        const summary = typeof p.summary === "string" && p.summary ? p.summary : null;
         return (
-          <StaticCard key={m.seq} title={`라운드 ${p.round ?? "?"} 질문`}>
+          <StaticCard key={m.seq}
+            title={summary ? `라운드 ${round ?? "?"} — 목표: ${summary}` : `라운드 ${round ?? "?"} 질문`}>
             <StaticQuestions questions={(p.questions ?? []) as QuestionCard[]} />
           </StaticCard>
         );
+      }
       case "event:facts": {
         const facts = (p.facts ?? []) as FactCard[];
         const conflicts = (p.conflicts ?? []) as { note?: string }[];
@@ -355,31 +385,58 @@ function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
   );
 }
 
-/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. */
+/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다.
+ *  선택↔입력은 상호배타다 — 입력하면 선택이 해제, 선택하면 입력이 지워진다
+ *  (과거에는 옵션 선택 중 입력값이 제출에서 조용히 폐기됐다). */
 function AnswersCard(props: {
   questions: QuestionCard[];
   answers: Record<number, { option?: number; free?: string }>;
+  round?: number;
+  summary?: string | null;
   onPick: (i: number, patch: { option?: number; free?: string }) => void;
   onSubmit: () => void;
+  onSubmitAll: () => void;
   busy: boolean;
 }) {
+  // 추천 칩·전체제출의 공통 표시 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 제외)
+  const canFill = (q: QuestionCard) =>
+    (q.suggestions ?? []).length > 0 && (q.allow_free ?? true);
+  const hasSuggestions = props.questions.some(canFill);
   return (
     <div className="card chat-card chat-card-active">
-      <div className="chat-card-title">라운드 답변 — 선택지를 고르거나 직접 적어 주세요</div>
+      <div className="chat-card-title">
+        {props.summary
+          ? `라운드 ${props.round ?? "?"} — 목표: ${props.summary}`
+          : "라운드 답변 — 선택지를 고르거나 직접 적어 주세요"}
+      </div>
       <ol className="question-list">
         {props.questions.map((q, i) => (
           <li key={i}>
             <div className="q-text">{q.text}</div>
+            {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
+              <div className="suggest-row">
+                <span className="suggest-label">추천</span>
+                {q.suggestions!.map((sug, k) => (
+                  <button
+                    key={k}
+                    className="suggest-chip"
+                    onClick={() => props.onPick(i, { option: undefined, free: sug })}
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+            )}
             {q.options && q.options.length > 0 && (
               <div className="options">
                 {q.options.map((o, j) => (
                   <button
                     key={j}
                     className={`option ${props.answers[i]?.option === j ? "option-picked" : ""}`}
-                    onClick={() => props.onPick(i, { option: j })}
+                    onClick={() => props.onPick(i, { option: j, free: undefined })}
                   >
-                    {o.label}
-                    {o.description ? <span className="hint"> — {o.description}</span> : null}
+                    <span className="option-label">{o.label}</span>
+                    {o.description ? <span className="option-desc">{o.description}</span> : null}
                   </button>
                 ))}
               </div>
@@ -389,13 +446,23 @@ function AnswersCard(props: {
                 className="free-input"
                 placeholder="직접 입력 (선택지 대신)"
                 value={props.answers[i]?.free ?? ""}
-                onChange={(e) => props.onPick(i, { free: e.target.value })}
+                onChange={(e) => props.onPick(i, { option: undefined, free: e.target.value })}
               />
             )}
           </li>
         ))}
       </ol>
       <div className="center-actions">
+        {hasSuggestions && (
+          <Button
+            variant="ghost"
+            disabled={props.busy}
+            title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
+            onClick={props.onSubmitAll}
+          >
+            추천으로 전체 제출
+          </Button>
+        )}
         <Button onClick={props.onSubmit} disabled={props.busy}>
           답변 제출
         </Button>

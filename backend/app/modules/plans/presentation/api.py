@@ -82,4 +82,7 @@ def revise_plan_from_review(plan_id: int, body: PlanReviseFromReview,
     job = enqueue(db, plan.project_id, JobType.PLAN_REVISE,
                   {"plan_id": plan_id, "review_id": body.review_id,
                    "finding_indices": indices})
+    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다 (get_db teardown 커밋은
+    # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).
+    db.commit()
     return JobOut.model_validate(job)

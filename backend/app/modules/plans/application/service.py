@@ -49,14 +49,11 @@ def approve_plan(db: Session, plan_id: int) -> Plan:
 
 def revise_plan(db: Session, plan_id: int, markdown: str) -> Plan:
     """plan 수정 → 새 세대 DRAFT plan (FR-4.3 — 파생물 직접 수정 없이 plan만 고친다)."""
-    from planforge.plan import PlanError
-
     base = require_plan(db, plan_id)
     project = require_project(db, base.project_id)
-    try:
-        parsed = validate_plan_markdown(markdown)
-    except PlanError as e:
-        raise PlanError(f"plan 포맷 검증 실패 — {e}")
+    # 검증·라벨링은 validate_plan_markdown(단일 권위)의 소관 — 여기서 다시 감싸면
+    # 라벨이 겹친다. PlanError → 422 매핑은 전역 핸들러(shared/errors.py)가 한다.
+    parsed = validate_plan_markdown(markdown)
 
     p = create_generation(db, base.project_id, markdown=markdown, docs=parsed.docs,
                           parsed_ok=True, origin=PlanOrigin.EDIT)

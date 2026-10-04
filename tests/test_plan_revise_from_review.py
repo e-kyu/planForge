@@ -232,3 +232,67 @@ def test_revise_from_review_unchanged_then_retry_succeeds(client, app):
     assert retry_pair[0]["role"] == "assistant" and retry_pair[0]["tool_calls"]
     assert retry_pair[1]["role"] == "tool"
     assert "원문과 동일" in retry_pair[1]["content"]
+
+
+def test_revise_from_review_skeleton_failure_fails_job(client, app):
+    """골격 미달 반영도 결정론 검증이 잠근다 — SkeletonError는 단일 권위가 문서명 포함
+    PlanError로 감싸 재시도 루프로 회수되고, 소진 시엔 PlanReviseError로 실패한다
+    (원문 예외 전파·오분류 SCHEMA가 아니라)."""
+    pid = _make_project(client, "prv-skel-fail")
+    plan_id = _approved_plan(app, pid)
+    rid = _review_report(app, pid, plan_id, FINDINGS)
+
+    client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
+    skel_bad = (
+        "# 기획 (골격 미달)\n"
+        "\n## 메타\n- 목적: x\n"
+        "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+        "\n## 슬라이드 목록\n"
+        "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
+    )
+    llm = FakeLLM([tool_call("write_plan", {"markdown": skel_bad})] * 3)
+    _run_queue(app, llm, profile="plan_revise")
+
+    job = client.get("/api/jobs/1").json()
+    assert job["status"] == "failed"
+    assert job["error_class"] == "llm"  # 재시도 소진 — LLM이 골격을 유지한 plan을 못 만듦
+    assert "plan 골격 검증 실패" in job["error"]
+    assert "문서 '제안서'" in job["error"]  # 메타에 산출 문서 생략 → 기본 문서
+    assert "표지" in job["error"]  # SkeletonError 원문 — 누락 유형 목록 그대로
+
+    # 새 Plan 세대가 만들어지지 않았다
+    plans = client.get(f"/api/projects/{pid}/plans").json()
+    assert len(plans) == 1
+
+
+def test_revise_from_review_skeleton_failure_then_retry_succeeds(client, app):
+    pid = _make_project(client, "prv-skel-retry")
+    plan_id = _approved_plan(app, pid)
+    rid = _review_report(app, pid, plan_id, FINDINGS)
+
+    client.post(f"/api/plans/{plan_id}/revise-from-review",
+                json={"review_id": rid, "finding_indices": [0]})
+    skel_bad = (
+        "# 기획 (골격 미달)\n"
+        "\n## 메타\n- 목적: x\n"
+        "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
+        "\n## 슬라이드 목록\n"
+        "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
+    )
+    llm = FakeLLM([
+        tool_call("write_plan", {"markdown": skel_bad}),
+        tool_call("write_plan", {"markdown": REVISED}),
+    ])
+    _run_queue(app, llm, profile="plan_revise")
+
+    job = client.get("/api/jobs/1").json()
+    assert job["status"] == "done", job
+    assert job["result"]["version_no"] == 2
+
+    # 골격 미달 피드백이 assistant.tool_calls → tool 쌍으로 전달됐다 (재시도 참여 증명)
+    assert len(llm.calls) == 2
+    retry_pair = llm.calls[1][2:4]  # [system, user] 뒤에 붙은 재시도 쌍
+    assert retry_pair[0]["role"] == "assistant" and retry_pair[0]["tool_calls"]
+    assert retry_pair[1]["role"] == "tool"
+    assert "plan 골격 검증 실패" in retry_pair[1]["content"]
+    assert "문서 '제안서'" in retry_pair[1]["content"]

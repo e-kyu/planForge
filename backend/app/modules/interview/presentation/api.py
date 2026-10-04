@@ -27,14 +27,13 @@ from app.shared.workspace import workspace_path
 
 from ..application.agent import InterviewAgent
 from ..domain.events import error_event
-from ..facade import MessageKind, MessageRole, require_session
+from ..facade import require_session
 from ..infrastructure.models import (
     InterviewMessage,
     InterviewSession,
     SessionPhase,
     SessionStatus,
 )
-from ..infrastructure.transcript import append_message
 from .schemas import (
     AnswersCreate,
     FactsConfirmCreate,
@@ -198,7 +197,12 @@ def answers(session_id: int, body: AnswersCreate, request: Request,
     _phase_ok(sess, (SessionPhase.AWAITING_ANSWERS,), "대기 중인 질문이 없습니다")
     _gate_open(sess)
     questions = sess.pending_questions or []
-    lines = []
+    if not body.answers:
+        # 프론트가 1개 이상을 강제한다 — 서버도 같은 계약을 검증해 양 끝 일관성을 유지한다.
+        # "전부 모름" 제출은 받지 않는다: 전 문항이 모름이 되는 오연동 리스크 (문항별
+        # '모름' 입력·추천 칩으로 커버한다).
+        raise http_409("답변을 1개 이상 제출하거나 '모름'을 입력해 주세요")
+    choices: dict[int, str] = {}
     for a in body.answers:
         if not 0 <= a.index < len(questions):
             raise http_409(f"질문 인덱스 범위 초과: {a.index} (0..{len(questions) - 1})")
@@ -215,10 +219,18 @@ def answers(session_id: int, body: AnswersCreate, request: Request,
             choice = (a.free_text or "").strip()
             if not choice:
                 raise http_409(f"답변이 비어 있습니다: 질문 {a.index}")
-        lines.append(f"{a.index + 1}. {q.get('text', '')}\n→ {choice}")
+        choices[a.index] = choice
+    # 미제출(누락) 문항은 (모름) 마킹 라인으로 채워 전달한다 — 무응답 인덱스가 메시지에서
+    # 소실돼 LLM이 추론해야 했던 지점 차단. 사용자 원문은 재작성하지 않는 결정론 조립이고,
+    # 라인은 인덱스 오름차순으로 정렬한다 (interview.md "모름 답변 처리" 절 참조).
+    for i in range(len(questions)):
+        choices.setdefault(i, "(모름)")
+    lines = [
+        f"{i + 1}. {questions[i].get('text', '')}\n→ {choices[i]}"
+        for i in sorted(choices)
+    ]
     message = "[라운드 답변]\n" + "\n".join(lines)
-    append_message(db, session_id, MessageRole.USER, MessageKind.TEXT, content=message)
-    db.commit()  # 스트림 시작 전 커밋 — 워커 스레드 세션과 (session_id, seq) 충돌 방지
+    # user 행 적립은 run_turn(agent)이 단일 권위 — 선행 적립·커밋 없이 그대로 넘긴다.
     return _stream_turn(_settings(request), request, session_id, message)
 
 

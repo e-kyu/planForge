@@ -8,7 +8,6 @@ export function CompactCard({ pid }: { pid: number }) {
   const byId = new Map((facts ?? []).map((f) => [f.id, f]));
   return (
     <div className="card chat-card">
-      <div className="chat-card-title">확립 팩트 ({facts?.length ?? "…"}건)</div>
       {error && <Banner kind="error">{error}</Banner>}
       {result && (
         <Banner kind="ok">
@@ -50,12 +49,13 @@ export function CompactCard({ pid }: { pid: number }) {
         </>
       ) : (
         <div className="center-actions">
-          <Button onClick={() => void propose()} disabled={busy || (facts?.length ?? 0) < 2}>
+          <Button
+            onClick={() => void propose()}
+            disabled={busy || (facts?.length ?? 0) < 2}
+            title="중복된 이전 팩트를 아카이브로 밀어내고 최종 확정값만 활성에 남깁니다 (FR-6.1)."
+          >
             팩트 압축 (통합 + 아카이브)
           </Button>
-          <span className="hint">
-            중복된 이전 팩트를 아카이브로 밀어내고 최종 확정값만 활성에 남깁니다 (FR-6.1).
-          </span>
         </div>
       )}
     </div>

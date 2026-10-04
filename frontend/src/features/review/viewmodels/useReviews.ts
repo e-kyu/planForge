@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Job } from "../../../api/client";
 import { enqueueReview, fetchPlans, fetchReviews, reviseFromReview } from "../models/reviewApi";
 import { latestByType } from "../../../shared/lib/jobs";
-import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
+import { seedJob, useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { errMsg } from "../../../shared/lib/errMsg";
 
@@ -97,6 +97,7 @@ export function useReviews(pid: number) {
     enqueueReview(pid)
       .then((job) => {
         setNotice(`검수 작업 큐 진입 (#${job.id}) — 워커가 결정론+LLM 검수를 실행합니다.`);
+        seedJob(qc, pid, job);
         return refresh();
       })
       .catch((e) => {
@@ -134,7 +135,9 @@ export function useReviewApply(planId: number, reviewId: number, pid: number) {
     try {
       const job = await reviseFromReview(planId, reviewId, findingIndices);
       setNotice(`plan 반영 작업 큐 진입 (#${job.id}) — 워커가 LLM plan 수정을 실행합니다.`);
-      // jobs 갱신 — 최신 revise 잡(queued)이 목록에 들어오며 과거 실패 파생 배너 즉시 소멸
+      // jobs 갱신 — 시딩으로 최신 revise 잡(queued)이 즉시 목록에 들어오며 과거 실패
+      // 파생 배너가 소멸하고, invalidate-refetch가 서버 목록으로 확정한다
+      seedJob(qc, pid, job);
       void qc.invalidateQueries({ queryKey: ["jobs", pid] });
     } catch (e) {
       setErr(errMsg(e));

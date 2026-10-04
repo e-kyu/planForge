@@ -230,6 +230,144 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       즉시 자동 검수 → 검수 동엔진 재판정(빠짐 없음) → findings 영속 기록 → FR-4.3 재생성
       루프. 채번은 덮어쓰기 없으므로 과거 버전 추적 가능(원칙 5).
 
+18. **인터뷰 턴 계약 강화 — 본문 선택지 나열 탐지 + 프로필 tool_choice 강제** (2026-10-03, `for-gemma4-26b`)
+    - 배경: 모델 교체(특히 소형 모델)마다 인터뷰 질문 구조가 흔들린다. (1) 선택지를
+      options 배열이 아니라 질문 본문에 서술형 `예:` 줄로 나열하면 options 없이
+      allow_free=true만으로 검증을 통과하고, 프론트는 `options.length` 기준으로
+      버튼을 렌더하므로 "본문엔 보이고 버튼은 없다"(직접 입력만) 상태가 된다.
+      (2) 도구 호출이 흔들리는 모델은 텍스트 전용 출력 → nudge 1회 → TurnError
+      (세션 FAILED)로 끝난다. 검토 과정에서 비-object 도구 인자(list/str)가
+      AttributeError로 세션 FAILED 되는 보호 구멍도 함께 확인됐다.
+    - 변경: (1) `validate_tool_args` — 본문 옵션 유사 줄(`예:`·`예)`·`보기:`·`답:`·
+      `1.`·`2)`·`①..⑳`·`가)…차)`·`(1)`·`(가)`(A)·불릿) 2줄 이상이면 계약 위반으로
+      거부 — options 유무와 무관(선택지는 options 배열로만 전달하는 계약). 피드백은
+      위반 문항 번호·원문 줄 인용·이동안(options 이동 / 나열 제거+allow_free)을 한 번에
+      알려 재시도 1회로 수렴시킨다. 인자 비-object는 AttributeError 대신 ToolError
+      재시도 피드백으로, JSON 파싱 실패는 한국어 피드백으로. options 라벨은 strip
+      정규화·빈 라벨 거부, description은 문자열 검사. (2) provider — `ProfileConfig
+      .tool_choice`(기본 auto) → `bind_tools` 전달(하드코딩 "auto" 대체; "required"는
+      도구 미호출 모델이 도구만 호출하게 강제). 계약 외 값은 생성 시점 ValueError.
+      계약 문서 `docs/interview-turn-contract.md` 신설(계약 4종 동시 점검 + 모델 교체
+      체크리스트 — CLAUDE.md 규칙 절차 참조).
+    - 불변: `chat_fn`/`stream_fn` dict 계약·이벤트 포맷·`_to_lc_messages` 위치·
+      `max_retries=0`·anthropic 금지·OpenAPI/프론트 무변경(`pending_questions`
+      unknown[] 유지, `npm run gen:types` 불필요). ERROR 피드백 재시도 경로
+      (`route_after_blocking`)·MAX_TOOL_TURNS·recursion_limit 상수 무변경. 이력에는
+      원본(raw) 도구 인자가 남고 정규화는 pending_questions·questions 이벤트에만
+      적용 — 기존 검증기와 동일 관행.
+    - 리스크 수용: (1) 본문 불릿 나열이 하위 기준 나열인 정상 질문이어도 위반 취급된다
+      — 구조 정돈 유도가 목적이며, 오탐 실관측 시 정규식 불릿 arm만 제거한다. (2) 일부
+      OpenAI 호환 릴레이는 required를 무시(동작 변화 없음 — auto와 동일)하거나 거부할
+      수 있다 — 프로필별 옵트인+기본 auto로 피해를 한정하고 되돌리는 절차를
+      config.example.json·계약 문서 체크리스트에 명시.
+
+19. **인터뷰 질문 품질 안정화 2차 — 퓨샷 강제 + 프론트 선택지 렌더 정돈** (2026-10-03, `for-gemma4-26b`)
+    - 배경: 결정 18의 서버 검증·재시도·tool_choice 이후에도 모델 교체마다 질문 구조가
+      흔들린다는 관찰 — 남은 원인 3곳. (1) `interview.md`에 ask_questions JSON 예시가
+      0개 — 형태 강제가 명령형 문장 3중뿐이며, write_plan의 "그대로 모방한다" 완성
+      예시 블록·derive 프롬프트의 스키마 예시와 달리 ask_questions만 퓨샷이 빠져
+      있었다. (2) 프론트 혼돈 근원 — 객관형 문항에도 직접 입력이 기본 병기되고 옵션
+      선택 중 입력값이 제출 시 조용히 폐기되며, 질문 본문 개행이 붕괴되고, 오류가 나도
+      답변이 클리어되며, 라운드 목표(round_summary)는 SSE payload에만 존재해 화면
+      어디에도 없다. (3) 부수 결함 — 같은 user 메시지가 모델 컨텍스트에 2회 중복 전송
+      (`run_turn` 적립 → autoflush로 `_history` 포함 → 재부착)되고, /answers가 DB
+      user 행을 이중 적립한다.
+    - 변경 1 (퓨샷 + 매턴 리마인더): `interview.md`에 `## ask_questions 인자 형식
+      (완성 예시)` 섹션 신설 — 객관형 2문항(options 3개/2개, description 근거) +
+      서술형 1문항(allow_free만) 실물 JSON. "둘 다 있는" 문항은 예시에 싣지 않는다
+      (소형 모델의 항상 병기 경향 유발 방지). `agent.py`의 `_system_prompt`는 매턴
+      시스템 프롬프트 끝(응답 직전 위치)에 `## 이번 턴 ask_questions 리마인더`를
+      부착하며 round_summary의 라운드 번호는 `sess.round_no + 1`로 서버가 계산해
+      주입 — 모델이 번호를 지어내는 지점을 제거한다 (예시 번호 복사 방지 각주 포함).
+    - 변경 2 (round_summary 영속): 세션 행 `pending_round_summary`(nullable Text,
+      alembic 9c1f4e7b8a20) 영속 → `SessionOut` 노출 → 이력 questions EVENT payload에도
+      summary 포함 — 재접속 리플레이에 라운드 목표 보존. 프론트 답변 카드·정적 이력
+      카드 부제 "라운드 N — 목표: …" (구세션 행은 summary 부재 → 폴백 제목).
+    - 변경 3 (user 적립 단일 권위): `run_turn`의 선행 적립분만 남기고 재부착 삭제,
+      /answers의 선행 적립+커밋 삭제 — 모든 호출자(/kick·/turn·/answers·게이트)는
+      선행 적립 없이 message를 넘기고 `_history()` 결과가 이력과 1:1이 된다. 구세션의
+      중복 user 이력 행(리플레이 버블 2개)은 백필 없이 방치(사용자 결정).
+    - 변경 4 (렌더 정돈): 옵션 클릭↔직접 입력 상호배타(onPick 패치가 반대값을 명시적
+      해제) — 제출 계약(AnswerItem 1문항 1값)과 정합하며 "free 조용히 폐기" 암묵
+      결함이 시각적 해제로 드러난다. 옵션 버튼은 label·description을 분리 span으로
+      쌓는다(.option-label/.option-desc). `.q-text` pre-wrap(개행 보존). `run()`은
+      오류(error 이벤트·예외)에서 false 반환 — `turn()`은 오류 없이 끝났을 때만
+      답변·초안을 비운다(오류 시 유지 — 재제출 대비).
+    - 불변: `tools.py` 스키마·`validate_tool_args`(권위), `chat_fn`/`stream_fn` dict
+      계약, EVENT seq·`_history` role 필터(USER/ASSISTANT/TOOL만), AnswerItem 1문항
+      1값, 직접 입력 기본 병기(`allow_free ?? true`), openapi 계약은
+      `pending_round_summary` 추가 1개(diff 확인) — `npm run gen:types` 동반.
+    - 리스크 수용: (1) 완성 예시+리마인더로 턴당 system 토큰 ≈+0.6k — 8턴 세션 기준
+      수용(강제 우선, 사용자 결정). (2) 소형 모델이 예시의 "라운드 3"을 그대로 복사할
+      수 있음 — 리마인더의 서버 계산 값으로 방어하고, 관찰되면 예시 번호를 자리표화.
+      (3) 정적 이력 카드의 옵션 표기(description inline hint)는 인터랙티브 카드와
+      압축 표기가 다르다 — 참조 전용이라 의도로 유지. (4) 서술형을 객관형으로 나열
+      하는 모델은 여전히 결정 18의 검증 거부→재시도에 의존한다 — 퓨샷 위반 억제가
+      1차, 검증이 2차 방어선.
+
+20. **인터뷰 모름 답변 추천 — ask_questions suggestions·(모름) 마킹·(미확정) 팩트 경유** (2026-10-03, `for-gemma4-26b`)
+    - 배경: 모름·몰라·미입력 계열 답변의 서버 쪽 처리가 전무했다. free_text는
+      strip() 후 LLM에 그대로 전달되고(모름 감지·취급 코드 0건), 미제출(누락) 문항은
+      `[라운드 답변]` 조립에서 번호 자체가 생략돼 LLM이 무응답을 추론해야 했다. 추천
+      답변 제시 지점 선정에서 두 방식을 모두 채택: (1) 질문 제시 시점 카드에 추천
+      후보 칩, (2) 모름 답변 뒤 턴에서 LLM이 근거 있는 추천을 (미확정) 팩트로 적립.
+    - 변경: (1) `ask_questions` 스키마에 문항당 선택 필드 `suggestions`(문자열 배열,
+      최대 3개, 한 줄 문장) — `validate_tool_args`는 타입·개수·개행(리터럴+이스케이프)·
+      120자 길이만 결정론 검증하고 strip 정규화한다. "소스·확립 팩트에서 도출, 추측이면
+      (미확정) 유도"는 프롬프트(interview.md 질문 설계 규칙·모름 답변 처리 절) 소관.
+      칩 클릭은 자유 입력 채움(선택↔입력 상호배타 유지), 카드 [추천으로 전체 제출]은
+      미답변 문항을 suggestions[0]으로 결정론 채움 — 클라이언트 조립이며 서버 계약
+      변화 없음. (2) `/answers` 조립은 인덱스 dict 기반 — 미제출 문항에 `→ (모름)`
+      고정 마킹 라인을 채우고 인덱스 오름차순 정렬한다(무응답 인덱스 소실 차단,
+      사용자 원문 재작성 없음). 빈 answers 배열은 409("전부 모름" 제출 기각 — 전 문항
+      모름 오연동 방지, 문항별 모름 입력·추천 칩이 커버). (3) 모름 계열 답변을 받은
+      턴의 LLM은 소스·확립 팩트에 근거가 있는 추천 후보를 `save_facts`(content에
+      (미확정) 필수, source "인터뷰 추천")로 제시 — fact_gate 승인이 유일한 채택
+      승인 지점이고 승인 전 턴은 소모되지 않는다. free_text는 서버 마킹 없이 원문
+      전달(정규식 (모름) 덮어쓰기는 부분답변 오표기 + 원칙 3 충돌로 기각).
+    - 불변: 새 도구·엔드포인트 없음(save_facts·fact_gate 재사용), AnswerItem·SessionOut·
+      FactOrigin(INTERVIEW)·turn_graph 불변, openapi diff 0(`pending_questions`
+      unknown[] 유지 — `npm run gen:types` 불필요). save_facts+ask_questions 병행
+      금지는 기존 dispatch_blocking 계약 유지(첫 blocking만 실행 — 소실되는 쪽이
+      ask_questions라 안전측). 정적 이력 카드(StaticQuestions)는 suggestions 미렌더
+      (참조 전용 표기 차이 유지 선례). "모름" 표현 자체는 팩트로 적립하지 않는다.
+    - 리스크 수용: (1) 모델의 always-emit suggestions 경향 — 예시는 서술형 1문항에만
+      싣고 프롬프트 제한("근거가 없는 항목에는 싣지 않는다")이 담당, 구조 검증은 결정
+      18 재시도 경로로 수렴. (2) suggestions는 LLM 추론 도출값 — (미확정) 필수·
+      fact_gate 수정 가능이 방어선이며, 확정 전환은 commit_facts(edits) 기존 경로.
+      (3) 결정 19 리마인더 토큰에 +1줄(≈+0.05k/턴) — 수용.
+
+21. **인터뷰 제안서 아크 고도화 — 서사 주제 그룹 5종·plan 포맷 배치 가이드** (2026-10-04, `for-gemma4-26b`)
+    - 배경: 제안서 아크는 요청서 FR-2.3 원문 수준의 한 줄("문제 / 해결책 / 기대효과")로
+      남아 있었다 — 개발설계서 설계 결정 설문(주제 그룹 5개 + 옵션 카드 예시)과 달리
+      서사·근거·리스크·요청 사항이 인터뷰에서 뽑히지 않아 plan.md 목차가 얇아진다.
+      plan 생성 지시는 interview.md write_plan 포맷 섹션이 유일(plan_revise는 검수 반영
+      전용, derive는 1:1 변환) — 인터뷰→plan 연결 보장의 유일한 수정 지점이기도 하다.
+    - 변경: (1) interview.md 제안서 아크를 주제 그룹 5종(현황·문제 정의 / 영향·기회 /
+      제안 해결책·차별성 / 기대효과·실증 근거 / 리스크·대응·요청 사항) + 예시 질문
+      옵션 카드로 심층화 — 각 주제는 주장 + 근거(로그 항목 또는 `(미확정)`)를 주제당
+      1개 팩트로 적립한다 (개발설계서 "결정+이유+대안" 패턴의 제안서 버전). 근거 없는
+      사례 창작을 막기 위해 실증사례를 독립 그룹으로 두지 않고 기대효과 수치의 근거로
+      흡수. (2) [제안서] 종료 체크리스트 1→5항. (3) 핵심 메시지 3개를 아크 세 축
+      (문제·영향 / 해결책·차별성 / 기대효과·요청)과 1:1 대응시키고, 아크 라운드에서
+      메시지가 흔들리면 `confirm_key_messages` 재제시·재승인 — 게이트 재오픈은 기존
+      기계 동작(agent.py `_confirm_key_messages`). (4) plan.md 포맷에 제안서 구성
+      가이드 신설 — 아크 순서→슬라이드 유형 배치(2단=현황·문제·영향, 표=해결책·차별성·
+      리스크, 차트=기대효과, 마무리=요청·확인 계획)와 아크 장 라벨 목차 (개발설계서
+      구성 가이드와 대칭). (5) 대칭 e2e
+      `test_interview_proposal_arc_full_flow_to_plan_approval` + fewshot 잠금 assert 4개.
+    - 불변: 도구 스키마·`validate_tool_args`·area 3종(공통|제안서|개발설계서) — 스키마
+      무변경(openapi diff 0 확인, `npm run gen:types` 불필요). agent.py·turn_graph·
+      parser·filter·plan_revise·derive 프롬프트·프론트 무변경. MAX_ROUNDS=8·골격
+      검증·confirm_key_messages "라운드 2 종료" 시점(tools.py:119 하드코딩) 유지.
+      ask_questions 완성 예시(퓨샷)와 plan 완성 예시 블록 무변경 — 표기법 시연 소관 분리.
+    - 리스크 수용: (1) 프롬프트 길이 +~45행(매턴 전체 주입) — 개발설계서 블록과 대칭
+      규모, 옵션 카드를 그룹당 주로 2개로 제한해 수용. (2) 예시 카드 라벨의 원문 카피
+      위험 — 개발설계서 선례와 동일 수준, "실제 사례 기반" 규칙 + 실세션 관찰이 방어선.
+      (3) 아크 슬라이드 순서는 서버가 결정론 검증하지 않는다(골격만 검증 — 검증 추가는
+      parser/agent 수정이 필요해 의도 제외) — 프롬프트 규칙 + 검수(review) 단계가
+      후속 방어선.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.
@@ -252,7 +390,10 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
 
 ## 계약 export 환경 (주의)
 
-`python scripts/export_openapi.py`(backend/에서, 시스템 python)로 export한 결과가 커밋 계약이다.
-`backend/.venv`의 fastapi/pydantic 신버전은 `UploadFile`을 `contentMediaType: application/octet-stream`으로,
-ValidationError에 `input`/`ctx`를 추가로 렌더링한다 — venv로 export하면 계약 diff가 발생한다.
-venv를 의도적으로 업그레이드했다면 별도 커밋에서 계약을 재생성·커밋할 것(프론트 `npm run gen:types` 동반).
+`python scripts/export_openapi.py`(backend/에서)로 export한 결과가 커밋 계약이다.
+(2026-10-03 실측 갱신 — **venv python이 현재 커밋 계약 렌더링과 일치한다:**
+venv fastapi 0.141.1+pydantic 2.13.5는 `UploadFile`을 `contentMediaType: application/octet-stream`으로,
+ValidationError에 `input`/`ctx`를 렌더링한다. 시스템 python(fastapi 0.115.11+pydantic 2.12.3)은
+`format: binary`·input/ctx 제거 렌더링이라 export하면 계약 diff가 유발된다 — 문서 초작성 당시와
+환경이 반전됐다. 세션마다 export 전 2환경 중 커밋 계약과 일치하는 쪽을 `git diff`로 확인할 것.)
+export 환경을 의도적으로 업그레이드했다면 별도 커밋에서 계약을 재생성·커밋할 것(프론트 `npm run gen:types` 동반).

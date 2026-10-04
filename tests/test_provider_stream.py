@@ -173,6 +173,36 @@ def test_stream_yields_text_and_completed_tool_calls():
     assert calls[1]["name"] == "update_checklist"
 
 
+def test_bind_tools_uses_profile_tool_choice():
+    """프로필 tool_choice가 bind_tools kwargs로 전달된다 (기본값 auto는 위 테스트가
+    잠근다 — 도구 미호출 소형 모델의 required 옵트인 경로)."""
+    p = get_provider(ProfileConfig(provider="ollama", model="test-model",
+                                   tool_choice="required"))
+    fake = _FakeLLM(_chunks())
+    p._llm = fake
+    tools = [{"type": "function", "function": {"name": "ask_questions", "parameters": {}}}]
+    list(p.stream([{"role": "user", "content": "hi"}], tools=tools))
+    assert fake.bind_calls[0]["tool_choice"] == "required"
+
+
+def test_invalid_tool_choice_raises():
+    """계약 외 tool_choice 값은 생성 시점에 거부한다 — langchain이 모르는 문자열을
+    조용히 relay에 전달해 요청 400으로 번지는 것을 앞단에서 잡는다."""
+    with pytest.raises(ValueError, match="tool_choice"):
+        get_provider(ProfileConfig(provider="ollama", model="m", tool_choice="force"))
+
+
+def test_load_config_tool_choice_parsing(tmp_path):
+    cfg = tmp_path / "config.json"
+    cfg.write_text('{"profiles": {"interview": {"provider": "ollama", "model": "m", '
+                   '"tool_choice": "required"}}}', encoding="utf-8")
+    profiles = load_config(cfg)
+    assert profiles["interview"].tool_choice == "required"
+    # 미기재 프로필·누락 프로필은 auto
+    assert profiles["derive"].tool_choice == "auto"
+    assert profiles["plan_revise"].tool_choice == "auto"
+
+
 def test_stream_without_tools_skips_bind():
     p = _provider()
     fake = _FakeLLM([AIMessageChunk(content="hi")])
