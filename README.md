@@ -32,7 +32,7 @@
 |---|---|
 | ① 프로젝트 생성 | 제목·슬러그로 프로젝트를 만든다. 워크스페이스(`work/output/docs/assets`)가 자동 생성된다. |
 | ② 소스 등록 | 기존 기획자료(.md .txt .json .csv, 2MB 이하, UTF-8)를 업로드한다. 인터뷰가 이 자료를 읽고 시작한다. |
-| ③ 인터뷰 | 에이전트가 소스·기존 팩트로 **예상 뼈대(가설)를 먼저 제시**하고, 틀린 부분만 질문한다. 라운드당 최대 4문항, 라운드 종료마다 **팩트 확인 게이트**(확인 후에만 적립), 핵심 메시지 3개 승인을 거친다. |
+| ③ 인터뷰 | 에이전트가 소스·기존 팩트로 **예상 뼈대(가설)를 먼저 제시**하고, 틀린 부분만 질문한다. 라운드당 최대 4문항 — 답을 모르는 문항은 **(모름) 추천 칩**으로 넘겨 (미확정) 팩트로 적립된다. 라운드 종료마다 **팩트 확인 게이트**(확인 후에만 적립), 핵심 메시지 3개 승인을 거친다. |
 | ④ plan 승인 | 인터뷰 결과로 plan(마크다운)이 생성된다. 편집·diff 확인 후 **승인해야만** 다음 단계로 넘어간다. |
 | ⑤ 파생물 생성 | 대상 문서(제안서/개발설계서 등)를 골라 생성 버튼을 누르면 LLM이 plan→slides.json/report.json으로 변환하고, 결정론 빌더가 `output/<문서 제목>_v01.pptx` 등을 채번 생성한다. |
 | ⑥ 검수 | 결정론 검수(수치 무결성·문서 태그·구조·세대 대응) + LLM 내용 검수가 🔴/🟡/⚪ 등급 리포트를 만든다. 수정 사항은 **plan만 수정**되고 재승인 후 재생성(버전 +1)된다. |
@@ -63,11 +63,13 @@ frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
   src/features/           화면별 feature 7종 (projects·project·sources·interview·plan·outputs·review)
     └ <feature>/          models/(API 호출) · viewmodels/(상태·로직 훅) · views/(표현 전용)
   src/shared/             components/(CodeMirror 에디터·마크다운 미리보기·공통 UI) · lib/ · styles/
+  e2e-smoke.mjs           전체 흐름 스모크 (실제 LLM 호출 — 수동 검증 스크립트, 커밋 대상 아님)
   visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용 — 브라우저 e2e는 별도 완주 예정)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
-docs/                     보조 문서 (architecture-decisions.md · token-checklist.md)
+docs/                     보조 문서 (architecture-decisions.md · token-checklist.md ·
+                          interview-turn-contract.md — 인터뷰 턴 계약)
 tests/                    pytest (계약 테스트 fixture 포함)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
@@ -159,7 +161,12 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 ```json
 {
   "profiles": {
-    "interview":   { "provider": "ollama", "model": "gemma4:26b" },
+    "interview":   { "provider": "azure",  "model": "gpt-5.6-luna",
+                     "tool_choice": "required",
+                     "api_key_env": "AZURE_OPENAI_API_KEY",
+                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                     "azure_endpoint": "https://<azure-endpoint>",
+                     "api_version": "2024-12-01-preview" },
 
     "derive":      { "provider": "azure",  "model": "gpt-5.6-luna",
                      "api_key_env": "AZURE_OPENAI_API_KEY",
@@ -167,9 +174,7 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
                      "azure_endpoint": "https://<azure-endpoint>",
                      "api_version": "2024-12-01-preview" },
 
-    "review":      { "provider": "openai", "model": "gpt-5.6-luna",
-                     "api_key_env": "OPENAI_API_KEY",
-                     "api_key": "예시(더미): sk-proj-xXxXxXxXxxxxxxxxxxxxxxxxxxxxxxxxxx" },
+    "review":      { "provider": "ollama", "model": "gemma4:26b" },
 
     "plan_revise": { "provider": "openai", "model": "gpt-5.6-luna",
                      "api_key_env": "OPENAI_API_KEY",
@@ -187,17 +192,21 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
   사용한다. ollama·openai를 base_url/키 차이만으로 소화하고, azure는 같은 패키지의
   AzureChatOpenAI로 소화한다. 도구 루프(derive·review·plan_revise·compact)는
   **tool calling이 필수**라 Ollama 모델도 지원 모델이어야 한다.
+- 프로필 공통 옵션 `tool_choice` — 도구 호출 강제 모드(`auto`(기본)·`any`·
+  `required`·`none`). 인터뷰는 모든 진행이 도구 호출이라 도구 호출이 흔들리는
+  (텍스트 전용 응답) 소형 모델에서 `required`로 강제할 수 있다. 일부 OpenAI 호환
+  릴레이는 `required`를 무시·거부할 수 있으므로, 문제가 보이면 `auto`로 되돌린다.
 - API 키는 두 가지 방법으로 공급한다 — 우선순위는 `api_key`(직접 기입) >
   `api_key_env`(환경변수 이름, openai 기본 `OPENAI_API_KEY` / azure 기본
   `AZURE_OPENAI_API_KEY`). ollama는 키가 필요 없다.
-  위 예시에서 **`derive`·`review`는 방법 2(환경변수)** — 키는
+  위 예시처럼 **환경변수 방법이 권장**이다 — 키는
   `$env:AZURE_OPENAI_API_KEY = "..."` 식으로 서버 환경변수에 넣고 config에는
-  `"api_key": ""`로 둔다. **`plan_revise`는 방법 1(직접 기입)** — 파일 자체가
-  노출되면 키도 노출되므로 로컬 임시 테스트용이고, 운영에서는 방법 2를 권장한다.
-  둘 다 비어 있으면 `ValueError: 환경변수 <이름>에 API 키가 없습니다`로
-  프로바이더 생성 시점에 중단된다. 예시 파일의 `api_key` 값은 형식 참고용
-  더미(`"예시(더미): ...")이므로 복사 후 실제 키로 교체하거나 빈 값(`""`)으로
-  둔다(우선순위상 더미가 환경변수를 이긴다).
+  `api_key`를 적지 않는다. `api_key` 직접 기입은 파일 자체가 노출되면 키도
+  노출되므로 로컬 임시 테스트용이다. 둘 다 비어 있으면
+  `ValueError: 환경변수 <이름>에 API 키가 없습니다`로 프로바이더 생성 시점에
+  중단된다. 예시 파일(`config.example.json`)에는 형식 참고용 더미
+  `api_key`(값이 `예시(더미): ...`로 시작)가 적혀 있다 — 우선순위상 더미가
+  환경변수를 이기므로, 복사 후 실제 키로 교체하거나 빈 값(`""`)으로 둔다.
 - **azure**는 `azure_endpoint`(환경변수 폴백 `AZURE_OPENAI_ENDPOINT`)와 `api_version`
   (폴백 `OPENAI_API_VERSION`, 예: `2024-12-01-preview`)이 필요하고, `model` 값은
   배포(deployment)명으로 쓰인다. 둘 중 하나라도 없으면 한국어 안내와 함께 즉시
@@ -236,11 +245,17 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 ### ③ 인터뷰 ("인터뷰" 탭)
 1. **인터뷰 시작**을 누르면 에이전트가 소스·기존 팩트를 읽고 **예상 뼈대(가설)를 먼저 제시**한다.
    소스가 텅 비면 초안 없이 뼈대 질문부터 시작한다(임의 추측 금지).
-2. 채팅으로 자유롭게 답하거나 **선택지 카드**를 클릭한다. 한 라운드는 최대 4문항.
-3. 라운드가 끝나면 **확정 팩트 요약(3~5줄) 확인 다이얼로그**가 뜬다 — 확인을 눌러야만
-   팩트가 적립되고 다음 라운드로 간다. 답변과 충돌하는 내용은 조용히 덮지 않고 즉시 물어본다.
-4. 라운드 2 이후 **핵심 메시지 3개** 승인 게이트가 나온다. 이후 질문은 이 3개를
-   성립시킬 근거 수집을 목표로 한다.
+2. 채팅으로 자유롭게 답하거나 **선택지 카드**를 클릭한다 — 선택지는 본문 나열이 아닌
+   버튼으로만 제공되며, "직접 입력"으로 서술도 가능하다. 답을 모르는 문항은
+   **(모름) 추천 칩·전체 제출 버튼**으로 넘기면 추측으로 채우지 않고 (미확정)
+   팩트로 적립된다. 한 라운드는 최대 4문항.
+3. 라운드마다 **목표와 요약**이 안내되고, 라운드가 끝나면 **확정 팩트 요약(3~5줄) 확인
+   다이얼로그**가 뜬다 — 확인을 눌러야만 팩트가 적립되고 다음 라운드로 간다. 답변과
+   충돌하는 내용은 조용히 덮지 않고 즉시 물어본다. 적립된 팩트는 **팩트 저장소 패널**에서
+   늘 확인할 수 있다.
+4. 라운드 2 이후 **핵심 메시지 3개** 승인 게이트가 나온다. 제안서는 문제 정의→해법→
+   기대효과의 **서사 아크**를 따라 주제 그룹별로 질문이 진행되며, 이후 질문은
+   핵심 메시지 3개를 성립시킬 근거 수집을 목표로 한다.
 5. 소스가 풍부하면 1~2라운드로 끝나는 것이 정상이다. 체크리스트가 채워지면 인터뷰가 종료되고
    plan 생성 단계로 넘어간다.
 
@@ -258,8 +273,10 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 - 작업은 작업 큐(단일 워커)로 처리된다 — 화면에서 진행 상태를 폴링하며 기다린다.
 - 완료되면 갤러리에 `output/<문서 제목>_v01.pptx` 같은 파일이 버전별로 쌓인다.
   md·html은 인라인 미리보기, pptx·docx는 다운로드된다. **기존 파일은 절대 덮어써지지 않는다.**
-- 하나의 plan에 문서가 여러 개면 `[문서: 제안서+개발설계서]` 태그로 슬라이드가 분리되고,
-  각 문서의 목차는 해당 문서만 01..NN으로 재채번된다.
+- 하나의 plan에 문서가 여러 개면 plan 메타 `산출 문서`와 `[문서: 제안서+개발설계서]`
+  태그가 교차검증된다(태그는 메타에 정의된 문서만 가리키고, 복수 문서면 각 문서의
+  태그 슬라이드 1개 이상 — 어긋나면 무음 치환 없이 생성 전 차단). 슬라이드는 문서별로
+  분리되고, 각 문서의 목차는 해당 문서만 01..NN으로 재채번된다.
 - 수치 무결성 대조는 파생물 생성에서 **중단·재시도하지 않는다** — 스키마 통과 본문을
   1회 측정해 기록하고, red(위반)가 남으면 검수 리포트까지 **자동 실행**(결정 17).
   위반 수로 안내하는 완료 배너가 뜨고, 위반이 있어도 산출물은 채번·존재한다.
@@ -268,14 +285,16 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 - 검수 실행 버튼 → 리포트 1건이 만들어진다 (파생물 생성에서 수치 위반이 남으면 **자동 실행**):
   - **결정론 검수**: 수치 무결성(plan↔산출물 숫자 대조 — 검수 단계 권위)·문서 태그·골격 구조·세대 대응(plan 세대 일치 여부)
   - **LLM 내용 검수**: plan↔팩트 대조 (LLM 실패는 리포트를 막지 않고 `llm_ok=false`로 표기)
-  - **결정론 검수**: 수치 무결성(plan↔산출물 숫자 대조)·문서 태그·골격 구조·세대 대응(plan 세대 일치 여부)
-  - **LLM 내용 검수**: plan↔팩트 대조 (LLM 실패는 리포트를 막지 않고 `llm_ok=false`로 표기)
 - 발견사항은 심각도 순: 🔴 사실 오류·수치 불일치 / 🟡 표현·구조 / ⚪ 선택.
-- 수정 승인 시 **plan만 수정** → 재승인 → 재생성(버전 +1). 파생물·산출물을 직접 고치는 길은 없다.
+- **선택 항목 plan에 반영 (새 세대)** 버튼으로 발견사항을 골라 반영하면, 작업 큐로
+  plan_revise job이 실행되어 LLM이 plan을 고쳐 새 세대(DRAFT)를 만든다(포맷 검증
+  게이트를 통과한 plan만 세대 등록). 이후 승인·재생성 절차는 동일하다.
+- 그 외 수정 시에도 **plan만 수정** → 재승인 → 재생성(버전 +1). 파생물·산출물을 직접 고치는 길은 없다.
 
 ### ⑦ 관리
-- **팩트 압축**: 인터뷰가 길어지면 `POST /api/projects/{pid}/facts/compact`(미리보기) →
-  `.../compact/apply`(활성 팩트 통합 + 이전 항목 아카이브)로 팩트 목록을 정리한다.
+- **팩트 압축**: 인터뷰가 길어지면 인터뷰 탭 **팩트 저장소 패널**의 압축 카드로 팩트 목록을
+  정리한다 — 미리보기(`POST /api/projects/{pid}/facts/compact`) → 적용
+  (`.../compact/apply` — 활성 팩트 통합 + 이전 항목 아카이브).
   팩트 단건 수정은 `PATCH /api/projects/{pid}/facts/{fact_id}`.
 
 ---
@@ -317,7 +336,7 @@ LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 | 프로젝트 | `POST/GET /api/projects` · `DELETE /api/projects/{pid}` |
 | 소스 | `GET/POST/DELETE /api/projects/{pid}/sources` · `GET .../sources/{name}/download` · `GET/PUT .../overview`(개요 문서) · `GET /api/sources`(글로벌 읽기전용) |
 | 인터뷰(SSE) | `POST .../interview/sessions` → `.../kick` · `.../turn` · `.../answers` · `.../facts/confirm` · `.../key-messages` · `GET .../messages?after=seq` |
-| plan | `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}` · `POST /api/plans/{id}/approve` · `POST /api/plans/{id}/revise` |
+| plan | `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}` · `POST /api/plans/{id}/approve` · `POST /api/plans/{id}/revise` · `POST /api/plans/{id}/revise-from-review`(검수 발견사항 → plan 수정 job) |
 | 검수 | `POST /api/projects/{pid}/reviews` · `GET /api/projects/{pid}/reviews`(및 단건) |
 | 팩트 | `POST /api/projects/{pid}/facts/compact`(미리보기) → `.../compact/apply` · `PATCH .../facts/{fact_id}` |
 | 산출물 | `GET /api/projects/{pid}/outputs` · `GET .../outputs/{build_id}/download` |
