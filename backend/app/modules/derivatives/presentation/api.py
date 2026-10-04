@@ -43,6 +43,9 @@ def enqueue_derivative(project_id: int, body: DerivativeCreate,
     job = enqueue(db, project_id, JobType.DERIVE_BUILD,
                   {"plan_id": plan.id, "kind": body.kind, "doc": body.doc,
                    "fmts": body.fmts})
+    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다. get_db teardown 커밋은
+    # FastAPI 특성상 응답 전송 후에 실행되어 202 직후 /jobs refetch가 잡을 놓친다.
+    db.commit()
     return JobOut.model_validate(job)
 
 
