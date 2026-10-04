@@ -437,6 +437,204 @@ def test_interview_design_arc_full_flow_to_plan_approval(dclient, design_llm, db
     validate_skeleton(filter_slides(plan.slides, "개발설계서"))  # 골격 검증 (원칙 8)
 
 
+# ------------------------------------------------------- 제안서 서사 아크 (interview.md 아크 블록 대칭)
+
+PROPOSAL_PLAN_MARKDOWN = """# 제안서 기획 (보고 파이프라인 도입 제안)
+
+## 메타
+- 산출 문서: 제안서
+- 목적: 4분기 시범 도입 승인
+- 청중: 경영진
+- 예상 분량: 6장
+
+## 핵심 메시지 (3개)
+1. 보고 작성은 주 10시간 수기 작성으로 인력 소모가 크다
+2. 보고 파이프라인 자동화가 수기 취합·양식 상이를 없앤다
+3. 4분기 시범 도입으로 작성 시간을 주 2시간으로 줄인다
+
+## 슬라이드 목록
+
+### 1. [유형: 표지] 보고 파이프라인 도입 제안
+- 핵심문장: 반복 보고 업무의 자동화로 작성 시간을 줄인다
+- 근거/출처: interview-log [2026-10-04] 표지 문장 (샘플)
+
+### 2. [유형: 목차] 목차
+- 핵심문장: 01 현황 및 문제점 / 02 해결 방안 / 03 기대 효과 및 요청 사항
+
+### 3. [유형: 2단] 현황 및 문제점
+- 좌 (현황):
+  - 보고 작성 | 주 10시간 수기 작성
+  - 데이터 취합 | 부서별 양식 상이로 수작업 취합
+- 우 (문제점·영향):
+  - 인력 소모 | 단순 반복 업무에 인력 소모
+- 근거/출처: interview-log [2026-10-04] 현황·문제 (샘플)
+
+### 4. [유형: 표] 해결 방안
+- 표: [대안 | 요약 | 판단 | 상태]
+  - 파이프라인 자동화 | 작성·취합 파이프라인 구축 | 수기 취합을 없앤다 | 확정
+  - 상시 대시보드 | 실시간 집계 화면 구축 | 실측 성과 검토 중 | (미확정)
+- 근거/출처: interview-log [2026-10-04] 해결 방안 대안 비교 (샘플)
+
+### 5. [유형: 차트] 기대 효과
+- 차트:
+  - 범주: 도입 전, 도입 후 (목표)
+  - 작성 시간(시간/주) | 10, 2
+- 근거/출처: (미확정)
+
+### 6. [유형: 마무리] 요청 사항
+- 핵심문장: 4분기 시범 도입 승인을 요청한다 — 상시 대시보드 착수 여부는 11월 첫째 주에 확정
+- 근거/출처: interview-log [2026-10-04] 요청 사항 (샘플)
+"""
+
+
+@pytest.fixture()
+def proposal_llm():
+    return FakeStreamLLM([
+        # 턴1 kick: 가설(제안서 단독) + 제안서 아크 주제 그룹 질문
+        ("가설 초안: 산출 문서는 제안서 단독 — 제안서 아크(현황·문제 정의 → 영향·기회 → …)를 진행한다.", [
+            ("update_checklist", {"items": [
+                {"id": "p1", "area": "제안서", "text": "핵심 메시지 3개 후보 사용자 승인 / 근거 확보",
+                 "done": False},
+                {"id": "p2", "area": "제안서", "text": "현황·문제·영향 확정 — 근거 또는 (미확정) 명시",
+                 "done": False},
+                {"id": "p3", "area": "제안서", "text": "제안 해결책·차별성 확정 — 대안 비교 포함",
+                 "done": False},
+                {"id": "p4", "area": "제안서", "text": "기대효과·실증 근거 확정",
+                 "done": False},
+                {"id": "p5", "area": "제안서", "text": "리스크·대응·요청 사항 기재",
+                 "done": False},
+            ]}),
+            ("ask_questions", {
+                "round_summary": "라운드 1 목표: 현황·문제 정의·영향 확정",
+                "questions": [
+                    {"text": "해결하려는 문제의 본질은 무엇인가요?", "options": [
+                        {"label": "업무 효율 저하",
+                         "description": "반복 수작업에 시간·인력 소모"},
+                        {"label": "데이터 품질 저하",
+                         "description": "수기 취합으로 오류·불일치 누적"}]},
+                    {"text": "제안하는 해결책과 범위, 대안 대비 차별점은?", "allow_free": True},
+                ]}),
+        ]),
+        # 턴2 answers: 아크 팩트 확인 게이트 (주제당 1개 팩트 — 주장+근거, 수치는 (미확정))
+        ("", [
+            ("save_facts", {"facts": [
+                {"content": "문제: 보고 작성은 주 10시간 수기 작성 — 업무 효율 저하 "
+                            "(부서별 양식 상이로 수작업 취합)", "source": "인터뷰 라운드 1"},
+                {"content": "해결책: 보고 파이프라인 자동화 — 대안 상시 대시보드는 "
+                            "실측 성과 검토 중 (미확정)", "source": "인터뷰 라운드 1"},
+                {"content": "기대효과: 작성 시간 주 2시간 목표 — 실측 근거 없음 (미확정)",
+                 "source": "인터뷰 라운드 1"},
+                {"content": "요청: 4분기 시범 도입 승인 — 상시 대시보드 착수 여부는 "
+                            "11월 첫째 주에 확정", "source": "인터뷰 라운드 1"},
+            ]}),
+        ]),
+        # 턴3 팩트 승인 후: 핵심 메시지 승인 카드 (아크 세 축 1:1)
+        ("", [
+            ("confirm_key_messages", {"messages": [
+                "보고 작성은 주 10시간 수기 작성으로 인력 소모가 크다",
+                "보고 파이프라인 자동화가 수기 취합·양식 상이를 없앤다",
+                "4분기 시범 도입으로 작성 시간을 주 2시간으로 줄인다"]}),
+        ]),
+        # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
+        ("", [
+            ("write_plan", {"markdown": PROPOSAL_PLAN_MARKDOWN}),
+        ]),
+    ])
+
+
+@pytest.fixture()
+def papp(db_env, test_engine, proposal_llm):
+    from app.main import create_app
+
+    return create_app(start_worker=False, llm_overrides={"interview": proposal_llm})
+
+
+@pytest.fixture()
+def pclient(papp):
+    from fastapi.testclient import TestClient
+
+    with TestClient(papp) as c:
+        yield c
+
+
+def test_interview_proposal_arc_full_flow_to_plan_approval(pclient, proposal_llm, db_env):
+    """제안서 서사 아크 — 가설(제안서 단독) → 아크 주제 그룹 질문 → 아크 팩트(주장+근거,
+    (미확정)) → 핵심 메시지(아크 세 축 1:1) → plan(아크 순서 슬라이드·(미확정) 원문 보존)
+    → 승인."""
+    pclient.post("/api/projects", json={"slug": "proposal-e2e", "title": "제안서 아크 e2e"})
+    r = pclient.post("/api/projects/1/interview/sessions", json={})
+    assert r.status_code == 201
+    sid = r.json()["id"]
+
+    # kick — 가설 선제시 + 제안서 아크 질문 카드
+    events = _sse_events(pclient, f"/api/interview/sessions/{sid}/kick")
+    assert "questions" in [n for n, _ in events]
+    s = pclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    assert s["pending_round_summary"] == "라운드 1 목표: 현황·문제 정의·영향 확정"
+    assert any(i["area"] == "제안서" for i in s["checklist"])
+    # 강화된 프롬프트(제안서 아크)가 시스템 프롬프트로 주입됐는지
+    first_call = proposal_llm.calls[0]
+    assert first_call[0]["role"] == "system"
+    assert "인터뷰 에이전트" in first_call[0]["content"]
+    assert "제안서 아크" in first_call[0]["content"]
+    assert "현황·문제 정의" in first_call[0]["content"]
+
+    # answers → 아크 팩트 게이트
+    _sse_events(pclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "option": 0},
+                             {"index": 1, "free_text": "보고 파이프라인 자동화"}]})
+    s = pclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "fact_gate" and len(s["pending_facts"]) == 4
+
+    # 팩트 승인 — 주장+근거가 팩트 저장소에 적립된다 (원칙 4)
+    _sse_events(pclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    facts = pclient.get("/api/projects/1/facts").json()
+    assert len(facts) == 4
+    contents = " ".join(f["content"] for f in facts)
+    assert "파이프라인 자동화" in contents
+    assert "상시 대시보드는 실측 성과 검토 중" in contents
+    assert "(미확정)" in contents
+    log = db_env / "proposal-e2e" / "docs" / "interview-log.md"
+    assert "파이프라인 자동화" in log.read_text(encoding="utf-8")
+    s = pclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "key_message_gate"
+
+    # 핵심 메시지 승인 → plan 작성
+    events = _sse_events(pclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    assert "plan_draft" in [n for n, _ in events]
+    draft = events[[n for n, _ in events].index("plan_draft")][1]
+    assert draft["docs"] == ["제안서"]
+    s = pclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["key_messages_approved"] is True
+
+    # plan 승인 게이트
+    r = pclient.post(f"/api/plans/{draft['plan_id']}/approve")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "approved"
+    s = pclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "approved" and s["status"] == "done"
+
+    # plan.md 미러 — 아크 순서 슬라이드·(미확정)이 원문 그대로 보존된다 (SSOT)
+    mirror = (db_env / "proposal-e2e" / "plan.md").read_text(encoding="utf-8")
+    assert mirror == PROPOSAL_PLAN_MARKDOWN
+    from planforge.plan import filter_slides, parse_plan_text, validate_skeleton
+
+    plan = parse_plan_text(mirror)
+    assert plan.docs == ["제안서"]
+    toc = next(s for s in plan.slides if s.type == "toc")
+    # 목차 불릿은 아크 순서의 장 라벨 (제안서 구성 가이드)
+    assert toc.message == "01 현황 및 문제점 / 02 해결 방안 / 03 기대 효과 및 요청 사항"
+    table = next(s for s in plan.slides if s.type == "table")
+    assert table.table.headers == ["대안", "요약", "판단", "상태"]
+    assert any(row[-1] == "(미확정)" for row in table.table.rows)  # (미확정) 상태 셀 원문 보존
+    chart = next(s for s in plan.slides if s.type == "chart")
+    assert chart.source == "(미확정)"  # 근거 없는 수치 — 근거 라인 (미확정) 원문 보존
+    assert chart.chart.series[0].values == [10, 2]  # 수치 무결성 — plan 표기 그대로
+    validate_skeleton(filter_slides(plan.slides, "제안서"))  # 골격 검증 (원칙 8)
+
+
 # ---------------------------------------------------------------------------
 # 질문 선택지 계약 강제 — 누락 시 ERROR 피드백 → 재호출 (turn_graph route_after_blocking)
 
@@ -632,6 +830,10 @@ def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
     assert "suggestions" in sys1          # 추천 후보 계약 서술 (질문 설계 규칙 + 예시)
     assert "모름 답변 처리" in sys1         # 모름 절 신설 (프롬프트 쪽 모름 인지·추천 근거)
     assert "추천 후보" in sys1             # _remind_ask 리마인더 1줄
+    assert "제안서 아크" in sys1           # 제안서 서사 아크 주제 그룹 (개발설계서 5그룹과 대칭)
+    assert "현황·문제 정의" in sys1         # 제안서 아크 주제 그룹 ①
+    assert "제안서 구성 가이드" in sys1      # plan 포맷의 제안서 배치 가이드 (개발설계서 가이드 대칭)
+    assert "대안 | 요약 | 판단 | 상태" in sys1  # 해결책·차별성 결정표 헤더 예시
 
     _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
