@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import type { Job } from "../../api/client";
 import { apiGet } from "../../api/client";
 import { errMsg } from "./errMsg";
@@ -7,6 +7,14 @@ import { hasActive, latestActive } from "./jobs";
 /** 잡 목록 조회 — ["jobs", pid]의 유일한 definition (outputsApi/reviewApi의 중복은 단계 삭제). */
 export function fetchJobs(pid: number) {
   return apiGet<Job[]>(`/api/projects/${pid}/jobs`);
+}
+
+/** 큐 진입(202) 응답으로 돌아온 잡을 ["jobs", pid] 캐시에 먼저 넣는다 — refetch RTT와
+ *  무관하게 큐 카드·busy 게이트가 즉시 반영되고 시딩 잡(queued)이 1.5s 폴링을 켠다.
+ *  백엔드는 잡 엔드포인트가 응답 전에 커밋하므로(202 계약) 이후 refetch에도 잡이 포함된다. */
+export function seedJob(qc: QueryClient, pid: number, job: Job) {
+  qc.setQueryData<Job[]>(["jobs", pid], (old) =>
+    old?.some((j) => j.id === job.id) ? old : [...(old ?? []), job]);
 }
 
 /** 잡 목록 폴링의 단일 소유자 — ["jobs", pid] 쿼리에 refetchInterval을 붙이는 유일한 관측점.

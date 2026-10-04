@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Build } from "../../../api/client";
 import { enqueueDerivative, fetchBuilds, fetchOutputText, fetchPlans } from "../models/outputsApi";
 import { latestDoneDeriveWithReds, latestFailed } from "../../../shared/lib/jobs";
-import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
+import { seedJob, useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { errMsg } from "../../../shared/lib/errMsg";
 
@@ -60,6 +60,7 @@ export function useOutputs(pid: number) {
       enqueueDerivative(pid, body),
     onSuccess: async (job) => {
       setNotice(`작업 큐 진입 (#${job.id}) — 워커가 직렬 처리합니다.`);
+      seedJob(qc, pid, job);
       await refresh();
     },
     onError: (e) => {
