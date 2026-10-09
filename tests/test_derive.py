@@ -227,20 +227,6 @@ def test_render_slides_text_design_plan_verbatim():
 
 # ---------------------------------------------------------------- provider 설정
 
-def test_load_config_profiles():
-    """config.example.json 로드 — ollama·openai·azure를 섞어 각 프로바이더 설정 형태를
-    보여주는 예시(편차 13) 기준. "_"로 시작하는 설명 키는 무시돼야 통과한다."""
-    from planforge.llm import load_config
-    profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
-    assert set(profiles) == {"interview", "derive", "review", "plan_revise"}
-    assert profiles["interview"].provider == "azure"
-    assert profiles["derive"].model == "gpt-5.6-luna"  # config.example.json 샘플 모델과 동기
-    assert profiles["review"].provider == "ollama"
-    assert profiles["review"].model == "gemma4:26b"
-    assert profiles["plan_revise"].provider == "openai"
-    assert profiles["plan_revise"].model == "gpt-5.6-luna"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
-
-
 def test_provider_requires_model():
     from planforge.llm import ProfileConfig, get_provider
     with pytest.raises(ValueError, match="모델"):

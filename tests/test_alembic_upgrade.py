@@ -35,5 +35,7 @@ def test_alembic_upgrade_head_creates_tables(tmp_path):
                 sa.text("SELECT name FROM sqlite_master WHERE type='table'"))}
     finally:
         engine.dispose()
-    assert {"projects", "plans", "facts", "jobs", "builds", "derivatives",
-            "interview_sessions", "interview_messages", "review_reports"} <= tables
+    # 등집합 — 마이그레이션은 정확히 이 10개 테이블만 남긴다(부수 테이블 생성 반대)
+    assert tables == {"projects", "plans", "facts", "jobs", "builds", "derivatives",
+                      "interview_sessions", "interview_messages", "review_reports",
+                      "alembic_version"}

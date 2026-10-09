@@ -11,6 +11,23 @@ from _helpers import make_project
 OVERVIEW = "overview.md"  # shared.workspace.OVERVIEW_NAME — 하드코딩으로 계약 고정
 
 
+def test_get_settings_reads_env_freshly(monkeypatch, tmp_path):
+    """Settings 캐시 없음 — get_settings는 호출마다 os.environ을 재독록한다(config.py 계약).
+
+    아래 두 테스트(test_global_sources_readonly_listing·test_global_source_download_
+    roundtrip)가 캐시 리셋 없이 monkeypatch.setenv로 GLOBAL_SOURCES_DIR을 재구성하는
+    것은 이 계약의 암묵 의존이다 — 명시 잠금으로 승격한다. 프로덕션 무변경.
+    """
+    from app.shared.config import get_settings
+
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(tmp_path / "a"))
+    s1 = get_settings()
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(tmp_path / "b"))
+    s2 = get_settings()
+    assert s1.global_sources_dir != s2.global_sources_dir
+    assert s2.global_sources_dir == tmp_path / "b"
+
+
 def test_upload_list_delete_source(client, db_env):
     pid = make_project(client, "src-demo", "소스 데모")
     r = client.post(f"/api/projects/{pid}/sources",
@@ -103,7 +120,7 @@ def test_global_sources_readonly_listing(client, db_env, monkeypatch):
     glob.mkdir(parents=True)
     (glob / "공용-메뉴얼.txt").write_text("공용 소스", encoding="utf-8")
     monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
-    # get_settings는 환경변수를 매 요청 새로 읽는다 — 캐시 리셋 없이 재구성됨
+    # get_settings는 env를 매 요청 새로 읽는다 — 잠금: test_get_settings_reads_env_freshly
     r = client.get("/api/sources")
     items = [s for s in r.json() if s["name"] == "공용-메뉴얼.txt"]
     assert len(items) == 1
@@ -232,6 +249,7 @@ def test_global_source_download_roundtrip(client, db_env, monkeypatch):
     glob = db_env / "global-sources"
     glob.mkdir(parents=True)
     (glob / "공용-메뉴얼.txt").write_text("공용 소스 본문", encoding="utf-8")
+    # env 재독록 계약(잠금: test_get_settings_reads_env_freshly)이 setenv를 그대로 반영한다
     monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
 
     r = client.get("/api/sources/공용-메뉴얼.txt/download")
