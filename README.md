@@ -69,8 +69,8 @@ workspaces/               프로젝트별 워크스페이스 (gitignored — 산
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
 docs/                     기획·아키텍처 문서 (PRD · ARCHITECTURE · ADR — 결정·편차 기록 ·
-                          UI_GUIDE) · 보조 계약 문서 (token-checklist ·
-                          interview-turn-contract — 인터뷰 턴 계약)
+                          UI_GUIDE — 디자인 가이드·토큰 변경 절차) · 보조 계약 문서
+                          (interview-turn-contract — 인터뷰 턴 계약)
 tests/                    pytest (계약 테스트 fixture 포함)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
@@ -382,7 +382,7 @@ docker compose build && docker compose up -d
   롤백 기준: 핵심 시나리오(프로젝트 생성 → 인터뷰 완주 → plan 승인 → 파생물 생성 → 검수) 실패 또는
   5xx 오류율 임계 초과 — 자세한 절차는 `docs/ADR.md` 참조.
 - DB는 SQLite 단일 방언(호스트 볼륨 `data/`). WAL + foreign_keys=ON은 연결 리스너가 설정한다.
-- 디자인 토큰(색·폰트·여백) 변경 절차: `docs/token-checklist.md` —
+- 디자인 토큰(색·폰트·여백) 변경 절차: `docs/UI_GUIDE.md` §토큰 변경 절차 —
   theme.py(기준점) 수정 → tokens.css 미러 수정 → 빌더 리터럴 점검 → 좌표 규격 변경 시
   fixture 갱신. **4종 세트(theme.py·빌더·fixture·tokens.css)를 동시 점검·수정**해야 한다.
 
@@ -397,7 +397,7 @@ docker compose build && docker compose up -d
 5. **무손실 채번**: `<문서 제목>_vNN.<ext>`, 확장자별 독립 시퀀스, 절대 덮어쓰기 금지(동시성 포함 — 빌드 직렬화).
 6. **다중 문서 태그**: `[문서: 제안서+개발설계서]` 필터링 + 문서별 목차 재채번.
 7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 토큰(theme.py)·렌더러(빌더)·
-   샘플(fixture)·프론트 미러(tokens.css) 동시 점검·수정 — 절차는 `docs/token-checklist.md`.
+   샘플(fixture)·프론트 미러(tokens.css) 동시 점검·수정 — 절차는 `docs/UI_GUIDE.md`.
 8. **골격 검증**: 파생물 생성 전 표지·목차·마무리·내용 슬라이드 각 1개 이상 검증, 미달 시 중단.
 
 ---

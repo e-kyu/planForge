@@ -12,7 +12,7 @@ description: /harness — step 기반 하네스 워크플로우 (설계 → phas
 
 `/docs/` 하위 문서(PRD, ARCHITECTURE, ADR)와 `CLAUDE.md`(계약 8원칙)를 읽고
 프로젝트의 기획·아키텍처·설계 의도를 파악한다. 필요시 Explore 에이전트를 병렬로
-사용한다. 토큰(theme)·디자인 관련 step이면 `docs/token-checklist.md`·`docs/UI_GUIDE.md`를,
+사용한다. 토큰(theme)·디자인 관련 step이면 `docs/UI_GUIDE.md`(§토큰 변경 절차 포함)를,
 인터뷰 계약 관련 step이면 `docs/interview-turn-contract.md`를 반드시 읽는다.
 
 ### B. 논의

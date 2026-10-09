@@ -29,7 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. **다중 문서 태그**: `[문서: 제안서+개발설계서]` 태그로 문서별 필터링, 문서별 목차 재채번.
 7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 **토큰(theme.py)·렌더러(빌더)·
    계약 fixture(tests/fixtures/*.sample.json)·프론트 미러(tokens.css)** 를 반드시 동시
-   점검·수정 — 좌표 규격 변경이면 fixture 갱신 (절차: `docs/token-checklist.md`).
+   점검·수정 — 좌표 규격 변경이면 fixture 갱신 (절차: `docs/UI_GUIDE.md` §토큰 변경 절차).
    하나만 고치는 PR은 리뷰에서 반려.
 8. **골격 검증**: 파생물 생성 전 표지·목차·마무리·내용 슬라이드 각 1개 이상 검증, 미달 시 중단.
 
@@ -117,7 +117,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 타입 갱신: backend/ `python scripts/export_openapi.py` → frontend/ `npm run gen:types`
 - API 전체 목록은 `backend/app/main.py`·OpenAPI 참조.
 - 배포: `docker compose build && docker compose up -d`
-- 토큰 변경 절차: `docs/token-checklist.md` (원칙 7)
+- 토큰 변경 절차: `docs/UI_GUIDE.md` §토큰 변경 절차 (원칙 7)
 
 ## 하네스 워크플로우 (/harness)
 
