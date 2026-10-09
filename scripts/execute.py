@@ -117,7 +117,7 @@ class StepExecutor:
     def _checkout_branch(self):
         branch = f"feat-{self._phase_name}"
 
-        r = self._run_git("rev-parse", "--abbrev-ref", branch)
+        r = self._run_git("rev-parse", "--abbrev-ref", "HEAD")
         if r.returncode != 0:
             print(f"  ERROR: git을 사용할 수 없거나 git repo가 아닙니다.")
             print(f"  {r.stderr.strip()}")
