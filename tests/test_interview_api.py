@@ -11,6 +11,7 @@ import json
 import pytest
 
 from app.agents.tools import MAX_SUGGESTIONS
+from _helpers import run_queue
 from fakes import (
     FakeLLM,
     FakeStreamLLM,
@@ -37,48 +38,42 @@ def _sse_events(client, url, payload=None):
         return events
 
 
-@pytest.fixture()
-def fake_llm():
-    return FakeStreamLLM([
-        # 턴1 kick: 가설 텍스트 + 라운드 1 질문
-        ("가설 초안: 목적은 보고 업무 자동화 도입 설득이다.", [
-            ("update_checklist", {"items": [{"id": "c1", "area": "공통", "text": "목적 확정", "done": True}]}),
-            ("ask_questions", {"round_summary": "뼈대 확인",
-                               "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
-        ]),
-        # 턴2 answers: 팩트 확인 게이트 제시
-        ("", [
-            ("save_facts", {"facts": [
-                {"content": "보고 작성이 주 10시간 수기 작성이다", "source": "인터뷰"},
-                {"content": "부서별 양식 상이로 취합이 수작업이다", "source": "인터뷰"},
-                {"content": "4분기 시범 도입을 목표로 한다", "source": "인터뷰"},
-            ]}),
-        ]),
-        # 턴3 팩트 승인 후: 핵심 메시지 승인 카드
-        ("", [
-            ("confirm_key_messages", {"messages": [
-                "주 11.5시간 절감", "표준 파이프라인", "시범 도입 후 확장"]}),
-        ]),
-        # 턴4 핵심 메시지 승인 후: plan 작성
-        ("", [
-            ("write_plan", {"markdown": plan_sample_markdown()}),
-        ]),
-    ])
+# ------------------------------------------------------- 기본 흐름 턴 스크립트 (모듈 상수)
+
+BASE_TURNS = [
+    # 턴1 kick: 가설 텍스트 + 라운드 1 질문
+    ("가설 초안: 목적은 보고 업무 자동화 도입 설득이다.", [
+        ("update_checklist", {"items": [{"id": "c1", "area": "공통", "text": "목적 확정", "done": True}]}),
+        ("ask_questions", {"round_summary": "뼈대 확인",
+                           "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
+    ]),
+    # 턴2 answers: 팩트 확인 게이트 제시
+    ("", [
+        ("save_facts", {"facts": [
+            {"content": "보고 작성이 주 10시간 수기 작성이다", "source": "인터뷰"},
+            {"content": "부서별 양식 상이로 취합이 수작업이다", "source": "인터뷰"},
+            {"content": "4분기 시범 도입을 목표로 한다", "source": "인터뷰"},
+        ]}),
+    ]),
+    # 턴3 팩트 승인 후: 핵심 메시지 승인 카드
+    ("", [
+        ("confirm_key_messages", {"messages": [
+            "주 11.5시간 절감", "표준 파이프라인", "시범 도입 후 확장"]}),
+    ]),
+    # 턴4 핵심 메시지 승인 후: plan 작성
+    ("", [
+        ("write_plan", {"markdown": plan_sample_markdown()}),
+    ]),
+]
 
 
 @pytest.fixture()
-def sapp(db_env, test_engine, fake_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": fake_llm})
-
-
-@pytest.fixture()
-def sclient(sapp):
-    from fastapi.testclient import TestClient
-
-    with TestClient(sapp) as c:
-        yield c
+def base_kit(llm_app_factory):
+    """기본 흐름 fake LLM 킷 — kit.client·kit.app·kit.fake (턴 스크립트 BASE_TURNS)."""
+    fake = FakeStreamLLM(BASE_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
 def _setup(sclient) -> int:
@@ -88,7 +83,8 @@ def _setup(sclient) -> int:
     return r.json()["id"]
 
 
-def test_interview_full_flow_to_plan_approval(sclient, sapp, fake_llm, db_env):
+def test_interview_full_flow_to_plan_approval(base_kit, db_env):
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
 
     # kick — 가설 선제시 + 질문 카드 (FR-2.2/2.3)
@@ -149,8 +145,9 @@ def test_interview_full_flow_to_plan_approval(sclient, sapp, fake_llm, db_env):
     assert (db_env / "interview-e2e" / "plan.md").read_text(encoding="utf-8") == plan_sample_markdown()
 
 
-def test_kick_emits_progress_and_not_persisted(sclient, fake_llm):
+def test_kick_emits_progress_and_not_persisted(base_kit):
     """progress 이벤트: 첫 토큰 전 구간 진행을 알리며, emit-only라 이력에 영속되지 않는다."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
     events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
     names = [n for n, _ in events]
@@ -163,7 +160,8 @@ def test_kick_emits_progress_and_not_persisted(sclient, fake_llm):
     assert all(m["content"] for m in msgs if m["role"] == "assistant" and m["kind"] == "text")
 
 
-def test_gate_phase_mismatches_are_409(sclient, fake_llm):
+def test_gate_phase_mismatches_are_409(base_kit):
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
     # facts 게이트가 열리지 않은 상태에서 confirm → 409
     r = sclient.post(f"/api/interview/sessions/{sid}/facts/confirm", json={"approve": True})
@@ -177,8 +175,9 @@ def test_gate_phase_mismatches_are_409(sclient, fake_llm):
     assert r.status_code == 409
 
 
-def test_plan_validation_error_loops_back(sclient, fake_llm):
+def test_plan_validation_error_loops_back(base_kit):
     """write_plan 검증 실패 → ERROR 피드백으로 재호출 유도 → 재시도 성공."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     bad = "# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n\n## 슬라이드 목록\n"
     fake_llm.turns = [
         ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
@@ -197,8 +196,9 @@ def test_plan_validation_error_loops_back(sclient, fake_llm):
     assert "plan_draft" in [n for n, _ in events]
 
 
-def test_interview_to_build_end_to_end(sclient, sapp, fake_llm, db_env):
+def test_interview_to_build_end_to_end(base_kit, db_env):
     """수용 기준 1 — API로 인터뷰→빌드 e2e (report md 산출물)."""
+    sclient, sapp, fake_llm = base_kit.client, base_kit.app, base_kit.fake
     sid = _setup(sclient)
     _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
     _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
@@ -214,23 +214,8 @@ def test_interview_to_build_end_to_end(sclient, sapp, fake_llm, db_env):
     job_id = r.json()["id"]
 
     # 단일 워커 직렬화는 run_job 직접 호출로 결정론 검증 (worker 루프는 비활성)
-    from app.shared.config import get_settings
-    from app.shared.db import make_session_factory
-    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
-
     derive_llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
-    ctx = JobContext(
-        session_factory=make_session_factory(sapp.state.settings.database_url),
-        settings=get_settings(),
-        llm_overrides={"derive": derive_llm},
-    )
-    s = ctx.session_factory()
-    try:
-        job = claim_next_job(s)
-        assert job is not None
-        run_job(ctx, job)
-    finally:
-        s.close()
+    run_queue(sapp, derive_llm)
 
     job = sclient.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
@@ -246,71 +231,64 @@ def test_interview_to_build_end_to_end(sclient, sapp, fake_llm, db_env):
 DESIGN_PLAN_MARKDOWN = plan_interview_design_markdown()
 
 
-@pytest.fixture()
-def design_llm():
-    return FakeStreamLLM([
-        # 턴1 kick: 가설(산출 문서 목록 첫 확정) + 설계 결정 설문 라운드 1
-        ("가설 초안: 산출 문서는 개발설계서 단독 — 설계 결정 설문을 진행한다.", [
-            ("update_checklist", {"items": [
-                {"id": "d1", "area": "개발설계서", "text": "아키텍처 스타일·시스템 구성 확정",
-                 "done": False},
-                {"id": "d2", "area": "개발설계서", "text": "기술 스택·모듈/패키지 구조 확정",
-                 "done": False},
+DESIGN_TURNS = [
+    # 턴1 kick: 가설(산출 문서 목록 첫 확정) + 설계 결정 설문 라운드 1
+    ("가설 초안: 산출 문서는 개발설계서 단독 — 설계 결정 설문을 진행한다.", [
+        ("update_checklist", {"items": [
+            {"id": "d1", "area": "개발설계서", "text": "아키텍처 스타일·시스템 구성 확정",
+             "done": False},
+            {"id": "d2", "area": "개발설계서", "text": "기술 스택·모듈/패키지 구조 확정",
+             "done": False},
+        ]}),
+        ("ask_questions", {
+            "round_summary": "라운드 1 목표: 아키텍처 스타일·기술 스택 확정",
+            "questions": [
+                {"text": "시스템 구조는 어떻게 잡나요?", "options": [
+                    {"label": "레이어드 모놀리식",
+                     "description": "계층 분리·단일 배포 — 운영이 단순"},
+                    {"label": "마이크로서비스",
+                     "description": "도메인별 독립 배포 — 운영이 복잡"}]},
+                {"text": "언어·프레임워크·버전과 패키지 구조는?", "allow_free": True},
             ]}),
-            ("ask_questions", {
-                "round_summary": "라운드 1 목표: 아키텍처 스타일·기술 스택 확정",
-                "questions": [
-                    {"text": "시스템 구조는 어떻게 잡나요?", "options": [
-                        {"label": "레이어드 모놀리식",
-                         "description": "계층 분리·단일 배포 — 운영이 단순"},
-                        {"label": "마이크로서비스",
-                         "description": "도메인별 독립 배포 — 운영이 복잡"}]},
-                    {"text": "언어·프레임워크·버전과 패키지 구조는?", "allow_free": True},
-                ]}),
-        ]),
-        # 턴2 answers: 설계 결정 팩트 확인 게이트 (주제당 1개 팩트 — 결정+이유+대안)
-        ("", [
-            ("save_facts", {"facts": [
-                {"content": "아키텍처: 레이어드 모놀리식 3계층 — 단일 배포로 운영 단순 "
-                            "(대안 마이크로서비스는 운영 복잡도로 제외)", "source": "인터뷰 라운드 1"},
-                {"content": "기술 스택: Python 3.12 + FastAPI + SQLAlchemy 2.x — 대안 Django는 "
-                            "전환 비용으로 제외", "source": "인터뷰 라운드 1"},
-                {"content": "API 규약: OpenAPI 스키마 우선, 오류 응답 통일", "source": "인터뷰 라운드 1"},
-                {"content": "비목표: 인증은 이번 범위 아님 — SSO 연동은 (미확정)", "source": "인터뷰 라운드 1"},
-            ]}),
-        ]),
-        # 턴3 팩트 승인 후: 핵심 메시지 승인 카드
-        ("", [
-            ("confirm_key_messages", {"messages": [
-                "레이어드 모놀리식으로 운영을 단순하게 유지한다",
-                "FastAPI + SQLAlchemy 2.x 스택으로 API 계약을 코드로 잠근다",
-                "인증·클라우드 배포는 비목표로 고정한다"]}),
-        ]),
-        # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
-        ("", [
-            ("write_plan", {"markdown": DESIGN_PLAN_MARKDOWN}),
-        ]),
-    ])
+    ]),
+    # 턴2 answers: 설계 결정 팩트 확인 게이트 (주제당 1개 팩트 — 결정+이유+대안)
+    ("", [
+        ("save_facts", {"facts": [
+            {"content": "아키텍처: 레이어드 모놀리식 3계층 — 단일 배포로 운영 단순 "
+                        "(대안 마이크로서비스는 운영 복잡도로 제외)", "source": "인터뷰 라운드 1"},
+            {"content": "기술 스택: Python 3.12 + FastAPI + SQLAlchemy 2.x — 대안 Django는 "
+                        "전환 비용으로 제외", "source": "인터뷰 라운드 1"},
+            {"content": "API 규약: OpenAPI 스키마 우선, 오류 응답 통일", "source": "인터뷰 라운드 1"},
+            {"content": "비목표: 인증은 이번 범위 아님 — SSO 연동은 (미확정)", "source": "인터뷰 라운드 1"},
+        ]}),
+    ]),
+    # 턴3 팩트 승인 후: 핵심 메시지 승인 카드
+    ("", [
+        ("confirm_key_messages", {"messages": [
+            "레이어드 모놀리식으로 운영을 단순하게 유지한다",
+            "FastAPI + SQLAlchemy 2.x 스택으로 API 계약을 코드로 잠근다",
+            "인증·클라우드 배포는 비목표로 고정한다"]}),
+    ]),
+    # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
+    ("", [
+        ("write_plan", {"markdown": DESIGN_PLAN_MARKDOWN}),
+    ]),
+]
 
 
 @pytest.fixture()
-def dapp(db_env, test_engine, design_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": design_llm})
-
-
-@pytest.fixture()
-def dclient(dapp):
-    from fastapi.testclient import TestClient
-
-    with TestClient(dapp) as c:
-        yield c
+def design_kit(llm_app_factory):
+    """설계 결정 설문 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 DESIGN_TURNS)."""
+    fake = FakeStreamLLM(DESIGN_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_interview_design_arc_full_flow_to_plan_approval(dclient, design_llm, db_env):
+def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
     """개발설계서 설계 결정 설문 — 가설(문서 목록 첫 확정) → 설계 질문 → 설계 결정 팩트
     → 핵심 메시지 → plan(결정표·구성·비목표) → 승인."""
+    dclient, design_llm = design_kit.client, design_kit.fake
     dclient.post("/api/projects", json={"slug": "design-e2e", "title": "설계 아크 e2e"})
     r = dclient.post("/api/projects/1/interview/sessions", json={})
     assert r.status_code == 201
@@ -385,80 +363,73 @@ def test_interview_design_arc_full_flow_to_plan_approval(dclient, design_llm, db
 PROPOSAL_PLAN_MARKDOWN = plan_interview_proposal_markdown()
 
 
-@pytest.fixture()
-def proposal_llm():
-    return FakeStreamLLM([
-        # 턴1 kick: 가설(제안서 단독) + 제안서 아크 주제 그룹 질문
-        ("가설 초안: 산출 문서는 제안서 단독 — 제안서 아크(현황·문제 정의 → 영향·기회 → …)를 진행한다.", [
-            ("update_checklist", {"items": [
-                {"id": "p1", "area": "제안서", "text": "핵심 메시지 3개 후보 사용자 승인 / 근거 확보",
-                 "done": False},
-                {"id": "p2", "area": "제안서", "text": "현황·문제·영향 확정 — 근거 또는 (미확정) 명시",
-                 "done": False},
-                {"id": "p3", "area": "제안서", "text": "제안 해결책·차별성 확정 — 대안 비교 포함",
-                 "done": False},
-                {"id": "p4", "area": "제안서", "text": "기대효과·실증 근거 확정",
-                 "done": False},
-                {"id": "p5", "area": "제안서", "text": "리스크·대응·요청 사항 기재",
-                 "done": False},
+PROPOSAL_TURNS = [
+    # 턴1 kick: 가설(제안서 단독) + 제안서 아크 주제 그룹 질문
+    ("가설 초안: 산출 문서는 제안서 단독 — 제안서 아크(현황·문제 정의 → 영향·기회 → …)를 진행한다.", [
+        ("update_checklist", {"items": [
+            {"id": "p1", "area": "제안서", "text": "핵심 메시지 3개 후보 사용자 승인 / 근거 확보",
+             "done": False},
+            {"id": "p2", "area": "제안서", "text": "현황·문제·영향 확정 — 근거 또는 (미확정) 명시",
+             "done": False},
+            {"id": "p3", "area": "제안서", "text": "제안 해결책·차별성 확정 — 대안 비교 포함",
+             "done": False},
+            {"id": "p4", "area": "제안서", "text": "기대효과·실증 근거 확정",
+             "done": False},
+            {"id": "p5", "area": "제안서", "text": "리스크·대응·요청 사항 기재",
+             "done": False},
+        ]}),
+        ("ask_questions", {
+            "round_summary": "라운드 1 목표: 현황·문제 정의·영향 확정",
+            "questions": [
+                {"text": "해결하려는 문제의 본질은 무엇인가요?", "options": [
+                    {"label": "업무 효율 저하",
+                     "description": "반복 수작업에 시간·인력 소모"},
+                    {"label": "데이터 품질 저하",
+                     "description": "수기 취합으로 오류·불일치 누적"}]},
+                {"text": "제안하는 해결책과 범위, 대안 대비 차별점은?", "allow_free": True},
             ]}),
-            ("ask_questions", {
-                "round_summary": "라운드 1 목표: 현황·문제 정의·영향 확정",
-                "questions": [
-                    {"text": "해결하려는 문제의 본질은 무엇인가요?", "options": [
-                        {"label": "업무 효율 저하",
-                         "description": "반복 수작업에 시간·인력 소모"},
-                        {"label": "데이터 품질 저하",
-                         "description": "수기 취합으로 오류·불일치 누적"}]},
-                    {"text": "제안하는 해결책과 범위, 대안 대비 차별점은?", "allow_free": True},
-                ]}),
-        ]),
-        # 턴2 answers: 아크 팩트 확인 게이트 (주제당 1개 팩트 — 주장+근거, 수치는 (미확정))
-        ("", [
-            ("save_facts", {"facts": [
-                {"content": "문제: 보고 작성은 주 10시간 수기 작성 — 업무 효율 저하 "
-                            "(부서별 양식 상이로 수작업 취합)", "source": "인터뷰 라운드 1"},
-                {"content": "해결책: 보고 파이프라인 자동화 — 대안 상시 대시보드는 "
-                            "실측 성과 검토 중 (미확정)", "source": "인터뷰 라운드 1"},
-                {"content": "기대효과: 작성 시간 주 2시간 목표 — 실측 근거 없음 (미확정)",
-                 "source": "인터뷰 라운드 1"},
-                {"content": "요청: 4분기 시범 도입 승인 — 상시 대시보드 착수 여부는 "
-                            "11월 첫째 주에 확정", "source": "인터뷰 라운드 1"},
-            ]}),
-        ]),
-        # 턴3 팩트 승인 후: 핵심 메시지 승인 카드 (아크 세 축 1:1)
-        ("", [
-            ("confirm_key_messages", {"messages": [
-                "보고 작성은 주 10시간 수기 작성으로 인력 소모가 크다",
-                "보고 파이프라인 자동화가 수기 취합·양식 상이를 없앤다",
-                "4분기 시범 도입으로 작성 시간을 주 2시간으로 줄인다"]}),
-        ]),
-        # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
-        ("", [
-            ("write_plan", {"markdown": PROPOSAL_PLAN_MARKDOWN}),
-        ]),
-    ])
+    ]),
+    # 턴2 answers: 아크 팩트 확인 게이트 (주제당 1개 팩트 — 주장+근거, 수치는 (미확정))
+    ("", [
+        ("save_facts", {"facts": [
+            {"content": "문제: 보고 작성은 주 10시간 수기 작성 — 업무 효율 저하 "
+                        "(부서별 양식 상이로 수작업 취합)", "source": "인터뷰 라운드 1"},
+            {"content": "해결책: 보고 파이프라인 자동화 — 대안 상시 대시보드는 "
+                        "실측 성과 검토 중 (미확정)", "source": "인터뷰 라운드 1"},
+            {"content": "기대효과: 작성 시간 주 2시간 목표 — 실측 근거 없음 (미확정)",
+             "source": "인터뷰 라운드 1"},
+            {"content": "요청: 4분기 시범 도입 승인 — 상시 대시보드 착수 여부는 "
+                        "11월 첫째 주에 확정", "source": "인터뷰 라운드 1"},
+        ]}),
+    ]),
+    # 턴3 팩트 승인 후: 핵심 메시지 승인 카드 (아크 세 축 1:1)
+    ("", [
+        ("confirm_key_messages", {"messages": [
+            "보고 작성은 주 10시간 수기 작성으로 인력 소모가 크다",
+            "보고 파이프라인 자동화가 수기 취합·양식 상이를 없앤다",
+            "4분기 시범 도입으로 작성 시간을 주 2시간으로 줄인다"]}),
+    ]),
+    # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
+    ("", [
+        ("write_plan", {"markdown": PROPOSAL_PLAN_MARKDOWN}),
+    ]),
+]
 
 
 @pytest.fixture()
-def papp(db_env, test_engine, proposal_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": proposal_llm})
-
-
-@pytest.fixture()
-def pclient(papp):
-    from fastapi.testclient import TestClient
-
-    with TestClient(papp) as c:
-        yield c
+def proposal_kit(llm_app_factory):
+    """제안서 아크 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 PROPOSAL_TURNS)."""
+    fake = FakeStreamLLM(PROPOSAL_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_interview_proposal_arc_full_flow_to_plan_approval(pclient, proposal_llm, db_env):
+def test_interview_proposal_arc_full_flow_to_plan_approval(proposal_kit, db_env):
     """제안서 서사 아크 — 가설(제안서 단독) → 아크 주제 그룹 질문 → 아크 팩트(주장+근거,
     (미확정)) → 핵심 메시지(아크 세 축 1:1) → plan(아크 순서 슬라이드·(미확정) 원문 보존)
     → 승인."""
+    pclient, proposal_llm = proposal_kit.client, proposal_kit.fake
     pclient.post("/api/projects", json={"slug": "proposal-e2e", "title": "제안서 아크 e2e"})
     r = pclient.post("/api/projects/1/interview/sessions", json={})
     assert r.status_code == 201
@@ -537,36 +508,29 @@ def test_interview_proposal_arc_full_flow_to_plan_approval(pclient, proposal_llm
 # 질문 선택지 계약 강제 — 누락 시 ERROR 피드백 → 재호출 (turn_graph route_after_blocking)
 
 
-@pytest.fixture()
-def retry_llm():
-    return FakeStreamLLM([
-        # 턴1 1호출 — 선택지가 누락된 ask_questions (validate_tool_args 실패 → ERROR)
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "청중은 누구인가?"}]})]),
-        # 턴1 2호출 — ERROR 피드백을 받아 options를 채워 재호출
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "청중은 누구인가?", "options": [
-                                     {"label": "경영진", "description": "도입 승인 판단"},
-                                     {"label": "실무팀", "description": "현업 작성자"}]}]})]),
-    ])
+RETRY_TURNS = [
+    # 턴1 1호출 — 선택지가 누락된 ask_questions (validate_tool_args 실패 → ERROR)
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "청중은 누구인가?"}]})]),
+    # 턴1 2호출 — ERROR 피드백을 받아 options를 채워 재호출
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "청중은 누구인가?", "options": [
+                                 {"label": "경영진", "description": "도입 승인 판단"},
+                                 {"label": "실무팀", "description": "현업 작성자"}]}]})]),
+]
 
 
 @pytest.fixture()
-def rapp(db_env, test_engine, retry_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": retry_llm})
-
-
-@pytest.fixture()
-def rclient(rapp):
-    from fastapi.testclient import TestClient
-
-    with TestClient(rapp) as c:
-        yield c
+def retry_kit(llm_app_factory):
+    """선택지 누락 재시도 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 RETRY_TURNS)."""
+    fake = FakeStreamLLM(RETRY_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_ask_questions_options_contract_triggers_retry(rclient, retry_llm):
+def test_ask_questions_options_contract_triggers_retry(retry_kit):
+    rclient, retry_llm = retry_kit.client, retry_kit.fake
     sid = _setup(rclient)
 
     events = _sse_events(rclient, f"/api/interview/sessions/{sid}/kick")
@@ -587,41 +551,34 @@ def test_ask_questions_options_contract_triggers_retry(rclient, retry_llm):
 # 본문 서술형 선택지 계약 — 선택지는 options 배열로만 전달한다 (본문 "예:" 나열 거부)
 
 
-@pytest.fixture()
-def prose_llm():
-    return FakeStreamLLM([
-        # 턴1 1호출 — 선택지를 본문에 나열한 ask_questions (prose 탐지 → ERROR)
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "시스템 구조는 어떻게 잡나요?\n"
-                                                "예:\n- 레이어드 모놀리식\n- 마이크로서비스",
-                                                "allow_free": True}]})]),
-        # 턴1 2호출 — ERROR 피드백을 받아 선택지를 options 배열로 옮겨 재호출
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "시스템 구조는 어떻게 잡나요?",
-                                                "options": [
-                                                    {"label": "레이어드 모놀리식",
-                                                     "description": "계층 분리·단일 배포"},
-                                                    {"label": "마이크로서비스",
-                                                     "description": "도메인별 독립 배포"}]}]})]),
-    ])
+PROSE_TURNS = [
+    # 턴1 1호출 — 선택지를 본문에 나열한 ask_questions (prose 탐지 → ERROR)
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "시스템 구조는 어떻게 잡나요?\n"
+                                            "예:\n- 레이어드 모놀리식\n- 마이크로서비스",
+                                            "allow_free": True}]})]),
+    # 턴1 2호출 — ERROR 피드백을 받아 선택지를 options 배열로 옮겨 재호출
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "시스템 구조는 어떻게 잡나요?",
+                                            "options": [
+                                                {"label": "레이어드 모놀리식",
+                                                 "description": "계층 분리·단일 배포"},
+                                                {"label": "마이크로서비스",
+                                                 "description": "도메인별 독립 배포"}]}]})]),
+]
 
 
 @pytest.fixture()
-def prose_app(db_env, test_engine, prose_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": prose_llm})
-
-
-@pytest.fixture()
-def prose_client(prose_app):
-    from fastapi.testclient import TestClient
-
-    with TestClient(prose_app) as c:
-        yield c
+def prose_kit(llm_app_factory):
+    """본문 나열 선택지 재시도 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 PROSE_TURNS)."""
+    fake = FakeStreamLLM(PROSE_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_ask_questions_prose_options_triggers_retry(prose_client, prose_llm):
+def test_ask_questions_prose_options_triggers_retry(prose_kit):
+    prose_client, prose_llm = prose_kit.client, prose_kit.fake
     sid = _setup(prose_client)
 
     events = _sse_events(prose_client, f"/api/interview/sessions/{sid}/kick")
@@ -637,38 +594,31 @@ def test_ask_questions_prose_options_triggers_retry(prose_client, prose_llm):
     assert q["options"][0]["label"] == "레이어드 모놀리식"  # 정규화된 라벨이 카드에 노출
 
 
-@pytest.fixture()
-def rawargs_llm():
-    return FakeStreamLLM([
-        # 턴1 1호출 — 유효하지 않은 JSON 문자열 인자 (json.loads 실패 → ERROR)
-        ("", [("ask_questions", '{"questions": ')]),
-        # 턴1 2호출 — 유효 JSON이지만 object가 아닌 인자 (list → ToolError)
-        ("", [("ask_questions", ["list"])]),
-        # 턴1 3호출 — 정상 인자
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "청중은 누구인가?",
-                                                "options": [{"label": "경영진"},
-                                                            {"label": "실무팀"}]}]})]),
-    ])
+RAWARGS_TURNS = [
+    # 턴1 1호출 — 유효하지 않은 JSON 문자열 인자 (json.loads 실패 → ERROR)
+    ("", [("ask_questions", '{"questions": ')]),
+    # 턴1 2호출 — 유효 JSON이지만 object가 아닌 인자 (list → ToolError)
+    ("", [("ask_questions", ["list"])]),
+    # 턴1 3호출 — 정상 인자
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "청중은 누구인가?",
+                                            "options": [{"label": "경영진"},
+                                                        {"label": "실무팀"}]}]})]),
+]
 
 
 @pytest.fixture()
-def raw_app(db_env, test_engine, rawargs_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": rawargs_llm})
-
-
-@pytest.fixture()
-def raw_client(raw_app):
-    from fastapi.testclient import TestClient
-
-    with TestClient(raw_app) as c:
-        yield c
+def rawargs_kit(llm_app_factory):
+    """비-object 인자 재시도 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 RAWARGS_TURNS)."""
+    fake = FakeStreamLLM(RAWARGS_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_ask_questions_non_dict_arguments_retry_not_fail(raw_client, rawargs_llm):
+def test_ask_questions_non_dict_arguments_retry_not_fail(rawargs_kit):
     """비-object 도구 인자는 세션 FAILED(튕김) 대신 ERROR 피드백 재시도로 수렴한다."""
+    raw_client, rawargs_llm = rawargs_kit.client, rawargs_kit.fake
     sid = _setup(raw_client)
 
     events = _sse_events(raw_client, f"/api/interview/sessions/{sid}/kick")
@@ -683,13 +633,14 @@ def test_ask_questions_non_dict_arguments_retry_not_fail(raw_client, rawargs_llm
     assert s["phase"] == "awaiting_answers" and s["error"] is None
 
 
-def test_user_message_is_sent_once_per_turn(sclient, fake_llm):
+def test_user_message_is_sent_once_per_turn(base_kit):
     """user 메시지는 run_turn이 단일 권위로 적립해 모델 컨텍스트에 1회만 실린다.
 
     과거 결함: run_turn이 행을 적립한 뒤 autoflush로 _history에 포함되고, 다시
     messages에 재부착해 동일 user 메시지를 모델에 2회 전송했다 (/answers는 선행
     적립까지 겹쳐 이력 행도 2행이었다). 중복은 약한 모델의 직접적인 혼돈 요인이다.
     """
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
 
     _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
@@ -708,7 +659,7 @@ def test_user_message_is_sent_once_per_turn(sclient, fake_llm):
     assert len(rows) == 1
 
 
-def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
+def test_system_prompt_carries_fewshot_and_reminder(base_kit):
     """시스템 프롬프트는 퓨샷(완성 예시) 섹션 + 매턴 리마인더를 모두 실어 보낸다.
 
     형태 강제의 프롬프트 쪽 근거: interview.md의 완성 예시 섹션이 본문에, agent.py
@@ -716,6 +667,7 @@ def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
     라운드 번호는 서버가 sess.round_no + 1로 계산해 주입한다 — 모델이 지어내지
     않도록 (kick 시 round_no=0 → 라운드 1).
     """
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
 
     _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
@@ -739,10 +691,11 @@ def test_system_prompt_carries_fewshot_and_reminder(sclient, fake_llm):
     assert "라운드 2 목표" in sys2  # 라운드 진행 → 서버 계산 번호 증가
 
 
-def test_round_summary_persisted_and_replayed(sclient, fake_llm):
+def test_round_summary_persisted_and_replayed(base_kit):
     """라운드 목표(round_summary)는 세션에 영속·SessionOut으로 노출되고, 이력
     questions EVENT 행 payload에도 summary가 실린다 — 재접속 리플레이(D6)에서
     라운드 목표가 보존된다 (과거에는 이력 행에서 유실됐다)."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     sid = _setup(sclient)
 
     events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
@@ -768,9 +721,10 @@ TOC_BAD_KEY_MARKDOWN = (
 )
 
 
-def test_plan_format_feedback_carries_remedy(sclient, fake_llm):
+def test_plan_format_feedback_carries_remedy(base_kit):
     """실세션 위반(목차를 `- 내용:` 임의 키로) 재현 — 포맷 실패 피드백에 파서 원문 +
     치료안 치트시트가 붙고, 재시도 1회에 수렴한다 (계약: 실패 수업 참조)."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     fake_llm.turns = [
         ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
         ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
@@ -806,9 +760,10 @@ SKELETON_MISSING_MARKDOWN = (
 )
 
 
-def test_plan_skeleton_error_feedback_loops_back(sclient, fake_llm):
+def test_plan_skeleton_error_feedback_loops_back(base_kit):
     """골격 미달(SkeletonError)도 ERROR 피드백으로 돌아와 재시도에 참여한다 — 과거에는
     except PlanError가 놓쳐 피드백 없이 세션이 즉시 FAILED였다."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     fake_llm.turns = [
         ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
         ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
@@ -844,10 +799,11 @@ DOC_TAG_META_MISSING_MARKDOWN = (
 )
 
 
-def test_plan_doc_tag_mismatch_feedback_loops_back(sclient, fake_llm):
+def test_plan_doc_tag_mismatch_feedback_loops_back(base_kit):
     """다중 문서 plan의 메타 '산출 문서' 누락(태그는 정상 — 실세션 수업)을 파서 교차검증이
     막는다: 디폴트 ["제안서"] 무음 치환 대신 PlanError가 치트시트와 함께 ERROR 피드백으로
     돌아와 재시도에 참여한다."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     fake_llm.turns = [
         ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
         ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
@@ -873,9 +829,10 @@ def test_plan_doc_tag_mismatch_feedback_loops_back(sclient, fake_llm):
     assert s["phase"] == "plan_review" and s["error"] is None
 
 
-def test_plan_retry_exhaustion_marks_session_failed(sclient, fake_llm):
+def test_plan_retry_exhaustion_marks_session_failed(base_kit):
     """write_plan 실패 3회 소진 — 4번째 write_plan 호출에서 dispatch_blocking 가드가
     TurnError로 세션 FAILED를 남긴다 (SSE error 이벤트 + 세션 error 문자열)."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
     bad = "# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n\n## 슬라이드 목록\n"
     fake_llm.turns = [
         ("", [("ask_questions", {"questions": [{"text": "q", "allow_free": True}]})]),
@@ -911,54 +868,47 @@ RECOMMENDED_FACT = ("주요 고객: 사내 경영진·현업 부서 (미확정) 
                     "소스 '보고 개선안'의 '매출·실무 부서 대상' 표기에 근거")
 
 
-@pytest.fixture()
-def sg_llm():
-    return FakeStreamLLM([
-        # 턴1 kick: 2문항 — 문항1 서술형+suggestions, 문항2 객관형
-        ("가설 초안: 보고 업무 자동화.", [
-            ("ask_questions", {"round_summary": "뼈대 확인",
-                               "questions": [
-                                   {"text": "주요 고객은 누구인가?", "allow_free": True,
-                                    "suggestions": ["사내 경영진·현업 부서 (미확정)",
-                                                    "외부 고객사 (미확정)"]},
-                                   {"text": "언제까지 제출해야 하나요?", "options": [
-                                       {"label": "4월 말"},
-                                       {"label": "5월 말"}]},
-                               ]}),
-        ]),
-        # 턴2 (라운드 답변에 (모름) 있음): 근거 기반 추천 후보를 (미확정) 팩트로 save_facts —
-        # interview.md "모름 답변 처리" 절이 유도하는 동작
-        ("", [
-            ("save_facts", {"facts": [
-                {"content": RECOMMENDED_FACT, "source": "인터뷰 추천"}]}),
-        ]),
-        # 턴3 (팩트 승인 후): 남은 항목을 이어서 진행 (라운드 2)
-        ("", [
-            ("ask_questions", {"round_summary": "라운드 2 목표: 일정 확정",
-                               "questions": [{"text": "제출 일정은 어떻게 되나요?",
-                                              "allow_free": True}]}),
-        ]),
-    ])
+SUGGEST_TURNS = [
+    # 턴1 kick: 2문항 — 문항1 서술형+suggestions, 문항2 객관형
+    ("가설 초안: 보고 업무 자동화.", [
+        ("ask_questions", {"round_summary": "뼈대 확인",
+                           "questions": [
+                               {"text": "주요 고객은 누구인가?", "allow_free": True,
+                                "suggestions": ["사내 경영진·현업 부서 (미확정)",
+                                                "외부 고객사 (미확정)"]},
+                               {"text": "언제까지 제출해야 하나요?", "options": [
+                                   {"label": "4월 말"},
+                                   {"label": "5월 말"}]},
+                           ]}),
+    ]),
+    # 턴2 (라운드 답변에 (모름) 있음): 근거 기반 추천 후보를 (미확정) 팩트로 save_facts —
+    # interview.md "모름 답변 처리" 절이 유도하는 동작
+    ("", [
+        ("save_facts", {"facts": [
+            {"content": RECOMMENDED_FACT, "source": "인터뷰 추천"}]}),
+    ]),
+    # 턴3 (팩트 승인 후): 남은 항목을 이어서 진행 (라운드 2)
+    ("", [
+        ("ask_questions", {"round_summary": "라운드 2 목표: 일정 확정",
+                           "questions": [{"text": "제출 일정은 어떻게 되나요?",
+                                          "allow_free": True}]}),
+    ]),
+]
 
 
 @pytest.fixture()
-def sg_app(db_env, test_engine, sg_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": sg_llm})
-
-
-@pytest.fixture()
-def sg_client(sg_app):
-    from fastapi.testclient import TestClient
-
-    with TestClient(sg_app) as c:
-        yield c
+def sg_kit(llm_app_factory):
+    """답변 추천 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 SUGGEST_TURNS)."""
+    fake = FakeStreamLLM(SUGGEST_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_suggestions_flow_to_card_payload(sg_client):
+def test_suggestions_flow_to_card_payload(sg_kit):
     """suggestions는 pending_questions(SessionOut)와 questions 이벤트 payload로
     프론트 답변 카드까지 전달된다 (unknown[] 타입이라 openapi 계약은 무변경)."""
+    sg_client, sg_llm = sg_kit.client, sg_kit.fake
     sid = _setup(sg_client)
 
     events = _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
@@ -971,8 +921,9 @@ def test_suggestions_flow_to_card_payload(sg_client):
     assert s["pending_questions"][1].get("suggestions") is None  # 선택 필드 — 미제시 통과
 
 
-def test_answers_lines_are_index_sorted_and_unanswered_marked(sg_client, sg_llm):
+def test_answers_lines_are_index_sorted_and_unanswered_marked(sg_kit):
     """답변 라인은 인덱스 오름차순으로 정렬되고, 제출 순서와 무관하다."""
+    sg_client, sg_llm = sg_kit.client, sg_kit.fake
     sid = _setup(sg_client)
     _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
 
@@ -988,10 +939,11 @@ def test_answers_lines_are_index_sorted_and_unanswered_marked(sg_client, sg_llm)
     assert "→ (모름)" not in answered[0]
 
 
-def test_unanswered_question_marked_and_recommended_fact_staged(sg_client, sg_llm, db_env):
+def test_unanswered_question_marked_and_recommended_fact_staged(sg_kit, db_env):
     """모름 경로 e2e — 미제출 문항은 → (모름) 마킹, 다음 턴에서 근거 기반 추천이
     (미확정) 팩트(fact_gate)로 제시되고, 승인 시 팩트 저장소에 origin=interview로
     적립되며 라운드가 이어진다."""
+    sg_client, sg_llm = sg_kit.client, sg_kit.fake
     sid = _setup(sg_client)
     _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
 
@@ -1021,9 +973,10 @@ def test_unanswered_question_marked_and_recommended_fact_staged(sg_client, sg_ll
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 2
 
 
-def test_empty_answers_rejected_with_409(sg_client, sg_llm):
+def test_empty_answers_rejected_with_409(sg_kit):
     """빈 answers 배열은 409 — LLM 턴이 열리지 않고 세션 상태가 보존된다
     (프론트 1개 이상 강제의 서버 쪽 대응)."""
+    sg_client, sg_llm = sg_kit.client, sg_kit.fake
     sid = _setup(sg_client)
     _sse_events(sg_client, f"/api/interview/sessions/{sid}/kick")
 
@@ -1036,36 +989,29 @@ def test_empty_answers_rejected_with_409(sg_client, sg_llm):
     assert len(sg_llm.calls) == before  # LLM 턴 미개시
 
 
-@pytest.fixture()
-def sug_retry_llm():
-    return FakeStreamLLM([
-        # 턴1 1호출 — 추천 후보 4개 (validate_tool_args 실패 → ERROR)
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "고객은 누구인가?", "allow_free": True,
-                                                "suggestions": ["a", "b", "c", "d"]}]})]),
-        # 턴1 2호출 — ERROR 피드백을 받아 2개로 줄여 재호출
-        ("", [("ask_questions", {"round_summary": "뼈대 확인",
-                                 "questions": [{"text": "고객은 누구인가?", "allow_free": True,
-                                                "suggestions": ["a", "b"]}]})]),
-    ])
+SUG_RETRY_TURNS = [
+    # 턴1 1호출 — 추천 후보 4개 (validate_tool_args 실패 → ERROR)
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "고객은 누구인가?", "allow_free": True,
+                                            "suggestions": ["a", "b", "c", "d"]}]})]),
+    # 턴1 2호출 — ERROR 피드백을 받아 2개로 줄여 재호출
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "고객은 누구인가?", "allow_free": True,
+                                            "suggestions": ["a", "b"]}]})]),
+]
 
 
 @pytest.fixture()
-def sug_retry_app(db_env, test_engine, sug_retry_llm):
-    from app.main import create_app
-
-    return create_app(start_worker=False, llm_overrides={"interview": sug_retry_llm})
-
-
-@pytest.fixture()
-def sug_retry_client(sug_retry_app):
-    from fastapi.testclient import TestClient
-
-    with TestClient(sug_retry_app) as c:
-        yield c
+def sug_retry_kit(llm_app_factory):
+    """추천 후보 수 위반 재시도 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 SUG_RETRY_TURNS)."""
+    fake = FakeStreamLLM(SUG_RETRY_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
 
 
-def test_ask_questions_suggestions_contract_triggers_retry(sug_retry_client, sug_retry_llm):
+def test_ask_questions_suggestions_contract_triggers_retry(sug_retry_kit):
+    sug_retry_client, sug_retry_llm = sug_retry_kit.client, sug_retry_kit.fake
     sid = _setup(sug_retry_client)
 
     events = _sse_events(sug_retry_client, f"/api/interview/sessions/{sid}/kick")
