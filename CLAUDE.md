@@ -118,3 +118,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - API 전체 목록은 `backend/app/main.py`·OpenAPI 참조.
 - 배포: `docker compose build && docker compose up -d`
 - 토큰 변경 절차: `docs/token-checklist.md` (원칙 7)
+
+## 하네스 워크플로우 (/harness)
+
+step 기반 자동 실행 하네스(`scripts/execute.py`)를 제공한다. 워크플로우 상세는
+`/harness` 슬래시 커맨드 참조 — A탐색(docs) → B논의 → C Step 설계 → D
+`phases/` 파일 생성 → E 실행.
+
+- 위치 규약: `phases/index.json`·`phases/{task}/index.json`·`step{N}.md`는 커밋
+  대상. `step{N}-output.json`·`phase*-output.json`은 gitignored 실행 산출물.
+- 실행: `python scripts/execute.py {task}` — `feat-{task}` 브랜치 자동 생성,
+  완료 step summary를 다음 step 컨텍스트로 누적, 최대 3회 자가 교정, feat/chore
+  2단계 커밋, KST 타임스탬프 기록. 안전망 테스트:
+  `python -m pytest scripts/test_execute.py -q`.
+- **우선관계**: 하네스 step 세션에서도 이 파일의 설계 원칙 계약 8개가 최상위다.
+  step은 `claude -p --dangerously-skip-permissions` 자식 세션으로 실행되지만
+  SSOT 가드훅(`guard_ssot.py`)·Bash 가드훅(`guard_bash.py`)은 자식 세션에서도
+  동작한다 — step에서 파생물을 직접 수정하려 하면 차단되는 것이 정상 동작이다.
+- `/harness-init`은 이식하지 않았다. planForge는 CLAUDE.md·docs 셋팅이 완료된
+  프로젝트이고 개발요청 원문(AGENT-DEV-REQUEST.md)은 git 이력에만 존재하므로
+  플레이스홀더 치환 단계가 필요 없다.

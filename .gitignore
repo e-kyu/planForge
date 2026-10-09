@@ -35,3 +35,7 @@ _smoke_out/
 # 브라우저 e2e 스모크 산출물 (스크립트 자체도 수동 검증용 — 커밋 대상 아님)
 .e2e-shots/
 frontend/e2e-smoke.mjs
+
+# 하네스 phase 실행 산출물 (phases/index.json·stepN.md은 커밋 대상)
+phases/**/phase*-output.json
+phases/**/step*-output.json
