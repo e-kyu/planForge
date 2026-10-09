@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 """derive 오케스트레이터 테스트 — 가짜 LLM을 주입해 결정론 파이프라인(스키마 검증·재시도·numcheck 측정 기록)을 잠근다."""
 import json
-import sys
 import warnings
 from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from planforge.derive import Deriver, DeriveError, DeriveSchemaError, render_slides_text
 from planforge.plan import filter_slides, parse_plan_file
@@ -46,29 +43,25 @@ def test_derive_numeric_distortion_recorded_not_gated(tmp_path):
     assert any("12" in f.message for f in res.findings)  # 왜곡 수치가 진단에 실린다
 
 
-def test_derive_schema_violation_retries():
+def test_derive_schema_violation_retries(tmp_path):
     bad = {"meta": {"title": "제목"}, "slides": [{"type": "unknown", "title": "x"}]}
     llm = FakeLLM([
         tool_call("write_slides_json", bad),
         tool_call("write_slides_json", correct_slides_payload()),
     ])
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        res = Deriver(llm, td).derive(PLAN, "slides", "제안서")
-        assert res.attempts == 2
-        retry_user = llm.calls[1][-1]["content"]
-        assert "스키마 검증 실패" in retry_user
+    res = Deriver(llm, tmp_path).derive(PLAN, "slides", "제안서")
+    assert res.attempts == 2
+    retry_user = llm.calls[1][-1]["content"]
+    assert "스키마 검증 실패" in retry_user
 
 
-def test_derive_schema_gives_up_raises_schema_subclass():
+def test_derive_schema_gives_up_raises_schema_subclass(tmp_path):
     """스키마 위반 지속 소진 — DeriveSchemaError로 raise하고 builder 진단을 실린다.
     '수치 무결성 위반' 헤드로 미표시 회귀 방지 (job #34 사후 대응 — 결정 16)."""
     bad = {"meta": {"title": "제목"}, "slides": [{"type": "unknown", "title": "x"}]}
     llm = FakeLLM([tool_call("write_slides_json", bad) for _ in range(3)])
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        with pytest.raises(DeriveSchemaError) as ei:
-            Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    with pytest.raises(DeriveSchemaError) as ei:
+        Deriver(llm, tmp_path).derive(PLAN, "slides", "제안서")
     assert isinstance(ei.value, DeriveError)  # 하위형 계약 — 기존 catch 사이트 유지
     msg = str(ei.value)
     assert "스키마 검증 실패가 3회" in msg
@@ -76,20 +69,18 @@ def test_derive_schema_gives_up_raises_schema_subclass():
     assert "수치 무결성 위반이" not in msg
 
 
-def test_derive_tool_never_called_reports_missing_tool_not_numeric():
+def test_derive_tool_never_called_reports_missing_tool_not_numeric(tmp_path):
     """도구 미호출 소진 — nudge만 소비해 판정 없이 끝나면 수치 무결성이 아니라
     도구 미호출로 라벨하고 마지막 응답 진단을 실린다 (결정 16)."""
     llm = FakeLLM([{"content": "도구 호출 없이 끝난 텍스트", "tool_calls": []} for _ in range(3)])
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        with pytest.raises(DeriveError, match="도구를 호출하지 않았습니다") as ei:
-            Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    with pytest.raises(DeriveError, match="도구를 호출하지 않았습니다") as ei:
+        Deriver(llm, tmp_path).derive(PLAN, "slides", "제안서")
     msg = str(ei.value)
     assert "수치 무결성" not in msg
     assert "도구 호출 없이 끝난 텍스트" in msg  # 마지막 응답 진단
 
 
-def test_derive_schema_then_tool_less_notes_miss():
+def test_derive_schema_then_tool_less_notes_miss(tmp_path):
     """스키마 실패 → 도구 미호출 혼합 소진 — 스키마 소진 라벨과 무응답 노트를 함께
     남긴다 (결정 16 라벨링 보존 — 도달하는 하드 fail은 이 둘뿐이다, 결정 17)."""
     bad_schema = {"meta": {"title": "제목"}, "slides": [{"type": "unknown", "title": "x"}]}
@@ -98,10 +89,8 @@ def test_derive_schema_then_tool_less_notes_miss():
         {"content": "무응답 텍스트", "tool_calls": []},
         {"content": "무응답 텍스트", "tool_calls": []},
     ])
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        with pytest.raises(DeriveSchemaError, match="스키마 검증 실패가 3회") as ei:
-            Deriver(llm, td).derive(PLAN, "slides", "제안서")
+    with pytest.raises(DeriveSchemaError, match="스키마 검증 실패가 3회") as ei:
+        Deriver(llm, tmp_path).derive(PLAN, "slides", "제안서")
     msg = str(ei.value)
     assert "알 수 없는 유형" in msg                                    # builder 진단
     assert "마지막 2회 응답은" in msg and "도구 호출 없이" in msg       # 무응답 노트
@@ -142,24 +131,15 @@ CHART_PLAN = """# 제안서 기획 (차트 샘플)
 
 
 def _chart_slides():
-    from planforge.plan import filter_slides
+    from planforge.plan import parse_plan_text
 
-    plan = parse_plan_file(_md_to_tmp(CHART_PLAN))
+    plan = parse_plan_text(CHART_PLAN)
     return filter_slides(plan.slides, plan.docs[0])
 
 
-def _md_to_tmp(md: str):
-    import tempfile
-    from pathlib import Path
-
-    f = Path(tempfile.mkdtemp()) / "plan.md"
-    f.write_text(md, encoding="utf-8")
-    return f
-
-
-def test_snap_literals_restores_plan_decimal_notation():
+def test_snap_literals_restores_plan_decimal_notation(tmp_path):
     """LLM이 15.0을 15로 정규화해도 결정론 스냅이 plan 표기(15.0)로 되돌린다."""
-    deriver = Deriver(None, ".")
+    deriver = Deriver(None, tmp_path)
     slides = _chart_slides()
     payload = {"slides": [{"type": "chart", "title": "매출 추이",
                            "chart": {"categories": ["3분기", "4분기"],
@@ -168,9 +148,9 @@ def test_snap_literals_restores_plan_decimal_notation():
     assert payload["slides"][0]["chart"]["series"][0]["values"] == [12.4, 15.0]
 
 
-def test_snap_literals_leaves_unknown_values_untouched():
+def test_snap_literals_leaves_unknown_values_untouched(tmp_path):
     """plan에 수치적으로 동일한 값이 없으면 건드리지 않는다 (창작 교정 아님)."""
-    deriver = Deriver(None, ".")
+    deriver = Deriver(None, tmp_path)
     slides = _chart_slides()
     payload = {"slides": [{"type": "chart", "title": "매출 추이",
                            "chart": {"categories": ["3분기", "4분기"],
@@ -179,8 +159,8 @@ def test_snap_literals_leaves_unknown_values_untouched():
     assert payload["slides"][0]["chart"]["series"][0]["values"] == [12.4, 20]
 
 
-def test_snap_literals_report_data_block():
-    deriver = Deriver(None, ".")
+def test_snap_literals_report_data_block(tmp_path):
+    deriver = Deriver(None, tmp_path)
     slides = _chart_slides()
     payload = {"sections": [{"type": "section", "title": "매출 추이",
                              "blocks": [{"kind": "data", "heading": "매출 추이",

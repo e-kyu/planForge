@@ -99,7 +99,7 @@ def test_compact_preview_needs_two_facts(client):
     assert out["ok"] is True and out["groups"] == []
 
 
-def test_compact_apply_archives_and_rewrites_mirror(client, app, db_env):
+def test_compact_apply_archives_and_rewrites_mirror(client):
     pid, ids = _seed(client)
     body = {"groups": [{"topic": "매출", "keep_id": ids["final"],
                         "archive_ids": [ids["old1"], ids["old2"], ids["unconf"]]}]}
@@ -128,7 +128,7 @@ def test_compact_apply_archives_and_rewrites_mirror(client, app, db_env):
     assert "3분기 매출 12.4억 원 (임시 추산)" in arch
 
 
-def test_compact_apply_skips_missing_ids(client, app, db_env):
+def test_compact_apply_skips_missing_ids(client):
     pid, ids = _seed(client)
     body = {"groups": [{"topic": "매출", "keep_id": 999,
                         "archive_ids": [ids["old1"], ids["old2"]]}]}

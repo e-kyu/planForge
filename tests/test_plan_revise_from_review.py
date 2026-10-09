@@ -149,7 +149,6 @@ def test_revise_from_review_no_indices_means_all(client, app):
     user_ctx = llm.calls[0][-1]["content"]
     assert "plan에 없는 수치가 등장했다" in user_ctx
     assert "문체가 불일치한다" in user_ctx  # 전체 선택
-    client.get(f"/api/jobs/{r.json()['id']}")
     job = client.get(f"/api/jobs/{r.json()['id']}").json()
     assert job["status"] == "done" and job["result"]["applied_count"] == 2
 
