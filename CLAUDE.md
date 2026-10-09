@@ -109,7 +109,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 명령어
 
 - 가상환경: `backend/.venv` (`.vscode/settings.json`이 인터프리터로 지정).
-- 슬래시: `/kickoff`(세션 진입점) · `/contract`(계약 테스트) · `/numcheck`(수치 무결성)
+- 슬래시: `/harness`(하네스 워크플로우) · `/review`(변경사항 리뷰 체크리스트)
 - CLI (backend/에서): `python -m planforge parse|numcheck|build-ppt|build-doc|derive ...`
 - DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/planforge.db`.
   스키마 변경은 `alembic revision`으로 마이그레이션 추가(개발용 `init_db`는 alembic 대체로만).
