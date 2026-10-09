@@ -106,7 +106,7 @@
 |---|---|---|---|
 | 1 | `backend/app/agents/tools.py` | `INTERVIEW_TOOLS` 스키마 + `validate_tool_args` (권위·기준점) | **수정** |
 | 2 | `backend/app/modules/interview/application/prompts/interview.md` | 런타임 LLM 프롬프트 — 계약 서술의 원문 | **수정** — 같은 계약으로 |
-| 3 | `docs/interview-turn-contract.md` | 이 대조표 | **수정** — 같은 계약으로 |
+| 3 | `docs/INTERVIEW-TURN-CONTRACT.md` | 이 대조표 | **수정** — 같은 계약으로 |
 | 4 | `tests/test_agents_tools.py` · `tests/test_interview_api.py` | 스키마 잠금·재시도 잠금 (스크립트된 가짜 LLM) | **수정** — 새 위반 케이스 회귀 테스트 추가 |
 
 하나만 고치는 PR은 리뷰에서 반려한다.

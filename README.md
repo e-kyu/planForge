@@ -70,7 +70,7 @@ sources/                  글로벌 소스 (모든 프로젝트가 공유, gitig
 data/                     SQLite DB (planforge.db, gitignored)
 docs/                     기획·아키텍처 문서 (PRD · ARCHITECTURE · ADR — 결정·편차 기록 ·
                           UI_GUIDE — 디자인 가이드·토큰 변경 절차) · 보조 계약 문서
-                          (interview-turn-contract — 인터뷰 턴 계약)
+                          (INTERVIEW-TURN-CONTRACT — 인터뷰 턴 계약)
 tests/                    pytest (계약 테스트 fixture 포함)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지

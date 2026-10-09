@@ -8,7 +8,7 @@ description: CLAUDE.md 계약·아키텍처 결정 기준 변경사항 리뷰 �
 - `/CLAUDE.md`
 - `/docs/ARCHITECTURE.md`
 - `/docs/ADR.md`
-- `/docs/interview-turn-contract.md` (인터뷰·LLM 계약을 건드린 경우)
+- `/docs/INTERVIEW-TURN-CONTRACT.md` (인터뷰·LLM 계약을 건드린 경우)
 
 그런 다음 변경된 파일들을 확인하고, 아래 체크리스트로 검증하라:
 
