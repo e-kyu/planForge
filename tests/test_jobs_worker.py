@@ -2,60 +2,21 @@
 """작업 큐 + derive/build 통합 테스트 — fake LLM으로 엔진 통합(승인 게이트·파생·빌드·채번)을 잠근다."""
 from __future__ import annotations
 
-from pathlib import Path
-
-from fakes import FakeLLM, correct_report_payload, correct_slides_payload, plan_sample_markdown, tool_call
-
-FIX = Path(__file__).parent / "fixtures"
-
-
-def _approved_plan(db_session_factory, project_id: int) -> int:
-    """승인된 plan 행을 직접 적립한다 (plan 편집 API는 PR-5)."""
-    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
-
-    with db_session_factory() as s:
-        plan = Plan(project_id=project_id, version_no=1,
-                    markdown=plan_sample_markdown(), docs=["제안서", "개발설계서"],
-                    parsed_ok=True, status=PlanStatus.APPROVED, origin=PlanOrigin.EDIT)
-        s.add(plan)
-        s.commit()
-        return plan.id
-
-
-def _run_queue(app, llm, profile="derive"):
-    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
-    from app.shared.config import get_settings
-    from app.shared.db import make_session_factory
-
-    ctx = JobContext(
-        session_factory=make_session_factory(app.state.settings.database_url),
-        settings=get_settings(),
-        llm_overrides={profile: llm},
-    )
-    s = ctx.session_factory()
-    try:
-        job = claim_next_job(s)
-        if job is not None:
-            run_job(ctx, job)
-    finally:
-        s.close()
-    return ctx
+from fakes import FakeLLM, correct_report_payload, correct_slides_payload, tool_call
+from _helpers import insert_plan, make_project, make_session, run_queue, session_factory
 
 
 def test_derive_build_report_job_end_to_end(client, app, db_env):
-    from app.shared.db import make_session_factory
+    make_project(client, "queue-demo", "큐 데모")
+    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"))
 
-    client.post("/api/projects", json={"slug": "queue-demo", "title": "큐 데모"})
-    pid = 1
-    plan_id = _approved_plan(make_session_factory(app.state.settings.database_url), pid)
-
-    r = client.post(f"/api/projects/{pid}/derivatives",
+    r = client.post(f"/api/projects/1/derivatives",
                     json={"kind": "report", "fmts": ["md"]})
     assert r.status_code == 202, r.text
     job_id = r.json()["id"]
 
     llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
@@ -66,12 +27,12 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
     assert job["started_at"] is not None  # 경과시간 계약 — JobOut 노출 확인
 
     # 파생물 행 — plan 세대 바인딩 (추적성 §5)
-    ders = client.get(f"/api/projects/{pid}/derivatives").json()
+    ders = client.get("/api/projects/1/derivatives").json()
     assert len(ders) == 1
     assert ders[0]["plan_id"] == plan_id and ders[0]["doc"] == "제안서"
 
     # 산출물 v01 — 파일 존재 + fs 채번 미러
-    outs = client.get(f"/api/projects/{pid}/outputs").json()
+    outs = client.get("/api/projects/1/outputs").json()
     assert len(outs) == 1 and outs[0]["ext"] == "md" and outs[0]["version_no"] == 1
     f = db_env / "queue-demo" / outs[0]["file_path"]
     assert f.is_file()
@@ -79,16 +40,14 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
 
 
 def test_derive_build_slides_job_creates_pptx(client, app, db_env):
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "ppt-demo", "title": "ppt"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "ppt-demo", "ppt")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
     assert r.status_code == 202
     job_id = r.json()["id"]
 
     llm = FakeLLM([tool_call("write_slides_json", correct_slides_payload())])
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
@@ -100,7 +59,7 @@ def test_derive_build_slides_job_creates_pptx(client, app, db_env):
 
 
 def test_unapproved_plan_blocks_derive(client, app):
-    client.post("/api/projects", json={"slug": "no-approve", "title": "x"})
+    make_project(client, "no-approve")
     r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
     assert r.status_code == 409
     assert "승인" in r.json()["detail"]
@@ -111,10 +70,8 @@ def test_numeric_distortion_job_done_with_findings(client, app, db_env):
 
     왜곡 지속 LLM 변환 1회 → job done, 측정값 findings가 job.result에 영속 기록되고
     위반 수치가 실제 산출물 md에 남는다."""
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "fail-demo", "title": "x"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "fail-demo")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives",
                     json={"kind": "report", "fmts": ["md"]})
     job_id = r.json()["id"]
@@ -122,7 +79,7 @@ def test_numeric_distortion_job_done_with_findings(client, app, db_env):
     bad = correct_report_payload()
     bad["sections"][3]["blocks"][0]["rows"][0][1] = "주 99시간 수기 작성"  # plan에 없는 수치 — 창작 red
     llm = FakeLLM([tool_call("write_report_json", bad)])
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
@@ -139,10 +96,8 @@ def test_numeric_distortion_job_done_with_findings(client, app, db_env):
 
 def test_llm_schema_failure_classified_as_schema_error(client, app, db_env):
     """스키마 위반 지속 소진 — error_class SCHEMA, 오류문에 builder 진단 실림 (결정 16)."""
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "schema-fail", "title": "x"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "schema-fail")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives",
                     json={"kind": "report", "fmts": ["md"]})
     job_id = r.json()["id"]
@@ -150,7 +105,7 @@ def test_llm_schema_failure_classified_as_schema_error(client, app, db_env):
     bad = correct_report_payload()
     del bad["sections"][0]["title"]  # 필수 키 누락 — build_doc.validate 위반
     llm = FakeLLM([tool_call("write_report_json", bad)] * 3)
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "failed"
@@ -165,17 +120,15 @@ def test_llm_schema_failure_classified_as_schema_error(client, app, db_env):
 def test_reds_auto_enqueue_review(client, app):
     """red 잔여 derive done → 검수 잡이 같은 커밋에 자동 큐잉되고, 그 잡이 같은 red를
     🔴 리포트로 판정한다 (수용 기준 3 e2e — 결정 17: 판정 권위는 검수 단계)."""
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "auto-review", "title": "x"})
-    plan_id = _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "auto-review")
+    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives",
                     json={"kind": "report", "fmts": ["md"]})
     derive_job_id = r.json()["id"]
 
     bad = correct_report_payload()
     bad["sections"][3]["blocks"][0]["rows"][0][1] = "주 99시간 수기 작성"
-    _run_queue(app, FakeLLM([tool_call("write_report_json", bad)]))
+    run_queue(app, FakeLLM([tool_call("write_report_json", bad)]))
     assert client.get(f"/api/jobs/{derive_job_id}").json()["status"] == "done"
 
     jobs = client.get("/api/projects/1/jobs").json()
@@ -187,8 +140,8 @@ def test_reds_auto_enqueue_review(client, app):
     assert rev["payload"]["auto"] is True  # 자동 큐잉 표식
 
     # 자동 큐잉된 검수 잡을 실행 — 도구 없는 review LLM(결정론 결과만 반영)으로
-    _run_queue(app, FakeLLM([{"content": "도구 없는 텍스트", "tool_calls": []}] * 2),
-               profile="review")
+    run_queue(app, FakeLLM([{"content": "도구 없는 텍스트", "tool_calls": []}] * 2),
+              profile="review")
 
     rev2 = [j for j in client.get("/api/projects/1/jobs").json() if j["type"] == "review"][0]
     assert rev2["status"] == "done"
@@ -201,12 +154,10 @@ def test_reds_auto_enqueue_review(client, app):
 
 def test_clean_derive_no_auto_review(client, app):
     """클린 생성은 검수를 자동 큐잉하지 않는다 (결정 17 — 위반 있을 때만 자동)."""
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "clean-demo", "title": "x"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "clean-demo")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    _run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
 
     job = client.get(f"/api/jobs/{r.json()['id']}").json()
     assert job["status"] == "done", job
@@ -218,16 +169,14 @@ def test_enqueue_auto_review_dedupe(client, app):
     """같은 plan 세대의 활성(queued/running) 검수 잡이 이미 있으면 중복 큐잉하지 않는다."""
     from app.modules.jobs.facade import JobType, enqueue
     from app.modules.review.facade import enqueue_auto_review
-    from app.shared.db import make_session_factory
 
-    client.post("/api/projects", json={"slug": "dedupe-demo", "title": "x"})
-    factory = make_session_factory(app.state.settings.database_url)
-    with factory() as s:
+    make_project(client, "dedupe-demo")
+    with make_session(app) as s:
         enqueue(s, 1, JobType.REVIEW, {"plan_id": 7})
         s.commit()
-    with factory() as s:
+    with make_session(app) as s:
         assert enqueue_auto_review(s, 1, 7) is None
-    with factory() as s:
+    with make_session(app) as s:
         job = enqueue_auto_review(s, 1, 8)
         s.commit()
         assert job is not None  # 다른 plan 세대는 큐잉된다
@@ -236,10 +185,8 @@ def test_enqueue_auto_review_dedupe(client, app):
 def test_build_failure_leaves_no_derivative_or_output(client, app, db_env, monkeypatch):
     """빌더 실패 → 고아 Derivative·산출물 파일 0건 (진행 불변식 회귀 — 도메인 행은
     atomic_build 이후에만 생성: report_progress 커밋이 조기 행 확정을 만들지 않는다)."""
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "build-fail", "title": "x"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "build-fail")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives",
                     json={"kind": "report", "fmts": ["md"]})
     job_id = r.json()["id"]
@@ -252,39 +199,33 @@ def test_build_failure_leaves_no_derivative_or_output(client, app, db_env, monke
     monkeypatch.setattr(build_doc_mod, "build", raiser)
 
     llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "failed", job
     # 진행 상태 — 빌드 단계 기록까지 남는다 (마지막 진행 기록)
     assert job["progress"]["step"] == "build"
     # 고아 없음 — 파생물행·빌드행·output 파일 모두 없어야 한다 (§5 원자성)
-    assert client.get(f"/api/projects/1/derivatives").json() == []
-    assert client.get(f"/api/projects/1/outputs").json() == []
+    assert client.get("/api/projects/1/derivatives").json() == []
+    assert client.get("/api/projects/1/outputs").json() == []
     assert not list((db_env / "build-fail" / "output").glob("*"))
 
 
 def test_claim_returns_none_on_empty_queue(app):
-    from app.shared.db import make_session_factory
     from app.modules.jobs.application.worker import claim_next_job
 
-    s = make_session_factory(app.state.settings.database_url)()
-    try:
+    with make_session(app) as s:
         assert claim_next_job(s) is None
-    finally:
-        s.close()
 
 
 def test_report_build_defaults_to_three_formats(client, app, db_env):
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "fmt-demo", "title": "x"})
-    _approved_plan(make_session_factory(app.state.settings.database_url), 1)
+    make_project(client, "fmt-demo")
+    insert_plan(app, 1, docs=("제안서", "개발설계서"))
     r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
     job_id = r.json()["id"]
 
     llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
-    _run_queue(app, llm)
+    run_queue(app, llm)
 
     outs = client.get("/api/projects/1/outputs").json()
     assert {o["ext"] for o in outs} == {"md", "html", "docx"}
@@ -297,22 +238,20 @@ def test_requeue_stale_running_resets_progress(client, app):
     from app.modules.jobs.application.worker import claim_next_job, requeue_stale_running
     from app.modules.jobs.facade import JobStatus, JobType, enqueue, report_progress
     from app.modules.jobs.infrastructure.models import Job
-    from app.shared.db import make_session_factory
 
-    factory = make_session_factory(app.state.settings.database_url)
-    client.post("/api/projects", json={"slug": "requeue-demo", "title": "x"})
-    with factory() as s:
+    make_project(client, "requeue-demo")
+    with make_session(app) as s:
         job = enqueue(s, 1, JobType.DERIVE_BUILD, {"kind": "slides"})
         s.commit()
         job_id = job.id
 
-    with factory() as s:  # claim → running 시점 + 진행 기록
+    with make_session(app) as s:  # claim → running 시점 + 진행 기록
         job = claim_next_job(s)
         assert job is not None and job.id == job_id
         report_progress(s, job, "llm", attempt=1, max_attempts=3)
 
-    assert requeue_stale_running(factory) == 1
-    with factory() as s:
+    assert requeue_stale_running(session_factory(app)) == 1
+    with make_session(app) as s:
         job = s.get(Job, job_id)
         assert job.status == JobStatus.QUEUED
         assert job.started_at is None and job.progress is None

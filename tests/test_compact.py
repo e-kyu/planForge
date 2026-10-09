@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fakes import FakeLLM, tool_call
+from _helpers import make_project
 
 from app.modules.facts.application.compact import build_context, run_llm_compact
 
@@ -15,12 +16,6 @@ PROPOSAL = {
          "reason": "#3이 최종 확정값"},
     ],
 }
-
-
-def _project(client) -> int:
-    r = client.post("/api/projects", json={"slug": "compact-t", "title": "x"})
-    assert r.status_code == 201
-    return r.json()["id"]
 
 
 def _fact(client, pid: int, content: str, source: str = "사내 집계") -> int:
@@ -49,7 +44,7 @@ def test_run_llm_compact_failure_is_lossless():
 # ---------------------------------------------------------------- API 게이트
 
 def _seed(client) -> tuple[int, dict]:
-    pid = _project(client)
+    pid = make_project(client, "compact-t")
     ids = {
         "old1": _fact(client, pid, "3분기 매출 12.4억 원 (임시 추산)"),
         "old2": _fact(client, pid, "3분기 매출 12.4억 원 (부서별 합산)"),
@@ -93,7 +88,7 @@ def test_compact_preview_llm_failure_is_lossless(client, app):
 
 
 def test_compact_preview_needs_two_facts(client):
-    pid = _project(client)
+    pid = make_project(client, "compact-t")
     _fact(client, pid, "단일 팩트")
     out = client.post(f"/api/projects/{pid}/facts/compact").json()
     assert out["ok"] is True and out["groups"] == []

@@ -2,14 +2,11 @@
 """인터뷰 세션/메시지 API + 팩트 API 테스트 (PR-3 전송 계층)."""
 from __future__ import annotations
 
-
-def _make_project(client) -> int:
-    client.post("/api/projects", json={"slug": "fact-demo", "title": "팩트"})
-    return 1
+from _helpers import make_project, session_factory
 
 
 def test_create_session_starts_hypothesis(client):
-    pid = _make_project(client)
+    pid = make_project(client, "fact-demo", "팩트")
     r = client.post(f"/api/projects/{pid}/interview/sessions", json={})
     assert r.status_code == 201, r.text
     body = r.json()
@@ -24,7 +21,7 @@ def test_session_404(client):
 
 
 def test_messages_after_cursor_replay(client):
-    pid = _make_project(client)
+    pid = make_project(client, "fact-demo", "팩트")
     client.post(f"/api/projects/{pid}/interview/sessions", json={})
     # 이력 행을 직접 적립해 커서 리플레이를 검증한다 (에이전트는 PR-4에서 연결)
     from app.modules.interview.infrastructure.transcript import append_message
@@ -32,7 +29,7 @@ def test_messages_after_cursor_replay(client):
     from app.modules.interview.infrastructure.models import MessageKind, MessageRole
 
     # client.app의 설정으로 세션 팩토리 생성
-    sf = _session_factory(client)
+    sf = session_factory(client)
     with sf() as s:
         for i in range(1, 4):
             append_message(s, 1, MessageRole.ASSISTANT, MessageKind.TEXT, f"m{i}")
@@ -44,14 +41,8 @@ def test_messages_after_cursor_replay(client):
     assert r.json()[0]["content"] == "m3"
 
 
-def _session_factory(client):
-    from app.shared.db import make_session_factory
-
-    return make_session_factory(client.app.state.settings.database_url)
-
-
 def test_facts_crud_and_filter(client):
-    pid = _make_project(client)
+    pid = make_project(client, "fact-demo", "팩트")
     r = client.post(f"/api/projects/{pid}/facts",
                     json={"content": "보고 작성 주 10시간", "source": "인터뷰"})
     assert r.status_code == 201
@@ -71,8 +62,8 @@ def test_facts_crud_and_filter(client):
 
 
 def test_fact_404_on_other_project(client):
-    _make_project(client)
-    client.post("/api/projects", json={"slug": "other", "title": "x"})
+    make_project(client, "fact-demo", "팩트")
+    make_project(client, "other")
     client.post("/api/projects/1/facts", json={"content": "x"})
     # project_id 불일치 → 404 (fact가 다른 프로젝트 소유)
     r = client.patch("/api/projects/2/facts/1", json={"status": "archived"})

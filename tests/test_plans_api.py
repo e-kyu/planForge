@@ -3,37 +3,22 @@
 from __future__ import annotations
 
 from fakes import plan_sample_markdown
-
-
-def _make_project(client) -> int:
-    client.post("/api/projects", json={"slug": "plan-demo", "title": "plan 데모"})
-    return 1
-
-
-def _insert_plan(app, project_id: int, version_no: int = 1, status: str = "draft") -> int:
-    from app.shared.db import make_session_factory
-    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
-
-    with make_session_factory(app.state.settings.database_url)() as s:
-        plan = Plan(project_id=project_id, version_no=version_no,
-                    markdown=plan_sample_markdown(), docs=["제안서", "개발설계서"],
-                    parsed_ok=True, status=PlanStatus(status), origin=PlanOrigin.INTERVIEW)
-        s.add(plan)
-        s.commit()
-        return plan.id
+from _helpers import insert_plan, make_project
 
 
 def test_list_and_get_plans(client, app):
-    pid = _make_project(client)
-    _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    insert_plan(app, pid, 1, status="draft", origin="interview",
+                docs=("제안서", "개발설계서"))
     r = client.get(f"/api/projects/{pid}/plans")
     assert r.status_code == 200 and len(r.json()) == 1
     assert r.json()[0]["version_no"] == 1 and r.json()[0]["status"] == "draft"
 
 
 def test_approve_flow_and_supersede(client, app, db_env):
-    pid = _make_project(client)
-    v1 = _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    v1 = insert_plan(app, pid, 1, status="draft", origin="interview",
+                     docs=("제안서", "개발설계서"))
     assert client.post(f"/api/plans/{v1}/approve").status_code == 200
 
     # 승인 후 재승인 → 409
@@ -59,8 +44,9 @@ def test_approve_flow_and_supersede(client, app, db_env):
 
 
 def test_revise_invalid_markdown_422(client, app):
-    pid = _make_project(client)
-    plan_id = _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    plan_id = insert_plan(app, pid, 1, status="draft", origin="interview",
+                          docs=("제안서", "개발설계서"))
     bad = "# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n\n## 슬라이드 목록\n"
     r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": bad})
     assert r.status_code == 422

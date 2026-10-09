@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fakes import FakeLLM, correct_report_payload, correct_slides_payload, plan_sample_markdown, tool_call
+from _helpers import insert_plan, make_project, make_session, run_queue
 
 from planforge.plan.parser import parse_plan_text
 from planforge.review import check_doc_tags, check_facts
@@ -140,63 +141,29 @@ def test_facts_unconfirmed_resolvable_is_yellow():
 
 # ---------------------------------------------------------------- review 잡 + API
 
-def _approved_plan(app, project_id: int) -> int:
-    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
-    from app.shared.db import make_session_factory
-
-    with make_session_factory(app.state.settings.database_url)() as s:
-        plan = Plan(project_id=project_id, version_no=1,
-                    markdown=plan_sample_markdown(), docs=["제안서"],
-                    parsed_ok=True, status=PlanStatus.APPROVED, origin=PlanOrigin.EDIT)
-        s.add(plan)
-        s.commit()
-        return plan.id
-
-
-def _run_queue(app, llm, profile="derive"):
-    from app.shared.config import get_settings
-    from app.shared.db import make_session_factory
-    from app.modules.jobs.application.worker import JobContext, claim_next_job, run_job
-
-    ctx = JobContext(
-        session_factory=make_session_factory(app.state.settings.database_url),
-        settings=get_settings(),
-        llm_overrides={profile: llm},
-    )
-    s = ctx.session_factory()
-    try:
-        job = claim_next_job(s)
-        if job is not None:
-            run_job(ctx, job)
-    finally:
-        s.close()
-
-
 def test_review_requires_approved_plan(client, app):
-    client.post("/api/projects", json={"slug": "rev-gate", "title": "x"})
+    make_project(client, "rev-gate")
     r = client.post("/api/projects/1/reviews")
     assert r.status_code == 409
 
 
 def test_review_requires_derivatives(client, app):
-    client.post("/api/projects", json={"slug": "rev-nod", "title": "x"})
-    _approved_plan(app, 1)
+    make_project(client, "rev-nod")
+    insert_plan(app, 1)
     r = client.post("/api/projects/1/reviews")
     assert r.status_code == 409
 
 
 def test_review_job_end_to_end(client, app):
-    from app.shared.db import make_session_factory
-
-    client.post("/api/projects", json={"slug": "rev-full", "title": "x"})
-    plan_id = _approved_plan(app, 1)
+    make_project(client, "rev-full")
+    plan_id = insert_plan(app, 1)
 
     # 파생물 2종 생성 (fake LLM)
     r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
     assert r.status_code == 202
-    _run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
     r = client.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
-    _run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
 
     # 검수 큐 진입 → 실행 (review 프로필 fake LLM: 발견사항 2건 보고)
     r = client.post("/api/projects/1/reviews")
@@ -208,7 +175,7 @@ def test_review_job_end_to_end(client, app):
         {"severity": "yellow", "code": "style", "where": "슬라이드 3 (표)",
          "message": "문체가 불일치한다"},
     ]
-    _run_queue(app, FakeLLM([tool_call("report_findings",
+    run_queue(app, FakeLLM([tool_call("report_findings",
                                        {"summary": "총평", "findings": findings})]),
                profile="review")
 
@@ -227,18 +194,17 @@ def test_review_detects_injected_numeric_distortion(client, app):
     """수용 기준 (요청서 §7-3): 파생물에 수치 왜곡을 주입하면 검수가 🔴로 탐지한다."""
     import copy
 
-    from app.shared.db import make_session_factory
     from app.modules.derivatives.infrastructure.models import Derivative, DerivativeKind
 
-    client.post("/api/projects", json={"slug": "rev-distort", "title": "x"})
-    _approved_plan(app, 1)
+    make_project(client, "rev-distort")
+    insert_plan(app, 1)
 
     r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    _run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
     assert client.get(f"/api/jobs/{r.json()['id']}").json()["status"] == "done"
 
     # 수치 왜곡 주입 — plan에 없는 13.5로 교체 (테스트 전용 주입, 앱 경로 아님)
-    with make_session_factory(app.state.settings.database_url)() as s:
+    with make_session(app) as s:
         d = s.query(Derivative).filter(
             Derivative.project_id == 1, Derivative.kind == DerivativeKind.SLIDES).one()
         doc = copy.deepcopy(d.json)
@@ -248,7 +214,7 @@ def test_review_detects_injected_numeric_distortion(client, app):
         s.commit()
 
     r = client.post("/api/projects/1/reviews")
-    _run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
+    run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
                profile="review")
 
     reports = client.get("/api/projects/1/reviews").json()
@@ -260,19 +226,18 @@ def test_review_detects_injected_numeric_distortion(client, app):
 
 def test_review_reports_stale_generation(client, app):
     """이전 세대 빌드가 남아 있으면 red로 보고한다 (FR-4.1 세대 대응성)."""
-    from app.shared.db import make_session_factory
     from app.modules.derivatives.infrastructure.models import Build, Derivative, DerivativeKind
 
-    client.post("/api/projects", json={"slug": "rev-gen", "title": "x"})
-    plan_id = _approved_plan(app, 1)
+    make_project(client, "rev-gen")
+    plan_id = insert_plan(app, 1)
 
     r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    _run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
     assert client.get(f"/api/jobs/{r.json()['id']}").json()["status"] == "done"
 
     # plan 세대 교체 — 새 승인 plan을 만들어 build를 '이전 세대'로 만든다
     from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
-    with make_session_factory(app.state.settings.database_url)() as s:
+    with make_session(app) as s:
         plan2 = Plan(project_id=1, version_no=2,
                      markdown=plan_sample_markdown(), docs=["제안서"],
                      parsed_ok=True, status=PlanStatus.APPROVED, origin=PlanOrigin.EDIT)
@@ -281,7 +246,7 @@ def test_review_reports_stale_generation(client, app):
         new_plan_id = plan2.id
 
     r = client.post("/api/projects/1/reviews")
-    _run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
+    run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
                profile="review")
 
     reports = client.get("/api/projects/1/reviews").json()
@@ -291,15 +256,15 @@ def test_review_reports_stale_generation(client, app):
 
 
 def test_review_llm_failure_keeps_deterministic_findings(client, app):
-    client.post("/api/projects", json={"slug": "rev-llm-fail", "title": "x"})
-    _approved_plan(app, 1)
+    make_project(client, "rev-llm-fail")
+    insert_plan(app, 1)
 
     r = client.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
-    _run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
+    run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
 
     client.post("/api/projects/1/reviews")
     # review LLM이 도구 없이 텍스트만 반환 → 내용 검수 실패, 결정론 결과는 보존
-    _run_queue(app, FakeLLM([{"content": "도구를 못 찾겠습니다", "tool_calls": []}] * 2),
+    run_queue(app, FakeLLM([{"content": "도구를 못 찾겠습니다", "tool_calls": []}] * 2),
                profile="review")
 
     reports = client.get("/api/projects/1/reviews").json()

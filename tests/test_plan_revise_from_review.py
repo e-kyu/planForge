@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fakes import FakeLLM, plan_sample_markdown, tool_call
-from test_review import _approved_plan, _run_queue
+from _helpers import insert_plan, make_project, run_queue
 
 SAMPLE = plan_sample_markdown()
 REVISED = SAMPLE.replace(
@@ -17,11 +17,6 @@ FINDINGS = [
     {"severity": "yellow", "code": "style", "where": "슬라이드 5",
      "message": "문체가 불일치한다"},
 ]
-
-
-def _make_project(client, slug: str) -> int:
-    client.post("/api/projects", json={"slug": slug, "title": "x"})
-    return 1
 
 
 def _review_report(app, project_id: int, plan_id: int, findings: list[dict]) -> int:
@@ -43,8 +38,8 @@ def _review_report(app, project_id: int, plan_id: int, findings: list[dict]) -> 
 
 def test_revise_from_review_contract_exposes_suggestion(client, app):
     """LLM 발견사항의 suggestion이 API 응답에 노출된다 (계약 보강)."""
-    pid = _make_project(client, "prv-contract")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-contract")
+    plan_id = insert_plan(app, pid)
     _review_report(app, pid, plan_id, FINDINGS)
     rep = client.get(f"/api/projects/{pid}/reviews").json()[0]
     assert rep["findings"][0]["suggestion"] == "표 데이터를 팩트와 대조해 교정"
@@ -55,12 +50,12 @@ def test_revise_from_review_gates(client, app):
     from app.shared.db import make_session_factory
     from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
-    pid = _make_project(client, "prv-gate")
+    pid = make_project(client, "prv-gate")
     # plan 404
     r = client.post("/api/plans/999/revise-from-review", json={"review_id": 1})
     assert r.status_code == 404
 
-    plan_id = _approved_plan(app, pid)
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     # review 404
@@ -96,8 +91,8 @@ def test_revise_from_review_gates(client, app):
 
 
 def test_revise_from_review_happy_path(client, app, db_env):
-    pid = _make_project(client, "prv-happy")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-happy")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     r = client.post(f"/api/plans/{plan_id}/revise-from-review",
@@ -106,7 +101,7 @@ def test_revise_from_review_happy_path(client, app, db_env):
     job_id = r.json()["id"]
 
     llm = FakeLLM([tool_call("write_plan", {"markdown": REVISED})])
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "done", job
@@ -137,14 +132,14 @@ def test_revise_from_review_happy_path(client, app, db_env):
 
 
 def test_revise_from_review_no_indices_means_all(client, app):
-    pid = _make_project(client, "prv-all")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-all")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     r = client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
     assert r.status_code == 202
     llm = FakeLLM([tool_call("write_plan", {"markdown": REVISED})])
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     user_ctx = llm.calls[0][-1]["content"]
     assert "plan에 없는 수치가 등장했다" in user_ctx
@@ -154,8 +149,8 @@ def test_revise_from_review_no_indices_means_all(client, app):
 
 
 def test_revise_from_review_nudge_then_success(client, app):
-    pid = _make_project(client, "prv-nudge")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-nudge")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
@@ -163,21 +158,21 @@ def test_revise_from_review_nudge_then_success(client, app):
         {"content": "도구를 못 찾겠습니다", "tool_calls": []},
         tool_call("write_plan", {"markdown": REVISED}),
     ])
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "done", job
 
 
 def test_revise_from_review_validation_failure_fails_job(client, app):
-    pid = _make_project(client, "prv-invalid")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-invalid")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
     # 핵심 메시지 3개 위반 마크다운 3회 → 재시도 소진
     bad = SAMPLE.replace("3. 시범 도입으로 효과를 먼저 검증한 뒤 확장한다\n", "")
     llm = FakeLLM([tool_call("write_plan", {"markdown": bad})] * 3)
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "failed"
@@ -191,14 +186,14 @@ def test_revise_from_review_validation_failure_fails_job(client, app):
 
 
 def test_revise_from_review_unchanged_markdown_is_validation_error(client, app):
-    pid = _make_project(client, "prv-same")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-same")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
     # 원문 복사 3회 → 루프 validate의 무변경 게이트가 매번 재시도 피드백 → 소진
     llm = FakeLLM([tool_call("write_plan", {"markdown": SAMPLE})] * 3)
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "failed"
@@ -209,8 +204,8 @@ def test_revise_from_review_unchanged_markdown_is_validation_error(client, app):
 
 
 def test_revise_from_review_unchanged_then_retry_succeeds(client, app):
-    pid = _make_project(client, "prv-retry")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-retry")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
@@ -219,7 +214,7 @@ def test_revise_from_review_unchanged_then_retry_succeeds(client, app):
         tool_call("write_plan", {"markdown": SAMPLE}),
         tool_call("write_plan", {"markdown": REVISED}),
     ])
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "done", job
@@ -237,8 +232,8 @@ def test_revise_from_review_skeleton_failure_fails_job(client, app):
     """골격 미달 반영도 결정론 검증이 잠근다 — SkeletonError는 단일 권위가 문서명 포함
     PlanError로 감싸 재시도 루프로 회수되고, 소진 시엔 PlanReviseError로 실패한다
     (원문 예외 전파·오분류 SCHEMA가 아니라)."""
-    pid = _make_project(client, "prv-skel-fail")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-skel-fail")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
@@ -250,7 +245,7 @@ def test_revise_from_review_skeleton_failure_fails_job(client, app):
         "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
     )
     llm = FakeLLM([tool_call("write_plan", {"markdown": skel_bad})] * 3)
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "failed"
@@ -265,8 +260,8 @@ def test_revise_from_review_skeleton_failure_fails_job(client, app):
 
 
 def test_revise_from_review_skeleton_failure_then_retry_succeeds(client, app):
-    pid = _make_project(client, "prv-skel-retry")
-    plan_id = _approved_plan(app, pid)
+    pid = make_project(client, "prv-skel-retry")
+    plan_id = insert_plan(app, pid)
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review",
@@ -282,7 +277,7 @@ def test_revise_from_review_skeleton_failure_then_retry_succeeds(client, app):
         tool_call("write_plan", {"markdown": skel_bad}),
         tool_call("write_plan", {"markdown": REVISED}),
     ])
-    _run_queue(app, llm, profile="plan_revise")
+    run_queue(app, llm, profile="plan_revise")
 
     job = client.get("/api/jobs/1").json()
     assert job["status"] == "done", job
