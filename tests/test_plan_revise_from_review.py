@@ -2,7 +2,7 @@
 """검수 → plan 반영 테스트 (FR-4.3) — 게이트·정상 흐름·검증 실패·부분 선택."""
 from __future__ import annotations
 
-from fakes import FakeLLM, plan_sample_markdown, tool_call
+from fakes import (FakeLLM, plan_skeleton_bad_markdown, plan_sample_markdown, tool_call)
 from _helpers import insert_plan, make_project, run_queue
 
 SAMPLE = plan_sample_markdown()
@@ -237,13 +237,7 @@ def test_revise_from_review_skeleton_failure_fails_job(client, app):
     rid = _review_report(app, pid, plan_id, FINDINGS)
 
     client.post(f"/api/plans/{plan_id}/revise-from-review", json={"review_id": rid})
-    skel_bad = (
-        "# 기획 (골격 미달)\n"
-        "\n## 메타\n- 목적: x\n"
-        "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
-        "\n## 슬라이드 목록\n"
-        "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
-    )
+    skel_bad = plan_skeleton_bad_markdown()
     llm = FakeLLM([tool_call("write_plan", {"markdown": skel_bad})] * 3)
     run_queue(app, llm, profile="plan_revise")
 
@@ -266,13 +260,7 @@ def test_revise_from_review_skeleton_failure_then_retry_succeeds(client, app):
 
     client.post(f"/api/plans/{plan_id}/revise-from-review",
                 json={"review_id": rid, "finding_indices": [0]})
-    skel_bad = (
-        "# 기획 (골격 미달)\n"
-        "\n## 메타\n- 목적: x\n"
-        "\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
-        "\n## 슬라이드 목록\n"
-        "\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n"
-    )
+    skel_bad = plan_skeleton_bad_markdown()
     llm = FakeLLM([
         tool_call("write_plan", {"markdown": skel_bad}),
         tool_call("write_plan", {"markdown": REVISED}),

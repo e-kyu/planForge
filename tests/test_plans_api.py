@@ -2,7 +2,7 @@
 """plan API 테스트 — 승인 게이트(FR-2.9)·세대 교체·수정 게이트(FR-4.3)."""
 from __future__ import annotations
 
-from fakes import plan_sample_markdown
+from fakes import plan_sample_markdown, plan_skeleton_bad_markdown
 from _helpers import insert_plan, make_project
 
 
@@ -61,8 +61,8 @@ def test_revise_invalid_markdown_422(client, app):
 
     # 파싱은 통과하지만 골격이 미달이면 422 — 단일 권위가 SkeletonError를 문서명 포함
     # PlanError로 감싼다 (전파되면 500이 됐던 결함의 잠금)
-    skel = ("# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
-            "\n## 슬라이드 목록\n\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n")
+    # fixtures/plan.skeleton_bad.md — 표지·목차·마무리 누락 (메타 산출 문서 생략 → 기본 문서 fallback)
+    skel = plan_skeleton_bad_markdown()
     r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": skel})
     assert r.status_code == 422
     assert "plan 골격 검증 실패" in r.json()["detail"]

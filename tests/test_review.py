@@ -2,60 +2,17 @@
 """검수 에이전트 테스트 (FR-4) — 결정론 검수 엔진 + review 잡 + API 게이트."""
 from __future__ import annotations
 
-from fakes import FakeLLM, correct_report_payload, correct_slides_payload, plan_sample_markdown, tool_call
-from _helpers import insert_plan, make_project, make_session, run_queue
+from fakes import (FakeLLM, correct_report_payload, correct_slides_payload, multidoc_plan_markdown,
+                   plan_sample_markdown, tool_call)
+from _helpers import insert_plan, make_project, make_session, run_derive, run_queue
 
 from planforge.plan.parser import parse_plan_text
 from planforge.review import check_doc_tags, check_facts
 
 # ---------------------------------------------------------------- 결정론 엔진
 
-MULTIDOC_PLAN = """# 제안서 기획 (다문서 샘플)
-
-## 메타
-- 산출 문서: 제안서, 개발설계서
-- 목적: 테스트
-- 청중: CTO
-- 예상 분량: 5장
-
-## 핵심 메시지 (3개)
-1. 매출 12.4억 원
-2. 고객 47개사
-3. 목표 15.0억 원
-
-## 슬라이드 목록
-
-### 1. [유형: 표지][문서: 제안서] 제안 표지
-- 핵심문장: 표지 문장
-- 근거/출처: (미확정)
-
-### 2. [유형: 목차][문서: 제안서] 제안 목차
-- 핵심문장: 01 현황 / 02 구성 / 03 요청
-
-### 3. [유형: 표][문서: 제안서] 현황
-- 근거/출처: 사내 집계
-- 표: [지표 | 수치]
-  - 매출 | 12.4억 원
-
-### 4. [유형: 마무리][문서: 제안서] 제안 마무리
-- 핵심문장: 요청 문장
-
-### 5. [유형: 표지][문서: 개발설계서] 설계서 표지
-- 핵심문장: 설계 표지
-- 근거/출처: 요구사항 명세
-
-### 6. [유형: 목차][문서: 개발설계서] 설계 목차
-- 핵심문장: 01 구성 / 02 데이터 / 03 일정
-
-### 7. [유형: 구성][문서: 개발설계서] 시스템 구성
-- 근거/출처: (미확정)
-- 구성:
-  - 사용자 계층 | 화면 A, 화면 B
-  - 데이터 계층 | 보고 DB
-
-### 8. [유형: 마무리][문서: 개발설계서] 설계 마무리
-- 핵심문장: 설계 마무리 문장
-"""
+# 다문서 샘플 — fixtures/plan.multidoc.md (doc-tag·목차 대조 테스트용)
+MULTIDOC_PLAN = multidoc_plan_markdown()
 
 
 def test_doc_tags_unknown_tag_is_red():
@@ -159,11 +116,11 @@ def test_review_job_end_to_end(client, app):
     plan_id = insert_plan(app, 1)
 
     # 파생물 2종 생성 (fake LLM)
-    r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    assert r.status_code == 202
-    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
-    r = client.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
-    run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
+    run_derive(app, client, 1, "slides",
+               FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    run_derive(app, client, 1, "report",
+               FakeLLM([tool_call("write_report_json", correct_report_payload())]),
+               fmts=["md"])
 
     # 검수 큐 진입 → 실행 (review 프로필 fake LLM: 발견사항 2건 보고)
     r = client.post("/api/projects/1/reviews")
@@ -199,9 +156,9 @@ def test_review_detects_injected_numeric_distortion(client, app):
     make_project(client, "rev-distort")
     insert_plan(app, 1)
 
-    r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
-    assert client.get(f"/api/jobs/{r.json()['id']}").json()["status"] == "done"
+    job_id = run_derive(app, client, 1, "slides",
+                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    assert client.get(f"/api/jobs/{job_id}").json()["status"] == "done"
 
     # 수치 왜곡 주입 — plan에 없는 13.5로 교체 (테스트 전용 주입, 앱 경로 아님)
     with make_session(app) as s:
@@ -231,9 +188,9 @@ def test_review_reports_stale_generation(client, app):
     make_project(client, "rev-gen")
     plan_id = insert_plan(app, 1)
 
-    r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
-    run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
-    assert client.get(f"/api/jobs/{r.json()['id']}").json()["status"] == "done"
+    job_id = run_derive(app, client, 1, "slides",
+                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+    assert client.get(f"/api/jobs/{job_id}").json()["status"] == "done"
 
     # plan 세대 교체 — 새 승인 plan을 만들어 build를 '이전 세대'로 만든다
     from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
@@ -259,8 +216,9 @@ def test_review_llm_failure_keeps_deterministic_findings(client, app):
     make_project(client, "rev-llm-fail")
     insert_plan(app, 1)
 
-    r = client.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
-    run_queue(app, FakeLLM([tool_call("write_report_json", correct_report_payload())]))
+    run_derive(app, client, 1, "report",
+               FakeLLM([tool_call("write_report_json", correct_report_payload())]),
+               fmts=["md"])
 
     client.post("/api/projects/1/reviews")
     # review LLM이 도구 없이 텍스트만 반환 → 내용 검수 실패, 결정론 결과는 보존
