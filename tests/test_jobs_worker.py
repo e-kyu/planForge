@@ -255,3 +255,59 @@ def test_requeue_stale_running_resets_progress(client, app):
         job = s.get(Job, job_id)
         assert job.status == JobStatus.QUEUED
         assert job.started_at is None and job.progress is None
+
+
+def test_claims_fifo_and_running_not_reclaimed(client, app):
+    """클레임은 id 오름차순 FIFO이고, RUNNING으로 전이(커밋)된 잡은 재클레임되지
+    않는다 — 큐 소진 시 None.
+
+    현재 직렬화 행위 고정 — 동시성 증명 아님, 멀티워커 전환 시 갱신 대상
+    (BEGIN IMMEDIATE 재설계 전까지 단일 워커 전제, 원칙 5).
+    """
+    from app.modules.jobs.application.worker import claim_next_job
+    from app.modules.jobs.facade import JobStatus, JobType, enqueue
+    from app.modules.jobs.infrastructure.models import Job
+
+    make_project(client, "fifo-demo")
+    with make_session(app) as s:
+        ids = [enqueue(s, 1, JobType.REVIEW, {"plan_id": n}).id for n in (1, 2, 3)]
+        s.commit()
+    assert ids == sorted(ids)
+
+    claimed = []
+    with make_session(app) as s:
+        for _ in range(3):
+            job = claim_next_job(s)
+            assert job is not None
+            claimed.append(job.id)
+            assert job.status == JobStatus.RUNNING
+        assert claim_next_job(s) is None  # 소진
+    assert claimed == ids  # FIFO — RUNNING 잡이 그 사이에 끼어들지 못한다
+
+
+def test_two_derive_jobs_run_to_done_in_id_order(client, app):
+    """derive 잡 2건을 큐에 넣고 run_queue 2회 — id 단조 순서로 모두 done.
+
+    현재 직렬화 행위 고정 — 동시성 증명 아님, 멀티워커 전환 시 갱신 대상
+    (빌더가 스레드 안전하지 않아 run_job은 단일 스레드 직렬 — 원칙 5).
+    """
+    from sqlalchemy import select
+
+    from app.modules.jobs.infrastructure.models import Job
+
+    make_project(client, "serial-demo")
+    insert_plan(app, 1, docs=("제안서",))
+    ids = []
+    for _ in range(2):
+        r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
+        assert r.status_code == 202, r.text
+        ids.append(r.json()["id"])
+    assert ids == sorted(ids), "잡 id는 enqueue 순으로 단조 — FIFO 전제"
+
+    llm = FakeLLM([tool_call("write_report_json", correct_report_payload())] * 2)
+    for _ in range(2):  # 단일 워커의 직렬 소비 — 큐가 빌 때까지 run_queue
+        run_queue(app, llm)
+
+    with make_session(app) as s:
+        jobs = {j.id: j for j in s.scalars(select(Job)).all()}
+        assert all(jobs[i].status.value == "done" for i in ids)

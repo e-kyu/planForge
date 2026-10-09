@@ -860,6 +860,41 @@ def test_plan_retry_exhaustion_marks_session_failed(base_kit):
     assert "plan 검증 재시도 한도 초과" in (s["error"] or "")
 
 
+def test_text_only_turn_exhaustion_fails_session(base_kit):
+    """도구 없이 텍스트만 나온 턴 — 리마인더(nudge) 1회 후에도 무도구면 TurnError로
+    세션 FAILED + SSE error 이벤트가 함께 남는다 (turn_graph route_after_llm
+    'LLM이 도구 호출 없이 응답을 마쳤습니다' 경로 잠금)."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
+    fake_llm.turns = [
+        ("도구 없이 텍스트만 나갑니다", []),
+        ("리마인더에도 역시 도구 없이", []),
+    ]
+    sid = _setup(sclient)
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    err = next(p for n, p in events if n == "error")
+    assert err["message"] == "LLM이 도구 호출 없이 응답을 마쳤습니다"
+    assert "done" in [n for n, _ in events]  # 실패도 done으로 마감 (run_turn 계약)
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "failed" and s["status"] == "aborted"
+    assert "도구 호출 없이" in (s["error"] or "")
+
+
+def test_non_blocking_tool_loop_limit_fails_session(base_kit):
+    """비차단 도구(update_checklist)만 반복 — 턴 내 LLM 호출 한도(8)에 도달하면
+    dispatch_non_blocking 가드가 TurnError로 끊고 세션 FAILED를 남긴다."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
+    fake_llm.turns = [
+        ("", [("update_checklist", {"items": [{"id": "c1", "area": "공통",
+                                               "text": "목적 확정", "done": True}]})]),
+    ] * 8
+    sid = _setup(sclient)
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    err = next(p for n, p in events if n == "error")
+    assert err["message"] == "턴 내 도구 루프 한도(8) 초과"
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "failed" and s["status"] == "aborted"
+
+
 # ---------------------------------------------------------------------------
 # 답변 추천(모름 처리) — 문항 suggestions 칩 + 미제출 (모름) 마킹 + (미확정) 팩트 적립
 
