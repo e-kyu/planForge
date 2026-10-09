@@ -68,8 +68,9 @@ frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
-docs/                     보조 문서 (architecture-decisions.md · token-checklist.md ·
-                          interview-turn-contract.md — 인터뷰 턴 계약)
+docs/                     기획·아키텍처 문서 (PRD · ARCHITECTURE · ADR — 결정·편차 기록 ·
+                          UI_GUIDE) · 보조 계약 문서 (token-checklist ·
+                          interview-turn-contract — 인터뷰 턴 계약)
 tests/                    pytest (계약 테스트 fixture 포함)
 CLAUDE.md                 개발 세션 계약 (설계 원칙 8개) + backend/CLAUDE.md · frontend/CLAUDE.md
 quick_overview.md         기본 개요 문서 · toons/ 소개 이미지
@@ -379,7 +380,7 @@ docker compose build && docker compose up -d
 - **롤백**: 이전 이미지 태그로 재배포(`docker compose`에서 이전 태그 지정). DB는 `alembic downgrade -1`
   한 단계만 허용 — 최근 마이그레이션(`updated_at`)은 nullable 추가 컬럼이라 구 버전 코드와 공존 가능.
   롤백 기준: 핵심 시나리오(프로젝트 생성 → 인터뷰 완주 → plan 승인 → 파생물 생성 → 검수) 실패 또는
-  5xx 오류율 임계 초과 — 자세한 절차는 `docs/architecture-decisions.md` 참조.
+  5xx 오류율 임계 초과 — 자세한 절차는 `docs/ADR.md` 참조.
 - DB는 SQLite 단일 방언(호스트 볼륨 `data/`). WAL + foreign_keys=ON은 연결 리스너가 설정한다.
 - 디자인 토큰(색·폰트·여백) 변경 절차: `docs/token-checklist.md` —
   theme.py(기준점) 수정 → tokens.css 미러 수정 → 빌더 리터럴 점검 → 좌표 규격 변경 시

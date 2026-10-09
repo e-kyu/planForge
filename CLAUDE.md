@@ -36,7 +36,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 아키텍처 요점
 
 **구조**: 가이드(`sources/default_architecture_guidelines.md`) 적용 — 백엔드 모듈러 모놀리식
-(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/architecture-decisions.md`.
+(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/ADR.md`.
 **모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
 `facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 모듈·feature를 템플릿으로 복제.
 

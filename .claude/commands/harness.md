@@ -10,11 +10,10 @@ description: /harness — step 기반 하네스 워크플로우 (설계 → phas
 
 ### A. 탐색
 
-`CLAUDE.md`(계약 8원칙·아키텍처 요점)와 `/docs/` 하위 문서
-(architecture-decisions, interview-turn-contract, token-checklist)를 읽고
+`/docs/` 하위 문서(PRD, ARCHITECTURE, ADR)와 `CLAUDE.md`(계약 8원칙)를 읽고
 프로젝트의 기획·아키텍처·설계 의도를 파악한다. 필요시 Explore 에이전트를 병렬로
-사용한다. 토큰(theme)·디자인 토큰 관련 step이면 `docs/token-checklist.md`를
-반드시 읽는다.
+사용한다. 토큰(theme)·디자인 관련 step이면 `docs/token-checklist.md`·`docs/UI_GUIDE.md`를,
+인터뷰 계약 관련 step이면 `docs/interview-turn-contract.md`를 반드시 읽는다.
 
 ### B. 논의
 
@@ -116,7 +115,8 @@ description: /harness — step 기반 하네스 워크플로우 (설계 → phas
 먼저 아래 파일들을 읽고 프로젝트의 아키텍처와 설계 의도를 파악하라:
 
 - `/CLAUDE.md`
-- `/docs/architecture-decisions.md`
+- `/docs/ARCHITECTURE.md`
+- `/docs/ADR.md`
 - {이전 step에서 생성/수정된 파일 경로}
 
 이전 step에서 만들어진 코드를 꼼꼼히 읽고, 설계 의도를 이해한 뒤 작업하라.
@@ -139,8 +139,9 @@ npm run build                              # 프론트엔드 — frontend/에서
 
 1. 위 AC 커맨드를 실행한다.
 2. 아키텍처 체크리스트를 확인한다:
-   - CLAUDE.md 모듈 경계 규칙(타 모듈 테이블·내부 파일 직접 import 금지)을 지키는가?
-   - docs/architecture-decisions.md의 결정·편차를 따르는가?
+   - docs/ARCHITECTURE.md 디렉토리 구조·모듈 경계 규칙(타 모듈 직접 import 금지)을
+     지키는가?
+   - docs/ADR.md의 결정·편차를 벗어나지 않았는가?
    - CLAUDE.md 설계 원칙 계약 8개를 위반하지 않는가?
 3. 결과에 따라 `phases/{task-name}/index.json`의 해당 step을 업데이트한다:
    - 성공 → `"status": "completed"`, `"summary": "산출물 한 줄 요약"`

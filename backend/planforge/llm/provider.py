@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """LLM provider 추상화 계층 — langchain-openai ChatOpenAI 어댑터.
 
-계약 (§3.1 — docs/architecture-decisions.md 편차 10으로 의도적 변경):
+계약 (§3.1 — docs/ADR.md 편차 10으로 의도적 변경):
 - OpenAI 호환 단일 프로토콜 — ollama·openai를 base_url/키 차이만으로 소화.
   azure는 같은 패키지의 AzureChatOpenAI로 소화 (BaseChatOpenAI 계열 — 편차 13).
   트랜스포트는 langchain-openai ChatOpenAI (하위 SDK는 openai).
