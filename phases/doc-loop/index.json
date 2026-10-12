@@ -69,7 +69,10 @@
     {
       "step": 8,
       "name": "doc-routing",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-13T00:41:59+0900",
+      "summary": "프론트 라우팅·훅 계층에 문서(doc) 차원 배관 — projects/models/docloops.ts 신설(DOC_SLUGS=[\"proposal\",\"uiux-design\",\"dev-design\"]·DocSlug·isDocSlug — 백엔드 DOC_KINDS 순서·철자 동기) · App.tsx 라우트 해석 확장(seg3 레거시 탭 키 우선 → doc=null, DOC_SLUGS 원소+seg4 탭 → doc 라우트, 문서 슬러그 뒤 탭 누락은 ProjectRedirect(doc) 지원) · client.ts DocLoop 타입 추출 추가 · ProjectPage doc 칩 행(문서 라벨+status 표기·현재 doc 강조·칩 클릭 #/projects/{pid}/{slug}/{현재탭}) + docloops=[] 레거시는 칩 행 미렌더·기존 화면 그대로 + 레거시 라우트 진입 시 active(없으면 마지막) 문서로 리다이렉트 + locked 문서 인터뷰 탭은 세션 생성 대신 안내(InterviewPanel에 key={doc??\"legacy\"} — 문서 전환 시 리마운트로 세션 상태 분리) · useInterview(pid, doc) localStorage 키 pf-session-{pid} 레거시 그대로·doc 라우트는 pf-session-{pid}-{doc}(마이그레이션·삭제 없음) · createSession(pid, doc_slug) 확장(레거시는 와이어 \"{}\" 유지) · usePlans/useOutputs queryKey [\"plans\"|\"builds\", pid, doc]+fetchPlans/fetchBuilds ?doc_slug=(프리픽스 매칭으로 기존 무효화 그대로 유효) — download는 Build.doc_slug 서버 경유라 파라미터 불필요, PlanPanel·OutputsPanel·InterviewPanel doc prop 경유 추가(View fetch 금지 유지), 배지·메트릭 집계 무수정(Phase 1 전체 집계) · pages.css .doc-chips 표시 전용 스타일(step 9 톤 통일) — AC npm run build(tsc --noEmit 포함) 통과",
+      "completed_at": "2026-10-13T00:44:18+0900"
     },
     {
       "step": 9,

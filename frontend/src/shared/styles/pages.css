@@ -618,6 +618,55 @@
   font-size: var(--fs-caption);
 }
 
+/* 문서 루프 칩 행 — ws-head와 tabs 사이 (step 8: 표시 전용, step 9에서 톤 통일) */
+.doc-chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.doc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  font-size: var(--fs-ui);
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: color var(--speed), border-color var(--speed), background var(--speed);
+}
+
+.doc-chip:hover {
+  color: var(--navy);
+  border-color: var(--light-blue);
+}
+
+.doc-chip-active {
+  color: var(--navy);
+  background: var(--bg-soft);
+  border-color: var(--navy);
+  font-weight: 600;
+}
+
+.doc-chip-status {
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  color: var(--text-sub);
+  background: var(--surface-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.doc-chip-active .doc-chip-status {
+  background: var(--surface);
+}
+
 /* 탭 스트립 — 화이트 라운드 바 (목업 tabs: bg-white rounded px pt) */
 .tabs {
   display: flex;

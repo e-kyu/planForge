@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Build } from "../../../api/client";
+import type { DocSlug } from "../../projects/models/docloops";
 import { enqueueDerivative, fetchBuilds, fetchOutputText, fetchPlans } from "../models/outputsApi";
 import { latestDoneDeriveWithReds, latestFailed } from "../../../shared/lib/jobs";
 import { seedJob, useActiveJobs } from "../../../shared/lib/useActiveJobs";
@@ -12,10 +13,18 @@ import { errMsg } from "../../../shared/lib/errMsg";
  * 소비만 한다. 큐가 비워지면(완료) 갤러리·plan 쿼리를 무효화해 갱신한다 — 원본 폴링의
  * 완료 경로 (마지막 load()에서 갤러리까지 재조회)에 해당한다. */
 
-export function useOutputs(pid: number) {
+export function useOutputs(pid: number, doc: DocSlug | null = null) {
   const qc = useQueryClient();
-  const buildsQ = useQuery({ queryKey: ["builds", pid], queryFn: () => fetchBuilds(pid) });
-  const plansQ = useQuery({ queryKey: ["plans", pid], queryFn: () => fetchPlans(pid) });
+  // 문서 라우트에서는 해당 문서의 산출물·세대만 조회(?doc_slug=) — 쿼리 키에 doc을 넣어 캐시 분리.
+  // ["builds", pid]·["plans", pid] 프리픽스 무효화는 문서 스코프 캐시도 함께 무효화한다.
+  const buildsQ = useQuery({
+    queryKey: ["builds", pid, doc],
+    queryFn: () => fetchBuilds(pid, doc),
+  });
+  const plansQ = useQuery({
+    queryKey: ["plans", pid, doc],
+    queryFn: () => fetchPlans(pid, doc),
+  });
   const jobsS = useActiveJobs(pid);
 
   const [error, setError] = useState<string | null>(null);

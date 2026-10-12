@@ -16,6 +16,7 @@ export type Session = components["schemas"]["SessionOut"];
 export type CompactPreview = components["schemas"]["CompactPreview"];
 export type CompactApplyResult = components["schemas"]["CompactApplyResult"];
 export type Message = components["schemas"]["MessageOut"];
+export type DocLoop = components["schemas"]["DocLoopOut"];
 
 export class ApiError extends Error {
   constructor(

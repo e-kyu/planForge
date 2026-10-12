@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bot } from "lucide-react";
 import type { Message } from "../../../api/client";
+import type { DocSlug } from "../../projects/models/docloops";
 import { Banner, Button, Empty } from "../../../shared/components/ui";
 import { useInterview } from "../viewmodels/useInterview";
 import { FactSidePanel } from "./FactSidePanel";
@@ -45,8 +46,9 @@ function progressLabel(status: string, phase: string): string {
 }
 
 /** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
- *  서버 상태·SSE 턴 머신은 useInterview, 팩트 목록은 useFactsPanel이 보유한다 (압축 카드는 FactSidePanel 소속). */
-export default function InterviewPanel({ pid }: { pid: number }) {
+ *  서버 상태·SSE 턴 머신은 useInterview, 팩트 목록은 useFactsPanel이 보유한다 (압축 카드는 FactSidePanel 소속).
+ *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 세션 식별(localStorage 키·생성 doc_slug)만 분리된다. */
+export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?: DocSlug | null }) {
   const {
     sid,
     session,
@@ -60,7 +62,7 @@ export default function InterviewPanel({ pid }: { pid: number }) {
     setError,
     start,
     run,
-  } = useInterview(pid);
+  } = useInterview(pid, doc);
   const [draft, setDraft] = useState("");
   const [answers, setAnswers] = useState<Record<number, { option?: number; free?: string }>>({});
   const [factCollapsed, setFactCollapsed] = useStoredBoolean("pf-fact-side-collapsed", false);

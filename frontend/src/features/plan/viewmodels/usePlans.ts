@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { approvePlan, fetchPlans, revisePlan } from "../models/plansApi";
+import type { DocSlug } from "../../projects/models/docloops";
 import { errMsg } from "../../../shared/lib/errMsg";
 
 /* plan 세대 목록 + 승인·수정 (FR-2.9, FR-4.3) — 액션은 뮤테이션.
  * 승인/수정 성공 시 목록 무효화 + 새 세대 선택 알림. 포맷 검증 실패(422)도 error로 전달된다. */
 
-export function usePlans(pid: number) {
+export function usePlans(pid: number, doc: DocSlug | null = null) {
   const qc = useQueryClient();
-  const plansQ = useQuery({ queryKey: ["plans", pid], queryFn: () => fetchPlans(pid) });
+  // 문서 라우트에서는 해당 문서의 세대만 조회(?doc_slug=) — 쿼리 키에 doc을 넣어 캐시 분리.
+  // ["plans", pid] 프리픽스 무효화는 문서 스코프 캐시도 함께 무효화한다(TanStack 프리픽스 매칭).
+  const plansQ = useQuery({
+    queryKey: ["plans", pid, doc],
+    queryFn: () => fetchPlans(pid, doc),
+  });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

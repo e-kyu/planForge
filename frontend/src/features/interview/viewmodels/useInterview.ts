@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSSE } from "../../../api/client";
 import { createSession, fetchMessages, fetchSession } from "../models/interviewApi";
+import type { DocSlug } from "../../projects/models/docloops";
 import { errMsg } from "../../../shared/lib/errMsg";
 
 /* 인터뷰 서버 상태 + SSE 턴 머신 (§2 ViewModel).
@@ -11,18 +12,24 @@ import { errMsg } from "../../../shared/lib/errMsg";
 
 export type InterviewTurn = { path: string; body: unknown };
 
+/** 세션 저장 키 — 문서 루프 라우트는 문서별 분리(`pf-session-{pid}-{doc}`), 레거시는
+ *  기존 키(`pf-session-{pid}`) 그대로 — 기존 사용자 세션 보존(마이그레이션 없음). */
+function sessionKey(pid: number, doc: DocSlug | null): string {
+  return doc ? `pf-session-${pid}-${doc}` : `pf-session-${pid}`;
+}
+
 /** 세션 복원 — per-viewer 편의(localStorage). 서버 데이터가 권위다. */
-function storedSid(pid: number): number | null {
+function storedSid(pid: number, doc: DocSlug | null): number | null {
   try {
-    return Number(localStorage.getItem(`pf-session-${pid}`)) || null;
+    return Number(localStorage.getItem(sessionKey(pid, doc))) || null;
   } catch {
     return null; /* 저장소 접근 불가 — 무시 */
   }
 }
 
-export function useInterview(pid: number) {
+export function useInterview(pid: number, doc: DocSlug | null = null) {
   const qc = useQueryClient();
-  const [sid, setSid] = useState<number | null>(() => storedSid(pid));
+  const [sid, setSid] = useState<number | null>(() => storedSid(pid, doc));
   const [streaming, setStreaming] = useState("");
   const [status, setStatus] = useState<string | null>(null); // 턴 내부 진행 단계 (progress 이벤트)
   const [active, setActive] = useState(false); // 이 라운드에서 토큰이 흐르는 중인지
@@ -46,12 +53,12 @@ export function useInterview(pid: number) {
   useEffect(() => {
     if (sid === null || !sessionQ.isError) return;
     try {
-      localStorage.removeItem(`pf-session-${pid}`);
+      localStorage.removeItem(sessionKey(pid, doc));
     } catch {
       /* 무시 */
     }
     setSid(null);
-  }, [sid, sessionQ.isError, pid]);
+  }, [sid, sessionQ.isError, pid, doc]);
 
   const session = sessionQ.data ?? null;
   const messages = messagesQ.data ?? [];
@@ -59,10 +66,10 @@ export function useInterview(pid: number) {
 
   function start() {
     setError(null);
-    createSession(pid)
+    createSession(pid, doc)
       .then((s) => {
         try {
-          localStorage.setItem(`pf-session-${pid}`, String(s.id));
+          localStorage.setItem(sessionKey(pid, doc), String(s.id));
         } catch {
           /* 무시 */
         }

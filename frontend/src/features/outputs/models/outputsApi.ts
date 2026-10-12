@@ -2,9 +2,15 @@ import { apiGet, apiPost, type Build, type Job, type Plan } from "../../../api/c
 
 /* 산출물 API 호출 계층 (§2 Model). fetchJobs의 유일한 정의는 shared/lib/useActiveJobs에 있다. */
 
-export const fetchBuilds = (pid: number) => apiGet<Build[]>(`/api/projects/${pid}/outputs`);
+export const fetchBuilds = (pid: number, docSlug?: string | null) =>
+  apiGet<Build[]>(
+    `/api/projects/${pid}/outputs${docSlug ? `?doc_slug=${encodeURIComponent(docSlug)}` : ""}`,
+  );
 
-export const fetchPlans = (pid: number) => apiGet<Plan[]>(`/api/projects/${pid}/plans`);
+export const fetchPlans = (pid: number, docSlug?: string | null) =>
+  apiGet<Plan[]>(
+    `/api/projects/${pid}/plans${docSlug ? `?doc_slug=${encodeURIComponent(docSlug)}` : ""}`,
+  );
 
 export const enqueueDerivative = (
   pid: number,

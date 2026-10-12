@@ -5,6 +5,7 @@ import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
 import { CmDiff, CmEditor } from "../../../shared/components/CmEditor";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { usePlans } from "../viewmodels/usePlans";
+import type { DocSlug } from "../../projects/models/docloops";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "초안",
@@ -39,9 +40,10 @@ type ViewStyle = "code" | "viewer";
 type EditStyle = "code" | "split" | "viewer";
 
 /** plan.md 뷰어/에디터/승인 (FR-5, FR-2.9, FR-4.3).
- *  SSOT: 콘텐츠 원본은 DB plans.markdown — UI 수정은 항상 revise(새 세대 DRAFT)로만 간다. */
-export default function PlanPanel({ pid }: { pid: number }) {
-  const { plans, error, notice, setNotice, busy, approve, revise } = usePlans(pid);
+ *  SSOT: 콘텐츠 원본은 DB plans.markdown — UI 수정은 항상 revise(새 세대 DRAFT)로만 간다.
+ *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 조회 스코프(?doc_slug=)는 viewmodel 경유. */
+export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocSlug | null }) {
+  const { plans, error, notice, setNotice, busy, approve, revise } = usePlans(pid, doc);
   const [selId, setSelId] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("view");
   const [viewStyle, setViewStyle] = useState<ViewStyle>("viewer"); // 표시 방식 (보기·대비 공유, 뷰어 기본)

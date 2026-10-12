@@ -5,6 +5,7 @@ import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../
 import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOutputs } from "../viewmodels/useOutputs";
+import type { DocSlug } from "../../projects/models/docloops";
 import { navigate } from "../../../shared/lib/hashRoute";
 import { elapsedText, jobStateText, progressText, JOB_TYPE_LABEL } from "../../../shared/lib/jobs";
 import type { DeriveFinding } from "../../../shared/lib/jobs";
@@ -27,8 +28,9 @@ const JOB_STATUS: Record<string, { icon: string; label: string }> = {
   cancelled: { icon: "−", label: "취소" },
 };
 
-/** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드). */
-export default function OutputsPanel({ pid }: { pid: number }) {
+/** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드).
+ *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 목록 조회 스코프(?doc_slug=)는 viewmodel 경유. */
+export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: DocSlug | null }) {
   const {
     builds,
     plans,
@@ -46,7 +48,7 @@ export default function OutputsPanel({ pid }: { pid: number }) {
     sel,
     selPreview,
     closePreview,
-  } = useOutputs(pid);
+  } = useOutputs(pid, doc);
   const [docSel, setDocSel] = useState<string>("");
   // 배너 dismiss — 닫은 job id를 기억해 새 실패가 오면 배너가 다시 나타난다
   const [failedDismissId, setFailedDismissId] = useState<number | null>(null);

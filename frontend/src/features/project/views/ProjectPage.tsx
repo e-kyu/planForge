@@ -1,7 +1,9 @@
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 import { ArrowLeft, Bot, FileText, Layout, Layers, ShieldCheck } from "lucide-react";
 import { Empty, Loading, fmtDate } from "../../../shared/components/ui";
 import { navigate } from "../../../shared/lib/hashRoute";
+import type { DocLoop } from "../../../api/client";
+import type { DocSlug } from "../../projects/models/docloops";
 import type { ProjectTab } from "../models/projectApi";
 import { useProject, useTabBadges } from "../viewmodels/useProjectShell";
 import SourcesPanel from "../../sources/views/SourcesPanel";
@@ -26,10 +28,30 @@ const TABS: {
   { key: "review", no: 5, label: "검수", icon: ShieldCheck },
 ];
 
-/** 프로젝트 셸 — 탭 라우팅 (#/projects/:id/:tab, FR-5 화면 구조). 표현 전용 View. */
-export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab }) {
+/** 프로젝트 셸 — 탭 라우팅 (#/projects/:id/:tab, FR-5 화면 구조). 표현 전용 View.
+ *  문서 루프 프로젝트(project.docloops 비어 있지 않음)는 doc 칩 행으로 문서별 루프를
+ *  표시하고, 레거시 프로젝트(docloops=[])는 기존 화면 그대로다 (step 8). */
+export default function ProjectPage({
+  pid,
+  tab,
+  doc = null,
+}: {
+  pid: number;
+  tab: ProjectTab;
+  doc?: DocSlug | null;
+}) {
   const { project, error } = useProject(pid);
   const badges = useTabBadges(pid);
+  const docloops = (project?.docloops ?? []) as DocLoop[];
+  const currentLoop = doc ? (docloops.find((l) => l.doc_slug === doc) ?? null) : null;
+
+  // 문서 루프 프로젝트를 문서 미지정(레거시) 라우트로 본 경우 — 현재 active 문서로
+  // 리다이렉트(전부 done이면 마지막 문서). 레거시 탭 UI와 문서 루프 흐름의 혼동 방지.
+  useEffect(() => {
+    if (doc || project === null || docloops.length === 0) return;
+    const target = docloops.find((l) => l.status === "active") ?? docloops.at(-1);
+    if (target) navigate(`/projects/${pid}/${target.doc_slug}/${tab}`);
+  }, [doc, project, docloops, pid, tab]);
 
   if (error) return <Empty>{error}</Empty>;
   if (project === null) return <Loading />;
@@ -56,6 +78,21 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
           </p>
         </div>
       </nav>
+      {docloops.length > 0 && (
+        <div className="doc-chips" role="group" aria-label="문서 루프">
+          {docloops.map((l) => (
+            <button
+              key={l.doc_slug}
+              type="button"
+              className={`doc-chip ${doc === l.doc_slug ? "doc-chip-active" : ""}`}
+              onClick={() => navigate(`/projects/${pid}/${l.doc_slug}/${tab}`)}
+            >
+              <span className="doc-chip-label">{l.label}</span>
+              <span className={`doc-chip-status doc-status-${l.status}`}>{l.status}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="tabs" role="tablist">
         {TABS.map((t) => {
           const Icon = t.icon;
@@ -65,7 +102,9 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
               role="tab"
               aria-selected={tab === t.key}
               className={`tab ${tab === t.key ? "tab-active" : ""}`}
-              onClick={() => navigate(`/projects/${pid}/${t.key}`)}
+              onClick={() =>
+                navigate(doc ? `/projects/${pid}/${doc}/${t.key}` : `/projects/${pid}/${t.key}`)
+              }
             >
               <span className="tab-num">{t.no}</span>
               <Icon aria-hidden="true" />
@@ -78,9 +117,17 @@ export default function ProjectPage({ pid, tab }: { pid: number; tab: ProjectTab
       </div>
       <section className="tab-body">
         {tab === "sources" && <SourcesPanel pid={pid} />}
-        {tab === "interview" && <InterviewPanel pid={pid} />}
-        {tab === "plan" && <PlanPanel pid={pid} />}
-        {tab === "outputs" && <OutputsPanel pid={pid} />}
+        {tab === "interview" &&
+          (currentLoop?.status === "locked" ? (
+            <Empty>
+              {currentLoop.label}은 아직 잠겨 있습니다(locked) — 이전 문서의 plan 승인 후
+              활성화됩니다.
+            </Empty>
+          ) : (
+            <InterviewPanel key={doc ?? "legacy"} pid={pid} doc={doc} />
+          ))}
+        {tab === "plan" && <PlanPanel pid={pid} doc={doc} />}
+        {tab === "outputs" && <OutputsPanel pid={pid} doc={doc} />}
         {tab === "review" && <ReviewPanel pid={pid} />}
       </section>
     </>
