@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """docloops 서비스 잠금 테스트 — 문서 루프 단방향 래치 상태머신.
 
-project 시드는 tests/_helpers.make_project (app/client fixture 경유) — step 2에서는
-타 모듈이 docloops 훅을 갖지 않으므로 프로젝트 생성이 루프 행을 만들지 않는다
-(훅 연결은 step 3). 그 결과 "행 없는(레거시) 프로젝트" 시나리오도 같은 헬퍼로 검증한다.
+project 시드는 tests/_helpers.make_project (app/client fixture 경유) — step 3부터
+create_project가 루프 3행을 시드한다(단일 생성 권위). "행 없는(레거시) 프로젝트"
+시나리오는 시드 후 행을 지워 만든다 (`_legacy_project`).
 """
 from __future__ import annotations
 
@@ -22,6 +22,16 @@ from app.modules.docloops.facade import (
     require_session_doc,
 )
 from app.shared.errors import CodedHTTPError
+
+
+def _legacy_project(client, slug: str) -> int:
+    """doc_loops 행이 없는 (레거시) 프로젝트 — 행의 단일 생성 권위는 create_project
+    훅이므로, 레거시 시나리오는 시드된 행을 지워 시뮬레이션한다."""
+    pid = make_project(client, slug)
+    with make_session(client) as db:
+        delete_project_data(db, pid)
+        db.commit()
+    return pid
 
 
 def _status(client, pid: int, slug: str) -> DocLoopStatus:
@@ -121,7 +131,7 @@ def test_on_plan_approved_none_or_unknown_is_noop(client):
 def test_on_plan_approved_rows_missing_is_noop(client):
     """루프 행이 없는 (기존/레거시) 프로젝트에 영향 없음 — 그리고 이 시나리오에서
     has_doc_layout은 False로 남는다."""
-    pid = make_project(client, "doclegacy")
+    pid = _legacy_project(client, "doclegacy")
     with make_session(client) as db:
         on_plan_approved(db, pid, "proposal")
         db.commit()
@@ -157,7 +167,7 @@ def test_require_session_doc(client):
         assert require_session_doc(db, pid, "uiux-design") == "uiux-design"
 
     # 행 없는 (레거시) 프로젝트의 캐노니컬 slug → 통과
-    legacy = make_project(client, "docgatelegacy")
+    legacy = _legacy_project(client, "docgatelegacy")
     with make_session(client) as db:
         assert require_session_doc(db, legacy, "dev-design") == "dev-design"
         assert has_doc_layout(db, legacy) is False
@@ -174,7 +184,7 @@ def test_list_loops_preserves_doc_kinds_order(client):
 
 
 def test_has_doc_layout(client):
-    pid = make_project(client, "doclayout")
+    pid = _legacy_project(client, "doclayout")
     with make_session(client) as db:
         assert has_doc_layout(db, pid) is False
         init_project_loops(db, pid)

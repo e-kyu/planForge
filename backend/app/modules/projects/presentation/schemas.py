@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from app.modules.docloops.presentation.schemas import DocLoopOut
 from app.shared.workspace import SLUG_RE
 
 
@@ -39,3 +40,6 @@ class ProjectOut(BaseModel):
     status: str
     owner: str | None
     created_at: datetime
+    # 문서 루프 상태 — 프로젝트 목록 1회 호출에서 문서 버튼 locked/active/done 판정용.
+    # 기본 [] 를 유지한다: TS 타입 갱신 전 기존 클라이언트 호환 + 레거시 프로젝트(행 없음).
+    docloops: list[DocLoopOut] = []

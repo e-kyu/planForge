@@ -11,6 +11,7 @@ class PlanOut(BaseModel):
     id: int
     project_id: int
     version_no: int
+    doc_slug: str | None = None  # 세대가 속한 문서 루프 (None = 레거시/문서 무관)
     markdown: str
     docs: list | None
     parsed_ok: bool

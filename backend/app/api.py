@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from .modules.derivatives.presentation.api import router as derivatives_router
+from .modules.docloops.presentation.api import router as docloops_router
 from .modules.facts.presentation.api import router as facts_router
 from .modules.interview.presentation.api import router as interview_router
 from .modules.jobs.presentation.api import router as jobs_router
@@ -29,3 +30,4 @@ api_router.include_router(jobs_router)
 api_router.include_router(facts_router)
 api_router.include_router(interview_router)
 api_router.include_router(reviews_router)
+api_router.include_router(docloops_router)

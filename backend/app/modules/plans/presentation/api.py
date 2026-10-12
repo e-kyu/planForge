@@ -2,7 +2,7 @@
 """plan.md API (FR-2.8/2.9) — plan 세대 조회·승인·수정 게이트."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,11 +22,14 @@ router = APIRouter(tags=["plans"])
 
 
 @router.get("/api/projects/{project_id}/plans", response_model=list[PlanOut])
-def list_plans(project_id: int, db: Session = Depends(get_db)):
+def list_plans(project_id: int, doc_slug: str | None = Query(default=None),
+               db: Session = Depends(get_db)):
+    """plan 세대 목록 — doc_slug가 주어지면 그 문서의 세대만 (None = 전체, 기존 동작)."""
     require_project(db, project_id)
-    plans = db.scalars(
-        select(Plan).where(Plan.project_id == project_id).order_by(Plan.version_no)
-    )
+    q = select(Plan).where(Plan.project_id == project_id).order_by(Plan.version_no)
+    if doc_slug is not None:
+        q = q.where(Plan.doc_slug == doc_slug)
+    plans = db.scalars(q)
     return [PlanOut.model_validate(p) for p in plans]
 
 

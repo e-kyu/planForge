@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules import derivatives, facts, interview, jobs, plans, review
+from app.modules.docloops import facade as docloops
 from app.shared.errors import http_404, http_409
 from app.shared.workspace import create_workspace, validate_slug
 
@@ -18,7 +19,11 @@ from ..infrastructure.models import Project
 
 def create_project(db: Session, settings, slug: str, title: str,
                    owner: str | None) -> Project:
-    """프로젝트 생성 (FR-1.1) — slug 검증·중복 검사·워크스페이스 자동 생성."""
+    """프로젝트 생성 (FR-1.1) — slug 검증·중복 검사·워크스페이스 자동 생성.
+
+    같은 트랜잭션에서 문서 루프 3행을 시드한다 (projects → docloops 방향 —
+    facade 경배 계약). doc_loops 행의 단일 생성 권위는 이 훅이다.
+    """
     validate_slug(slug)
     exists = db.scalar(select(Project).where(Project.slug == slug))
     if exists is not None:
@@ -27,6 +32,7 @@ def create_project(db: Session, settings, slug: str, title: str,
     p = Project(slug=slug, title=title, owner=owner, workspace_path=str(ws))
     db.add(p)
     db.flush()
+    docloops.init_project_loops(db, p.id)
     return p
 
 
@@ -48,6 +54,7 @@ def delete_project(db: Session, project_id: int) -> Project:
     facts.facade.delete_project_facts(db, project_id)
     interview.facade.delete_project_data(db, project_id)
     plans.facade.delete_project_plans(db, project_id)
+    docloops.delete_project_data(db, project_id)
     jobs.facade.delete_project_jobs(db, project_id)
     db.delete(p)
     return p
