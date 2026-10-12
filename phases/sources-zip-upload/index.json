@@ -31,7 +31,7 @@
       "name": "upload-api-zip-and-upload-result",
       "status": "completed",
       "started_at": "2026-10-12T22:35:58+0900",
-      "completed_at": "2026-10-12T22:39:31+0900",
+      "completed_at": "2026-10-12T22:40:00+0900",
       "summary": "schemas에 SkipOut·UploadResult(saved·skipped 래핑) 신설, upload_source를 .zip 분기로 확장(zip은 extract_zip 소비 + SourceError 409 전체 거부, 스킵 보고 201 / 단일 파일 409 거부 시맨틱 유지) — 기존 upload 테스트 래핑 구조 갱신 + zip 통합 6건 신설, 회귀 3종 57 passed, 전체 스위트 296 passed"
     },
     {
