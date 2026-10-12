@@ -42,6 +42,7 @@ class Build(UpdatedAtMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    doc_slug: Mapped[str | None] = mapped_column(String(32), nullable=True)  # NULL = 레거시
     plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id"), index=True)
     derivative_id: Mapped[int] = mapped_column(ForeignKey("derivatives.id"), index=True)
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -63,6 +64,7 @@ class InterviewSession(UpdatedAtMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    doc_slug: Mapped[str | None] = mapped_column(String(32), nullable=True)  # NULL = 레거시
     phase: Mapped[SessionPhase] = mapped_column(
         _enum(SessionPhase), default=SessionPhase.HYPOTHESIS, server_default="hypothesis"
     )

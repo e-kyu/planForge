@@ -10,6 +10,7 @@ models를 임포트하므로, 이 패키지 import가 shared.db.Base.metadata를
 """
 from . import (  # noqa: F401 — metadata 등록
     derivatives,
+    docloops,
     facts,
     interview,
     jobs,

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -37,6 +38,7 @@ class Plan(UpdatedAtMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+    doc_slug: Mapped[str | None] = mapped_column(String(32), nullable=True)  # NULL = 레거시
     version_no: Mapped[int] = mapped_column(Integer)  # 1부터, project별 독립
     markdown: Mapped[str] = mapped_column(Text)  # 원칙 1 — SSOT
     docs: Mapped[list | None] = mapped_column(JSONVariant, nullable=True)  # 파싱 캐시

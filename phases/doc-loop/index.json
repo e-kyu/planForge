@@ -1,0 +1,64 @@
+{
+  "project": "planforge",
+  "phase": "doc-loop",
+  "steps": [
+    {
+      "step": 0,
+      "name": "doc-loop-schema",
+      "status": "completed",
+      "started_at": "2026-10-13T00:04:23+0900",
+      "summary": "alembic b7c4d9e2f6a1 (doc_loops 신설 + plans/interview_sessions/builds nullable doc_slug) · docloops 모듈 스켈레톤(DocLoop·DocLoopStatus) · app/modules/__init__.py 집계 등록 · test_alembic_upgrade.py 기대 테이블 11개 갱신 — upgrade/downgrade/재upgrade 사이클 통과, 전체 pytest 298 passed"
+    },
+    {
+      "step": 1,
+      "name": "workspace-doc-root",
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "name": "docloops-facade",
+      "status": "pending"
+    },
+    {
+      "step": 3,
+      "name": "docloops-api-projects",
+      "status": "pending"
+    },
+    {
+      "step": 4,
+      "name": "interview-doc-threading",
+      "status": "pending"
+    },
+    {
+      "step": 5,
+      "name": "plans-doc-threading",
+      "status": "pending"
+    },
+    {
+      "step": 6,
+      "name": "derive-review-doc-ws",
+      "status": "pending"
+    },
+    {
+      "step": 7,
+      "name": "contract-types",
+      "status": "pending"
+    },
+    {
+      "step": 8,
+      "name": "doc-routing",
+      "status": "pending"
+    },
+    {
+      "step": 9,
+      "name": "doc-buttons-ui",
+      "status": "pending"
+    },
+    {
+      "step": 10,
+      "name": "docs-adr",
+      "status": "pending"
+    }
+  ],
+  "created_at": "2026-10-13T00:04:23+0900"
+}
