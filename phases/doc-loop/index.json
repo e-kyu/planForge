@@ -32,7 +32,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:18:02+0900",
       "summary": "문서 루프 읽기 API 표면 + 프로젝트 라이프사이클 통합 — docloops presentation(DocLoopOut·GET /api/projects/{pid}/docloops, 레거시행 없음=[] 계약) · plans facade 확장(latest_generations_by_doc·latest_generations_by_project_doc 배치, latest_approved/create_generation doc_slug 기본 파라미터 — 기존 호출자 무수정, PlanOut.doc_slug·list_plans?doc_slug= 필터) · projects 통합(create_project가 같은 트랜잭션에서 docloops.init_project_loops 훅 — 단일 생성 권위, delete 사슬에 docloops.delete_project_data 추가, ProjectOut.docloops=[] 기본 내장 + 목록은 루프 1회/plans 1회 배치 로드 N+1 방지) · test_docloops_api.py 7건 신설 — AC 31 passed · 전체 321 passed + 1 skipped",
-      "completed_at": "2026-10-13T00:22:48+0900"
+      "completed_at": "2026-10-13T00:23:03+0900"
     },
     {
       "step": 4,
