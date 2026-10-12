@@ -48,7 +48,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:28:49+0900",
       "summary": "plan 승인(Approve)의 문서 스코프 축소 + 승인 트랜잭션 루프 진행 — plans/application/service.py(_scoped_supersede: 승인본 교체를 문서 스코프로 좁힘, 레거시 None은 is_(None) 명시 분기 · approve_plan: complete_plan_review_sessions(doc_slug narrowing — None은 파라미터 미전달 전체 계약), 미러 root를 doc_ws_root(has_doc_layout 권위)로 결정 + ensure_doc_ws 멱등 지연 생성, 커밋 전 docloops.facade.on_plan_approved 훅) · revise_plan/plan_revise_job(create_generation doc_slug=원본 세대 상속 + 미러 root 동일 규칙) · version_no는 프로젝트 전체 단조 유지(uq_project_planver 불변) · insert_plan helper에 doc_slug 파라미터 추가, test_docloops_api.py 6건 신설(승인 전파·래치 유지·세션 스코프 unchanged·문서별 미러·supersede 문서 스코프+?doc_slug= 필터·레거시 루트 경로 회귀) — test_plans_api.py test_approve_flow_and_supersede 무수정 통과, AC 52 passed · 전체 332 passed + 1 skipped",
-      "completed_at": "2026-10-13T00:35:07+0900"
+      "completed_at": "2026-10-13T00:35:34+0900"
     },
     {
       "step": 6,
