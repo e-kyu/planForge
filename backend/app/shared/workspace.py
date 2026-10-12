@@ -55,6 +55,37 @@ def ensure_workspace_dirs(ws: Path) -> None:
         (ws / sub).mkdir(parents=True, exist_ok=True)
 
 
+# 문서별 루프 워크스페이스 하위 구조 — sources는 문서 간 공유 소스라 프로젝트 루트에
+# 남는다 (문서별 하위에 만들지 않는다). 레이아웃의 권위는 디렉토리 존재가 아니라
+# DB doc_loops 행이다 — 행이 있는(신규) 프로젝트만 문서별 경로를 쓰고, 행이 없는
+# 기존 프로젝트는 루트 경로로 계속 동작한다.
+DOC_WS_SUBDIRS = ("work", "output", "docs", "assets")
+
+
+def doc_ws_root(ws: Path, doc_slug: str | None, *, doc_layout: bool) -> Path:
+    """문서별 ws 루트 — doc_layout(=프로젝트가 doc_loops 행을 가짐)이고 doc_slug가
+    있으면 ws/{doc_slug}, 그 외(레거시 · doc 없는 plan)는 ws를 반환한다.
+
+    판정은 디렉토리 존재로 하지 않는다 — 권위는 DB 행이며 존재 확인은 지연 생성·
+    race와 충돌한다. doc_layout=False + doc_slug 조합도 ws 루트다 (레거시 프로젝트의
+    문서 세션 허용 계약).
+    """
+    if doc_slug and doc_layout:
+        validate_slug(doc_slug)  # 경로 성분 검증 — ".." 등 트래버설은 WorkspaceError
+        return ws / doc_slug
+    return ws
+
+
+def ensure_doc_ws(root: Path) -> Path:
+    """문서별 루프가 시작될 때(세션 생성 시점) 하위 구조를 지연 생성한다.
+
+    멱등 — 기존 디렉토리를 오류로 취급하지 않는다 (ensure_workspace_dirs와 동일 스타일).
+    """
+    for sub in DOC_WS_SUBDIRS:
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def write_plan_mirror(ws: Path, markdown: str) -> Path:
     """DB plans.markdown을 plan.md 미러로 기록 (바이트 동일 — 원칙 1).
 
