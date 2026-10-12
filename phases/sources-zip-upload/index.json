@@ -7,7 +7,7 @@
       "name": "recursive-sources-context",
       "status": "completed",
       "started_at": "2026-10-12T22:21:54+0900",
-      "completed_at": "2026-10-12T22:25:55+0900",
+      "completed_at": "2026-10-12T22:26:04+0900",
       "summary": "read_sources_context를 rglob 재귀 수집으로 변경(정렬 키·헤더·미주입 목록을 POSIX 상대경로로 고정) — 기존 7개 테스트 무수정 통과 + 신규 3개 케이스 추가, 전체 스위트 녹색"
     },
     {
