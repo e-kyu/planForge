@@ -58,7 +58,21 @@ export interface paths {
         /** List Sources */
         get: operations["list_sources_api_projects__project_id__sources_get"];
         put?: never;
-        /** Upload Source */
+        /**
+         * Upload Source
+         * @description 소스 업로드 — .zip은 해제 결과를, 단일 파일은 그대로를 저장한다.
+         *
+         *     응답 계약 확장: 기존 단일 SourceOut → UploadResult(saved·skipped) 래핑.
+         *     - zip 멤버의 덮어쓰기 금지는 거부가 아니라 스킵 보고로 원칙을 유지한다 — zip은
+         *       사용자가 일괄 해제 결과를 미리 검증할 수 없는 일괄 경로라 1멤버 충돌로 나머지를
+         *       전부 거부하지 않는다 (경계: "사용자 명시 선택 vs 일괄 해제 결과").
+         *     - 단일 파일의 거부는 409 그대로다 — 명시적으로 고른 파일 하나의 거부를 스킵으로
+         *       조용히 넘기면 사용자가 실패를 인지하지 못한다 (기존 계약 유지).
+         *     - .zip 자체는 소스로 저장되지 않는다 — 해제 결과만 소스가 된다 (_SOURCE_MEDIA에
+         *       .zip 항목 없음 — download 경로를 통과하지 않는다).
+         *     - extract_zip은 2페이즈 설계상 자체 결함(SourceError) 시 어떤 파일도 기록하지
+         *       않았으므로 409 전체 거부로 변환해도 워크스페이스는 무손상이다.
+         */
         post: operations["upload_source_api_projects__project_id__sources_post"];
         delete?: never;
         options?: never;
@@ -1043,6 +1057,16 @@ export interface components {
             /** Created At */
             created_at: unknown;
         };
+        /**
+         * SkipOut
+         * @description 스킵된 zip 멤버 보고 — 원명(정규화 전)으로 사용자가 원본 zip과 대조할 수 있게 한다.
+         */
+        SkipOut: {
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string;
+        };
         /** SourceOut */
         SourceOut: {
             /** Name */
@@ -1058,6 +1082,19 @@ export interface components {
         TurnCreate: {
             /** Message */
             message: string;
+        };
+        /**
+         * UploadResult
+         * @description 소스 업로드 응답 — 기존 단일 SourceOut의 래핑 확장.
+         *
+         *     zip 업로드는 멤버마다 저장/스킵이 갈리므로 saved·skipped를 함께 보고한다. 단일
+         *     파일은 saved 1건·skipped 빈 배열이다 (거부는 409 — 스킵이 아니라 거부다).
+         */
+        UploadResult: {
+            /** Saved */
+            saved: components["schemas"]["SourceOut"][];
+            /** Skipped */
+            skipped: components["schemas"]["SkipOut"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -1292,7 +1329,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourceOut"];
+                    "application/json": components["schemas"]["UploadResult"];
                 };
             };
             /** @description Validation Error */
