@@ -39,7 +39,7 @@
       "name": "contract-type-regen",
       "status": "completed",
       "started_at": "2026-10-12T22:40:01+0900",
-      "completed_at": "2026-10-12T22:42:25+0900",
+      "completed_at": "2026-10-12T22:42:44+0900",
       "summary": "openapi.json 재export(venv python — 계약 렌더링 일치 환경) 후 npm run gen:types로 types.gen.ts 재생성 — UploadResult(saved: SourceOut[]·skipped: SkipOut[])·SkipOut(name·reason) 추가, POST sources 응답 SourceOut→UploadResult 전환, {name} path 파라미터 반영 — 소스 코드 수편집 0, diff가 계약 변경 3종으로 제한됨, test_sources_api.py 29 passed·전체 스위트 296 passed, npm run build 녹색"
     },
     {
