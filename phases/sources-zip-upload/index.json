@@ -23,7 +23,7 @@
       "name": "zip-extraction-core",
       "status": "completed",
       "started_at": "2026-10-12T22:28:49+0900",
-      "completed_at": "2026-10-12T22:35:34+0900",
+      "completed_at": "2026-10-12T22:35:58+0900",
       "summary": "workspace에 MAX_ZIP_MEMBERS·MAX_ZIP_UNCOMPRESSED_BYTES·sanitize_source_relpath(구조적 기각+성분 치환) 신설, sources/application/zip_sources.py extract_zip으로 2페이즈 사전스캔+바이트 직접 기록(extractall 금지·cp437→cp949 멤버명 복원·덮어쓰기 금지) 구현 — 신규 18건, 회귀 3종 51 passed, 전체 스위트 290 passed"
     },
     {
