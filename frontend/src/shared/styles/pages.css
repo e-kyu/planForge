@@ -124,6 +124,12 @@
   color: var(--ok);
 }
 
+/* 업로드 보고 배너 — zip 멤버 스킵 목록(이름 — 사유) */
+.upload-skip-list {
+  margin: var(--space-2) 0 0;
+  padding-left: 18px;
+}
+
 .loading {
   color: var(--text-sub);
   padding: var(--margin);

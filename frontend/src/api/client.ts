@@ -10,6 +10,7 @@ export type Build = components["schemas"]["BuildOut"];
 export type Review = components["schemas"]["ReviewOut"];
 export type ReviewFinding = components["schemas"]["FindingOut"];
 export type SourceFile = components["schemas"]["SourceOut"];
+export type UploadResult = components["schemas"]["UploadResult"];
 export type Overview = components["schemas"]["OverviewOut"];
 export type Session = components["schemas"]["SessionOut"];
 export type CompactPreview = components["schemas"]["CompactPreview"];

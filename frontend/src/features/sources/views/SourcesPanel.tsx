@@ -30,6 +30,7 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
     files,
     globalFiles,
     error,
+    uploadReport,
     upload,
     delTarget,
     delBusy,
@@ -119,6 +120,23 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
       <section>
         {error && <Banner kind="error">{error}</Banner>}
 
+        {uploadReport && (
+          <Banner kind="info">
+            {uploadReport.savedCount > 0 &&
+              `${uploadReport.savedCount}건의 소스를 저장했습니다.`}
+            {uploadReport.savedCount > 0 && uploadReport.skipped.length > 0 && " "}
+            {uploadReport.skipped.length > 0 && (
+              <ul className="upload-skip-list">
+                {uploadReport.skipped.map((s) => (
+                  <li key={s.name}>
+                    {`${s.name} — ${s.reason}`}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Banner>
+        )}
+
         <div className="card">
           <div className="panel-head">
             <div className="sources-head-text">
@@ -137,6 +155,7 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
           <div className="panel-foot">
             <span className="hint sources-foot-desc">
               인터뷰 에이전트와 기획서 생성의 기초 팩트로 활용될 수집 문서를 등록·관리합니다. (.md .txt .json .csv, 최대 {MAX_MB}MB · UTF-8 · PDF 미지원)
+              zip 업로드는 압축을 해제해 등록하며, zip 내부 파일도 동일 규칙(확장자·{MAX_MB}MB·UTF-8)이 적용됩니다. 기존 소스는 덮어쓰지 않습니다.
             </span>
             <label className="upload-label">
               <Upload aria-hidden="true" />
@@ -144,7 +163,7 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
               <input
                 ref={fileInput}
                 type="file"
-                accept=".md,.txt,.json,.csv"
+                accept=".md,.txt,.json,.csv,.zip"
                 multiple
                 onChange={(e) => upload(e.target.files)}
                 data-testid="source-file-input"
