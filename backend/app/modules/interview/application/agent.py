@@ -28,9 +28,15 @@ from planforge.plan import (
 )
 
 from app.agents.tools import ToolError, validate_tool_args
+from app.modules.docloops import facade as docloops
 from app.modules.facts.facade import append_facts, list_active_facts
 from app.modules.plans.facade import PlanOrigin, create_generation
-from app.shared.workspace import read_sources_context, write_interview_log_mirror, write_plan_mirror
+from app.shared.workspace import (
+    doc_ws_root,
+    read_sources_context,
+    write_interview_log_mirror,
+    write_plan_mirror,
+)
 
 from ..domain.events import Event, done_event, error_event, notice_event, progress_event, state_event
 from ..infrastructure.models import (
@@ -139,6 +145,18 @@ class InterviewAgent:
         if not parts:
             parts.append("(소스·팩트가 텅 비어 있음 — 뼈대 질문부터 시작. 임의 추측 금지)")
         return "\n\n".join(parts)
+
+    def _mirror_root(self) -> Path:
+        """미러(plan.md·interview-log.md)를 쓸 ws 루트 — 문서 세션은 문서별 하위로.
+
+        doc 없는 세션(None)은 doc_ws_root가 ws를 반환 — 기존 루트 경로 동일.
+        레이아웃 권위는 doc_loops 행(has_doc_layout)이라 행 없는 기존 프로젝트의
+        doc 세션도 루트 경로를 유지한다 (step 4 무이관 계약).
+        """
+        ws = Path(self.sess.project.workspace_path)
+        return doc_ws_root(ws, self.sess.doc_slug,
+                           doc_layout=docloops.has_doc_layout(
+                               self.db, self.sess.project_id))
 
     def _history(self) -> list[dict]:
         """이력 행 → LLM 메시지. user/assistant/tool만 (event 카드는 도구 결과로 이미 반영).
@@ -336,10 +354,12 @@ class InterviewAgent:
                         "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
                         "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
 
-        # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당
+        # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당. doc_slug는 세대가
+        # 속한 문서 식별자 (None = 레거시) — 승인·채번 사슬이 이 값으로 좁혀진다.
         p = create_generation(self.db, self.sess.project_id, markdown=md, docs=plan.docs,
-                              parsed_ok=True, origin=PlanOrigin.INTERVIEW)
-        write_plan_mirror(Path(self.sess.project.workspace_path), md)
+                              parsed_ok=True, origin=PlanOrigin.INTERVIEW,
+                              doc_slug=self.sess.doc_slug)
+        write_plan_mirror(self._mirror_root(), md)
 
         self.sess.phase = SessionPhase.PLAN_REVIEW
         events.add(Event(name="plan_draft", kind=MessageKind.PLAN_DRAFT,
@@ -366,11 +386,13 @@ class InterviewAgent:
                         pending[idx]["content"] = e["content"]
                     if e.get("source") is not None:
                         pending[idx]["source"] = e["source"]
+        # 팩트 적립 자체는 프로젝트 공유 저장소(append_facts) 소관 — 미러만 문서 루트를 따른다
+        # (팩트는 프로젝트 공유가 설계 결정이고, doc 구분은 session_id로 가능 — step 4).
         append_facts(self.db, self.sess.project_id, self.sess.id, pending)
         lines = []
         for f in pending:
             lines.append(f"[{date.today().isoformat()}] {f['content']} (출처: {f.get('source', '')})")
-        write_interview_log_mirror(Path(self.sess.project.workspace_path), lines)
+        write_interview_log_mirror(self._mirror_root(), lines)
         self.sess.pending_facts = None
         self.db.commit()
         return pending

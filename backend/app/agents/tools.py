@@ -135,7 +135,7 @@ INTERVIEW_TOOLS: list[dict] = [
         "function": {
             "name": "update_checklist",
             "description": ("종료 판정 체크리스트를 갱신한다 (비차단 — 즉시 루프가 이어진다). "
-                            "area는 공통|제안서|개발설계서 중 하나."),
+                            "area는 공통|제안서|UI·UX설계서|개발설계서 중 하나."),
             "parameters": {
                 "type": "object",
                 "properties": {

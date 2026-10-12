@@ -10,6 +10,7 @@ class SessionOut(BaseModel):
 
     id: int
     project_id: int
+    doc_slug: str | None
     phase: str
     round_no: int
     status: str
@@ -36,7 +37,7 @@ class MessageOut(BaseModel):
 
 
 class SessionCreate(BaseModel):
-    pass
+    doc_slug: str | None = None  # 문서 루프 세션 — None은 레거시(문서 무관) 세션
 
 
 class TurnCreate(BaseModel):

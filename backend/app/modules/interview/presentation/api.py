@@ -13,17 +13,19 @@ from __future__ import annotations
 import queue
 import threading
 from collections.abc import Generator
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.docloops import facade as docloops
 from app.modules.projects.facade import project_slug, require_project
 from app.modules.sources.facade import project_sources_dir
 from app.shared.db import get_db, make_session_factory
 from app.shared.errors import http_404, http_409
-from app.shared.workspace import workspace_path
+from app.shared.workspace import doc_ws_root, ensure_doc_ws, workspace_path
 
 from ..application.agent import InterviewAgent
 from ..domain.events import error_event
@@ -53,11 +55,21 @@ _STREAM_MEDIA_TYPE = "text/event-stream"
 
 @router.post("/api/projects/{project_id}/interview/sessions", status_code=201,
              response_model=SessionOut)
-def create_session(project_id: int, _body: SessionCreate, db: Session = Depends(get_db)):
-    require_project(db, project_id)
-    s = InterviewSession(project_id=project_id)
+def create_session(project_id: int, body: SessionCreate, db: Session = Depends(get_db)):
+    project = require_project(db, project_id)
+    # 문서 루프 세션 생성 게이트 — locked 409·미상 slug 404 (docloops 계약).
+    # 레거시 프로젝트(doc_loops 행 없음)는 slug만 저장되고 미러 경로는 루트를 유지한다
+    # (require_session_doc이 캐노니컬 slug 검증만 통과 — 기존 프로젝트 무이관 계약).
+    doc_slug = (docloops.require_session_doc(db, project_id, body.doc_slug)
+                if body.doc_slug else None)
+    s = InterviewSession(project_id=project_id, doc_slug=doc_slug)
     db.add(s)
     db.flush()
+    # 문서 세션 생성 시점 = 해당 문서 루프의 시작 — 문서별 워크스페이스 하위 구조를
+    # 지연 생성한다 (멱등). 레이아웃 권위는 doc_loops 행이므로 행 있는 프로젝트만.
+    if doc_slug and docloops.has_doc_layout(db, project_id):
+        root = doc_ws_root(Path(project.workspace_path), doc_slug, doc_layout=True)
+        ensure_doc_ws(root)
     return SessionOut.model_validate(s)
 
 

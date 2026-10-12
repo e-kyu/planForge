@@ -37,7 +37,10 @@
     {
       "step": 4,
       "name": "interview-doc-threading",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-13T00:23:04+0900",
+      "summary": "인터뷰 세션에 문서 정체성(doc_slug) 스레딩 — create_session이 body.doc_slug를 require_session_doc 게이트(locked 409·미상 404) 통과 후 세션에 저장, doc_loops 행 권위(has_doc_layout)일 때 ensure_doc_ws로 문서별 워크스페이스 지연 생성(레거시 프로젝트는 slug만 저장·루트 경로 무이관) · SessionCreate/SessionOut.doc_slug 노출 · complete_plan_review_sessions에 doc_slug 파라미터(None=전체 기존 계약 유지, slug=narrowing) · agent _mirror_root 헬퍼로 _write_plan(create_generation(..., doc_slug=세션.doc_slug))·commit_facts 미러를 문서 루트에 기록, 팩트 적립(append_facts)은 프로젝트 공유 유지 · 인터뷰 계약 4세트 동시 갱신(tools.py description 공통|제안서|UI·UX설계서|개발설계서, interview.md [UI·UX설계서] 체크리스트 항목·합집합 조건, INTERVIEW-TURN-CONTRACT.md 어휘 확장 기록, test_interview_api.py 어휘 잠금 테스트) · test_docloops_api.py 3건·test_docloops_service.py 1건 신설 — AC 46 passed · 전체 326 passed + 1 skipped",
+      "completed_at": "2026-10-13T00:38:30+0900"
     },
     {
       "step": 5,

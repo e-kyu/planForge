@@ -8,6 +8,7 @@ create_project가 루프 3행을 시드한다(단일 생성 권위). "행 없는
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
 from _helpers import make_project, make_session
 from app.modules.docloops.facade import (
@@ -20,6 +21,12 @@ from app.modules.docloops.facade import (
     list_loops,
     on_plan_approved,
     require_session_doc,
+)
+from app.modules.interview.facade import complete_plan_review_sessions
+from app.modules.interview.infrastructure.models import (
+    InterviewSession,
+    SessionPhase,
+    SessionStatus,
 )
 from app.shared.errors import CodedHTTPError
 
@@ -191,6 +198,43 @@ def test_has_doc_layout(client):
         db.commit()
     with make_session(client) as db:
         assert has_doc_layout(db, pid) is True
+
+
+def test_complete_plan_review_sessions_doc_scoped(client):
+    """plan 승인 완료 처리의 문서 스코프 (step 4) — slug를 주면 그 문서 세션만 완료.
+
+    step 5(문서 plan 승인)가 이 파라미터를 이어받고, None은 전체(기존 계약)다 —
+    레거시 plan 승인 경로와 기존 테스트 계약이 None=전체에 고정돼 있다.
+    """
+    pid = make_project(client, "docsessscope")
+    with make_session(client) as db:
+        p = InterviewSession(project_id=pid, doc_slug="proposal",
+                             phase=SessionPhase.PLAN_REVIEW)
+        u = InterviewSession(project_id=pid, doc_slug="uiux-design",
+                             phase=SessionPhase.PLAN_REVIEW)
+        db.add_all([p, u])
+        db.commit()
+        p_id, u_id = p.id, u.id
+
+    # 문서 스코프 — proposal 세션만 완료 (APPROVED/DONE), uiux 세션은 PLAN_REVIEW 유지
+    with make_session(client) as db:
+        complete_plan_review_sessions(db, pid, doc_slug="proposal")
+        db.commit()
+    with make_session(client) as db:
+        rows = {s.id: s for s in db.scalars(
+            select(InterviewSession).where(InterviewSession.project_id == pid)).all()}
+        assert rows[p_id].phase == SessionPhase.APPROVED
+        assert rows[p_id].status == SessionStatus.DONE
+        assert rows[u_id].phase == SessionPhase.PLAN_REVIEW
+
+    # None(기본) — 전체 기존 동작: 남은 uiux 세션도 완료한다
+    with make_session(client) as db:
+        complete_plan_review_sessions(db, pid)
+        db.commit()
+    with make_session(client) as db:
+        for s in db.scalars(
+                select(InterviewSession).where(InterviewSession.project_id == pid)):
+            assert s.phase == SessionPhase.APPROVED and s.status == SessionStatus.DONE
 
 
 def test_doc_label_bidirectional_mapping():

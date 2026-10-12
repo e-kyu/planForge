@@ -3,14 +3,21 @@
 
 step 3부터 create_project가 루프 3행을 시드한다 — "행 없는(레거시) 프로젝트"는
 시드 후 행을 지워 만든다 (delete_project_data = projects 삭제 사슬과 같은 경로).
+step 4는 문서 세션 생성 게이트(POST /interview/sessions)와 완료 처리 스코프를 잠근다.
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 from _helpers import make_project, make_session
 from app.modules.docloops.facade import delete_project_data, list_loops
 from app.modules.plans.facade import PlanOrigin, PlanStatus, create_generation
 
 DOC_SLUGS = ["proposal", "uiux-design", "dev-design"]
+
+
+def _ws_dir(client) -> Path:
+    return Path(client.app.state.settings.workspaces_dir)
 
 
 def _legacy_project(client, slug: str) -> int:
@@ -100,6 +107,58 @@ def test_delete_project_removes_docloop_rows(client):
     assert client.delete(f"/api/projects/{pid}").status_code == 204
     with make_session(client) as db:
         assert list_loops(db, pid) == []
+
+
+def test_create_doc_session_gates_and_layout(client):
+    """문서 세션 생성 게이트(step 4) — locked 409·미상 slug 404·active 201 + 문서별 ws."""
+    pid = make_project(client, "docsession")
+
+    # locked 문서 (uiux-design) → 409 + 이전 문서 승인 안내
+    r = client.post(f"/api/projects/{pid}/interview/sessions",
+                    json={"doc_slug": "uiux-design"})
+    assert r.status_code == 409, r.text
+    assert "잠겨" in r.json()["detail"]
+
+    # 미상 slug → 404 (캐노니컬 slug만 허용)
+    r = client.post(f"/api/projects/{pid}/interview/sessions",
+                    json={"doc_slug": "nonsense"})
+    assert r.status_code == 404, r.text
+
+    # active 문서 (proposal) → 201 + 문서별 워크스페이스 지연 생성
+    r = client.post(f"/api/projects/{pid}/interview/sessions",
+                    json={"doc_slug": "proposal"})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["doc_slug"] == "proposal"
+    root = _ws_dir(client) / "docsession" / "proposal"
+    for sub in ("work", "output", "docs", "assets"):
+        assert (root / sub).is_dir()
+    # sources는 문서간 공유라 프로젝트 루트에 유지된다 (DOC_WS_SUBDIRS 계약)
+    assert (root / "sources").exists() is False
+
+
+def test_create_session_without_doc_slug_keeps_legacy_layout(client):
+    """doc_slug 없는 세션 — doc_slug null, 문서별 디렉터리를 만들지 않는다 (레거시 계약)."""
+    pid = make_project(client, "docsesslegacy")
+    r = client.post(f"/api/projects/{pid}/interview/sessions", json={})
+    assert r.status_code == 201, r.text
+    assert r.json()["doc_slug"] is None
+    wsroot = _ws_dir(client) / "docsesslegacy"
+    assert not [p for p in wsroot.iterdir() if p.name in DOC_SLUGS]
+
+
+def test_create_doc_session_on_legacy_project_saves_slug_only(client):
+    """레거시 프로젝트(doc_loops 행 없음)의 doc 세션 — 409/404가 아니라 slug만 저장되고
+    미러는 루트 경로를 유지한다 (기존 프로젝트 무이관 계약)."""
+    pid = _legacy_project(client, "docsesslegacyproj")
+    r = client.post(f"/api/projects/{pid}/interview/sessions",
+                    json={"doc_slug": "dev-design"})
+    assert r.status_code == 201, r.text
+    assert r.json()["doc_slug"] == "dev-design"
+    wsroot = _ws_dir(client) / "docsesslegacyproj"
+    for sub in ("work", "output", "docs", "sources", "assets"):
+        assert (wsroot / sub).is_dir()  # create_workspace의 원본 5개 — 문서 하위 생성 없음
+    assert not (wsroot / "dev-design").exists()
 
 
 def test_list_plans_doc_slug_filter(client):

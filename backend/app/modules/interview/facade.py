@@ -34,13 +34,20 @@ def require_session(db: Session, session_id: int) -> InterviewSession:
     return s
 
 
-def complete_plan_review_sessions(db: Session, project_id: int) -> None:
-    """plan 승인(plans 모듈)이 호출 — plan을 작성한 세션을 완료 처리한다."""
-    for sess in db.scalars(
-        select(InterviewSession)
-        .where(InterviewSession.project_id == project_id,
-               InterviewSession.phase == SessionPhase.PLAN_REVIEW)
-    ).all():
+def complete_plan_review_sessions(db: Session, project_id: int,
+                                  doc_slug: str | None = None) -> None:
+    """plan 승인(plans 모듈)이 호출 — plan을 작성한 세션을 완료 처리한다.
+
+    doc_slug를 주면 그 문서 세션만, 주지 않으면 기존 동작(전체)을 유지한다 —
+    레거시 plan 승인 경로와 기존 테스트 계약이 None=전체에 고정돼 있다 (문서 plan
+    승인은 plans 쪽이 slug를 명시적으로 넘긴다).
+    """
+    q = select(InterviewSession).where(
+        InterviewSession.project_id == project_id,
+        InterviewSession.phase == SessionPhase.PLAN_REVIEW)
+    if doc_slug is not None:
+        q = q.where(InterviewSession.doc_slug == doc_slug)
+    for sess in db.scalars(q).all():
         sess.phase = SessionPhase.APPROVED
         sess.status = SessionStatus.DONE
 

@@ -119,6 +119,12 @@
 `interview.md`·이 문서·`test_interview_api.py`만 수정했다 (대칭 e2e:
 `test_interview_proposal_arc_full_flow_to_plan_approval`).
 
+2026-10-13 area 어휘 확장 (doc-loop step 4): `update_checklist`의 `area` 필드는 hard
+enum이 아니라 설명 문자열의 소프트 어휘다 — 검증 권위는 `tools.py`의 스키마 그대로.
+문서별 루프(docloops) 도입에 따라 어휘를 공통|제안서|UI·UX설계서|개발설계서 4종으로
+확장했다 — `tools.py` 설명 문자열과 `interview.md` 체크리스트 `[UI·UX설계서]` 항목·
+합집합 조건을 동시 갱신 (계약 4세트 동시 점검 — 구조 스키마·`validate_tool_args`는 무변경).
+
 ## 모델 교체 시 체크리스트
 
 1. `backend/planforge/config.json`의 프로필을 교체한다 — 도구 호출이 흔들리는 모델이면

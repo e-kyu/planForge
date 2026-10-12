@@ -1059,3 +1059,31 @@ def test_ask_questions_suggestions_contract_triggers_retry(sug_retry_kit):
     s = sug_retry_client.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
     assert s["pending_questions"][0]["suggestions"] == ["a", "b"]
+
+UIUX_AREA_TURNS = [
+    # 턴1 — 확장 어휘 area로 체크리스트 갱신 후 질문 제시 (blocking으로 기다린다)
+    ("", [
+        ("update_checklist", {"items": [
+            {"id": "u1", "area": "UI·UX설계서", "text": "화면 구성·사용자 흐름 확정", "done": True},
+            {"id": "d1", "area": "개발설계서", "text": "요구사항 목록 확정", "done": True},
+        ]}),
+        ("ask_questions", {"round_summary": "뼈대 확인",
+                           "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
+    ]),
+]
+
+
+def test_update_checklist_area_vocabulary_uiux_design(llm_app_factory, db_env):
+    """area 어휘 확장 잠금 (step 4 계약 4세트) — 문서별 루프(docloops) 도입으로
+    UI·UX설계서가 허용 어휘다. area는 hard enum이 아닌 설명 문자열 어휘(tools.py 권위)
+    이므로 서버 거부 경로가 없다 — 회귀 지점은 체크리스트에 그대로 적립되는 것."""
+    fake = FakeStreamLLM(UIUX_AREA_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.client.post("/api/projects", json={"slug": "uiux-area", "title": "어휘"})
+        r = kit.client.post("/api/projects/1/interview/sessions", json={})
+        assert r.status_code == 201, r.text
+        sid = r.json()["id"]
+        _sse_events(kit.client, f"/api/interview/sessions/{sid}/kick")
+
+    s = kit.client.get(f"/api/interview/sessions/{sid}").json()
+    assert {i["area"] for i in s["checklist"]} == {"UI·UX설계서", "개발설계서"}
