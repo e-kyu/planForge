@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:07:22+0900",
       "summary": "app/shared/workspace.py에 문서별 루프 경로 헬퍼 추가 — DOC_WS_SUBDIRS(work·output·docs·assets, sources는 루트 공유 유지)·doc_ws_root(DB 행이 권위, 존재 판정 금지·validate_slug 트래버설 방어)·ensure_doc_ws(멱등 지연 생성) — 기존 워크스페이스 함수 무수정, tests/test_workspace_doc_root.py 7건 신설, AC 16 passed · 전체 304 passed + 1 skipped",
-      "completed_at": "2026-10-13T00:35:00+0900"
+      "completed_at": "2026-10-13T00:11:00+0900"
     },
     {
       "step": 2,
