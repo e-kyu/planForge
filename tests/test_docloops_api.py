@@ -11,7 +11,8 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from _helpers import insert_plan, make_project, make_session
+from _helpers import insert_plan, make_project, make_session, run_queue
+from app.modules.derivatives.infrastructure.models import Build
 from app.modules.docloops.facade import delete_project_data, list_loops
 from app.modules.interview.infrastructure.models import (
     InterviewSession,
@@ -19,6 +20,7 @@ from app.modules.interview.infrastructure.models import (
     SessionStatus,
 )
 from app.modules.plans.facade import PlanOrigin, PlanStatus, create_generation
+from fakes import FakeLLM, correct_report_payload, correct_slides_payload, tool_call
 
 DOC_SLUGS = ["proposal", "uiux-design", "dev-design"]
 
@@ -303,3 +305,138 @@ def test_legacy_project_approval_stays_root_path(client, app):
     plans = {p["id"]: p for p in client.get(f"/api/projects/{pid}/plans").json()}
     assert plans[v1]["status"] == "superseded"
     assert plans[v2]["status"] == "approved"
+
+
+# ---------------------------------------------------------------- step 6 — derive·검수의 문서별 ws
+
+def _doc_derive(client, app, pid: int, kind: str, doc_slug: str | None = None,
+                fmts: list[str] | None = None) -> dict:
+    """doc_slug 지정 enqueue + run_job 직접 실행 → 최종 job 상태를 반환한다."""
+    body: dict = {"kind": kind}
+    if doc_slug is not None:
+        body["doc_slug"] = doc_slug
+    if fmts is not None:
+        body["fmts"] = fmts
+    r = client.post(f"/api/projects/{pid}/derivatives", json=body)
+    assert r.status_code == 202, r.text
+    job_id = r.json()["id"]
+    llm = FakeLLM([tool_call("write_slides_json", correct_slides_payload())] if kind == "slides"
+                  else [tool_call("write_report_json", correct_report_payload())])
+    run_queue(app, llm)
+    job = client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "done", job
+    return job
+
+
+def test_doc_scoped_derive_writes_doc_workspace_files(client, app, db_env):
+    """문서 plan의 derive·빌드 산출물이 문서별 ws(proposal/work·output)에 쌓인다
+    (빌더 로직 무변경 — 주입 루트만 문서별로 바뀐다)·Build.doc_slug 채움 +
+    file_path "output/..." 상대 형식 유지."""
+    pid = make_project(client, "docderive")
+    insert_plan(app, pid, 1, doc_slug="proposal")
+
+    slides_job = _doc_derive(client, app, pid, "slides", doc_slug="proposal")
+    report_job = _doc_derive(client, app, pid, "report", doc_slug="proposal", fmts=["md"])
+
+    root = _ws_dir(client) / "docderive" / "proposal"
+    assert (root / "work" / "slides.json").is_file()
+    assert (root / "work" / "report.json").is_file()
+    assert list((root / "output").glob("*.pptx"))
+    assert list((root / "output").glob("*.md"))
+    # 루트 output는 채번 파일 없음 (문서별 ws가 채번 소속)
+    assert not list((_ws_dir(client) / "docderive" / "output").iterdir())
+
+    with make_session(app) as db:
+        builds = db.scalars(select(Build).where(Build.project_id == pid)).all()
+        assert len(builds) == 2  # pptx + md
+        assert all(b.doc_slug == "proposal" for b in builds)
+        assert all(b.file_path.startswith("output/") for b in builds)
+    # job result의 builds도 file_path 계약을 유지한다
+    for b in (*slides_job["result"]["builds"], *report_job["result"]["builds"]):
+        assert b["file_path"].startswith("output/")
+
+
+def test_doc_scoped_outputs_listing_and_download(client, app):
+    """outputs 목록·다운로드가 문서별 ws 경로에서 파일을 찾는다 (doc-root 결합 보정)."""
+    pid = make_project(client, "docoutputfind")
+    insert_plan(app, pid, 1, doc_slug="proposal")
+    job = _doc_derive(client, app, pid, "report", doc_slug="proposal", fmts=["md"])
+
+    outs = client.get(f"/api/projects/{pid}/outputs").json()
+    assert len(outs) == 1 and outs[0]["ext"] == "md"
+    build_id = job["result"]["builds"][0]["build_id"]
+
+    r = client.get(f"/api/projects/{pid}/outputs/{build_id}/download")
+    assert r.status_code == 200, r.text
+    assert "11.5시간" in r.text  # 문서별 ws의 실제 파일을 스트리밍한다 (수치 무결성)
+
+
+def test_outputs_doc_slug_filter(client, app):
+    """?doc_slug= 필터 — 문서 루프의 산출물만 좁혀 보인다."""
+    pid = make_project(client, "docoutfilter")
+    insert_plan(app, pid, 1, doc_slug="proposal")
+    _doc_derive(client, app, pid, "report", doc_slug="proposal", fmts=["md"])
+    insert_plan(app, pid, 2, doc_slug=None)
+    _doc_derive(client, app, pid, "report", fmts=["md"])
+
+    outs = client.get(f"/api/projects/{pid}/outputs").json()
+    assert len(outs) == 2
+    prop = client.get(f"/api/projects/{pid}/outputs?doc_slug=proposal").json()
+    assert len(prop) == 1
+    with make_session(app) as db:
+        rows = [b.doc_slug for b in db.scalars(
+            select(Build).where(Build.project_id == pid)).all()]
+        assert rows.count("proposal") == 1
+        assert None in rows
+
+
+def test_review_generation_check_is_doc_scoped(client, app):
+    """검수 §2 세대 대응성의 문서 스코프 축소 — 다른 문서(doc_slug 불일치) 빌드는
+    '이전 plan 세대' red에서 제외되고, 같은 문서의 이전 세대 빌드는 계속 red다."""
+    from app.modules.jobs.facade import JobType, enqueue
+
+    pid = make_project(client, "revdocnar")
+    insert_plan(app, pid, 1, doc_slug="proposal")
+    _doc_derive(client, app, pid, "slides", doc_slug="proposal")  # proposal 빌드 (v1 세대)
+    insert_plan(app, pid, 2, doc_slug="dev-design")
+    _doc_derive(client, app, pid, "slides", doc_slug="dev-design")  # 다른 문서 빌드 (v2 세대)
+    stale_plan = insert_plan(app, pid, 3, doc_slug="proposal")  # proposal 재승인 — v1 빌드만 stale
+
+    # 검수 잡을 v3 plan으로 직접 큐잉 (review API는 전체 최신 승인본이므로 facade 경유)
+    with make_session(app) as db:
+        job = enqueue(db, pid, JobType.REVIEW, {"plan_id": stale_plan})
+        db.commit()
+        review_job_id = job.id
+    run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})] * 2),
+              profile="review")
+
+    job = client.get(f"/api/jobs/{review_job_id}").json()
+    assert job["status"] == "done", job
+    reports = client.get(f"/api/projects/{pid}/reviews").json()
+    assert len(reports) == 1
+    gen_finds = [f for f in reports[0]["findings"] if f["code"] == "generation"]
+    # proposal v1 빌드(stale, 같은 문서)만 보고 — dev-design 빌드는 제외된다
+    assert len(gen_finds) == 1 and gen_finds[0]["severity"] == "red"
+    assert "재생성" in gen_finds[0]["message"]
+
+
+def test_legacy_doc_none_derive_uses_project_root(client, app, db_env):
+    """회귀 — doc_loops 행 없는(레거시) 프로젝트의 doc_slug=None plan derive는
+    기존과 동일하게 프로젝트 루트 work/output을 쓴다 (Build.doc_slug NULL)."""
+    pid = _legacy_project(client, "docderivelegacy")
+    insert_plan(app, pid, 1, doc_slug=None)
+
+    job = _doc_derive(client, app, pid, "report", fmts=["md"])
+    assert job["result"]["counts"]["sections"] == 5
+
+    root = _ws_dir(client) / "docderivelegacy"
+    assert (root / "work" / "report.json").is_file()
+    assert list((root / "output").glob("*.md"))
+    assert not any((root / s).exists() for s in DOC_SLUGS)  # 문서 하위 생성 없음
+
+    outs = client.get(f"/api/projects/{pid}/outputs").json()
+    assert len(outs) == 1
+    assert (db_env / "docderivelegacy" / outs[0]["file_path"]).is_file()
+    with make_session(app) as db:
+        builds = db.scalars(select(Build).where(Build.project_id == pid)).all()
+        assert len(builds) == 1 and builds[0].doc_slug is None

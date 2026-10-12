@@ -13,9 +13,16 @@ from pathlib import Path
 from planforge.derive import Deriver
 from planforge.plan import PlanError, parse_plan_file
 
+from app.modules.docloops import facade as docloops
 from app.modules.plans.facade import PlanStatus, get_plan
 from app.modules.projects.facade import get_project
-from app.shared.workspace import atomic_build, parse_build_filename, write_plan_mirror
+from app.shared.workspace import (
+    atomic_build,
+    doc_ws_root,
+    ensure_doc_ws,
+    parse_build_filename,
+    write_plan_mirror,
+)
 
 from ..infrastructure.models import Build, Derivative, DerivativeKind
 
@@ -35,8 +42,16 @@ def run_derive_build(ctx, session, job) -> dict:
     doc = payload.get("doc")
     fmts = tuple(payload.get("fmts") or ())
 
+    # 문서별 루프 — 이 plan의 파생물은 자기 문서의 work/output에 쌓인다. 경로 권위는
+    # plan.doc_slug이고 레이아웃 권위는 doc_loops 행(has_doc_layout)이며, 레거시
+    # (행 없음 · doc_slug=None)는 프로젝트 루트를 유지한다 (step 1 doc_ws_root 계약).
+    ws_root = doc_ws_root(ws, plan.doc_slug,
+                          doc_layout=docloops.has_doc_layout(session, project.id))
+    if ws_root != ws:
+        ensure_doc_ws(ws_root)  # 직접 시드 승인 plan 등 하위 구조가 없을 수 있는 경로 — 멱등
+
     # SSOT: DB plan 행을 plan.md 미러로 갱신 (idempotent — Deriver가 파일을 읽음)
-    plan_mirror = write_plan_mirror(ws, plan.markdown)
+    plan_mirror = write_plan_mirror(ws_root, plan.markdown)
 
     from app.modules.jobs.facade import report_progress
     from app.shared.llm import LLMRegistry
@@ -52,7 +67,7 @@ def run_derive_build(ctx, session, job) -> dict:
         progress("llm", attempt=n, max_attempts=max_n)
 
     registry = LLMRegistry(ctx.settings.llm_config_path, ctx.llm_overrides)
-    deriver = Deriver(registry.chat_fn("derive"), ws)
+    deriver = Deriver(registry.chat_fn("derive"), ws_root)
     # 진행 기록 불변식 — 모든 report_progress는 대기 중 도메인 행이 없는 시점에서만 호출한다.
     # report_progress가 세션 전체를 커밋하므로(facade 계약), 조기 커밋은 빌드 실패 시 고아
     # Derivative를 남긴다. 그래서 session.add()는 전부 atomic_build 이후로 밀렸다.
@@ -78,7 +93,7 @@ def run_derive_build(ctx, session, job) -> dict:
                 build_doc.build(str(res.work_path), fmt, str(tmp))
 
     t_build = time.monotonic()
-    made = atomic_build(ws, run_builder)
+    made = atomic_build(ws_root, run_builder)
     print(f"[derive] job #{job.id} 결정론 빌드 완료 "
           f"({time.monotonic() - t_build:.0f}s, 파일 {len(made)}건)", flush=True)
 
@@ -108,6 +123,7 @@ def run_derive_build(ctx, session, job) -> dict:
         builds.append(Build(
             project_id=project.id,
             plan_id=plan.id,
+            doc_slug=plan.doc_slug,
             derivative_id=derivative.id,
             job_id=job.id,
             doc_kind=resolved_doc,

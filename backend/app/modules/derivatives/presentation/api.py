@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.docloops import facade as docloops
 from app.modules.jobs.facade import JobType, enqueue
 from app.modules.jobs.presentation.schemas import JobOut
 from app.modules.plans.facade import latest_approved
@@ -15,7 +16,7 @@ from app.modules.projects.facade import require_project
 from app.shared.config import Settings, get_settings
 from app.shared.db import get_db
 from app.shared.errors import http_404, http_409
-from app.shared.workspace import ensure_workspace_dirs
+from app.shared.workspace import doc_ws_root, ensure_workspace_dirs
 
 from ..infrastructure.models import Build, Derivative
 from .schemas import BuildOut, DerivativeCreate, DerivativeOut
@@ -34,8 +35,10 @@ def enqueue_derivative(project_id: int, body: DerivativeCreate,
         if bad:
             raise http_409(f"지원하지 않는 포맷: {bad}")
 
-    # FR-2.9 승인 게이트 — 최신 승인 plan이 대상 (승인본 없으면 409)
-    plan = latest_approved(db, project_id)
+    # FR-2.9 승인 게이트 — 최신 승인 plan이 대상 (승인본 없으면 409). doc_slug가
+    # 주어지면 그 문서의 승인본으로 좁힌다. 큐 payload에는 doc_slug를 싣지 않는다 —
+    # 실행 시점 권위는 plan 행(plan.doc_slug)이고 이중 권위는 미정합을 만든다.
+    plan = latest_approved(db, project_id, doc_slug=body.doc_slug)
     if plan is None:
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")
 
@@ -60,15 +63,20 @@ def list_derivatives(project_id: int, plan_id: int | None = None,
 
 @router.get("/outputs", response_model=list[BuildOut])
 def list_outputs(project_id: int, db: Session = Depends(get_db),
+                 doc_slug: str | None = Query(default=None),
                  settings: Settings = Depends(get_settings)):
     project = require_project(db, project_id)
+    ws = Path(project.workspace_path)
+    has_doc_rows = docloops.has_doc_layout(db, project_id)
+    q = select(Build).where(Build.project_id == project_id)
+    if doc_slug is not None:
+        q = q.where(Build.doc_slug == doc_slug)
     out = []
-    for b in db.scalars(
-        select(Build).where(Build.project_id == project_id).order_by(Build.id.desc())
-    ):
+    for b in db.scalars(q.order_by(Build.id.desc())):
         item = BuildOut.model_validate(b)
-        # fs 존재 재확인 — 파일이 지워졌으면 노출하지 않는다
-        if (Path(project.workspace_path) / b.file_path).is_file():
+        # fs 존재 재확인 — 파일이 지워졌으면 노출하지 않는다. file_path는 문서별
+        # ws 루트 기준 상대경로("output/..." 형식 유지)라 결합 시 doc root로 보정한다.
+        if (doc_ws_root(ws, b.doc_slug, doc_layout=has_doc_rows) / b.file_path).is_file():
             out.append(item)
     return out
 
@@ -81,7 +89,9 @@ def download_output(project_id: int, build_id: int, db: Session = Depends(get_db
     if b is None or b.project_id != project_id:
         raise http_404(f"산출물 없음: {build_id}")
     project = require_project(db, project_id)
-    full = Path(project.workspace_path) / b.file_path
+    root = doc_ws_root(Path(project.workspace_path), b.doc_slug,
+                       doc_layout=docloops.has_doc_layout(db, project_id))
+    full = root / b.file_path
     if not full.is_file():
         raise http_404("파일이 워크스페이스에 없습니다")
     media = {"md": "text/markdown", "html": "text/html"}.get(b.ext)

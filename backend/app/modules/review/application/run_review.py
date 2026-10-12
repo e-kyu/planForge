@@ -13,12 +13,13 @@ from planforge.numcheck import check_report, check_slides
 from planforge.plan import PlanError, filter_slides, parse_plan_file
 from planforge.review import check_doc_tags, check_facts
 
+from app.modules.docloops import facade as docloops
 from app.modules.derivatives.facade import DerivativeKind, list_builds, list_for_plan
 from app.modules.facts.facade import list_active_facts
 from app.modules.jobs.facade import report_progress
 from app.modules.plans.facade import PlanStatus, get_plan
 from app.modules.projects.facade import get_project
-from app.shared.workspace import write_plan_mirror
+from app.shared.workspace import doc_ws_root, ensure_doc_ws, write_plan_mirror
 
 from ..infrastructure.models import ReviewReport
 from .review_agent import run_llm_review
@@ -45,9 +46,13 @@ def run_review(ctx, session, job) -> dict:
         findings.append({"code": code, "severity": severity, "where": where,
                          "message": message, "suggestion": suggestion})
 
-    # SSOT 미러 (Deriver와 동일 — 엔진이 읽는 파일 형태일 뿐)
+    # SSOT 미러 (Deriver와 동일 — 엔진이 읽는 파일 형태일 뿐). 문서 plan은 그 문서의
+    # ws 하위에 기록된 미러를 대조한다 (plans 승인·derive와 동일 경로 규칙).
     ws = Path(project.workspace_path)
-    plan_mirror = write_plan_mirror(ws, plan.markdown)
+    mirror_root = doc_ws_root(ws, plan.doc_slug,
+                              doc_layout=docloops.has_doc_layout(session, project.id))
+    ensure_doc_ws(mirror_root)
+    plan_mirror = write_plan_mirror(mirror_root, plan.markdown)
     parsed = parse_plan_file(plan_mirror)
 
     # 1) 파생물 ↔ plan 대조 (구조 + 수치 무결성 — numcheck)
@@ -65,8 +70,13 @@ def run_review(ctx, session, job) -> dict:
         for x in f:
             add(x.code, x.severity, x.where, x.message, suggestion=x.suggestion)
 
-    # 2) 세대 대응성 (FR-4.1) — 기존 빌드가 이 plan 세대인지 (채번은 확장자별 독립이므로 plan_id로)
+    # 2) 세대 대응성 (FR-4.1) — 기존 빌드가 이 plan 세대인지 (채번은 확장자별 독립이므로 plan_id로).
+    # 이 plan이 문서 plan이면 그 문서의 빌드만 대상으로 좁힌다 — 다른 문서의 산출물은
+    # 이 plan 세대의 재생성 대상이 아니므로(각자 문서별 ws에 채번됨) red 오탐이 된다.
+    # 레거시(None) plan은 기존 계약대로 전체 빌드를 대조한다.
     for b in list_builds(session, project.id):
+        if plan.doc_slug is not None and b.doc_slug != plan.doc_slug:
+            continue
         if b.plan_id != plan.id:
             add("generation", "red", f"산출물 {b.title}_v{b.version_no:02d}.{b.ext}",
                 "이전 plan 세대의 산출물입니다 — plan을 고친 뒤 파생물을 재생성하세요 (재생성 대상)")

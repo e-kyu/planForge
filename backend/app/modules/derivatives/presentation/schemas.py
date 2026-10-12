@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class DerivativeCreate(BaseModel):
     kind: str  # slides | report
     doc: str | None = None
+    doc_slug: str | None = None  # 문서 루프 식별자 — 승인 게이트 plan 조회 스코프 (None = 기존 계약)
     fmts: list[str] | None = None  # report 빌드 포맷 (기본 3종)
 
 
