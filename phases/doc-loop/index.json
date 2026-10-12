@@ -56,7 +56,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:35:35+0900",
       "summary": "파이프라인 실행부(derive·빌드·검수)의 문서별 워크스페이스 반영 — derive_build ws 결정을 doc_ws_root(has_doc_layout 권위·plan.doc_slug 실행시점 읽기)로 교체 + ensure_doc_ws 멱등 지연 생성, Build.doc_slug=plan.doc_slug 채움(file_path \"output/...\" 상대 형식 유지) · DerivativeCreate.doc_slug 신설(enqueue는 latest_approved(doc_slug) 게이트 — 큐 payload에 doc_slug 미실어 plan 행 권위 단일화), list_outputs ?doc_slug= 필터 + download/list_outputs 경로를 doc_ws_root 결합 보정 · run_review 미러 root를 문서별 루트로 결정 + §2 세대 대응성을 문서 스코프로 좁힘(다른 문서 빌드 red 오탐 제거·레거시 None은 전체 대조 유지) — planforge/ 엔진·빌더 무수정, test_docloops_api.py 5건 신설(문서별 ws 적립·outputs 목록·다운로드·필터·검수 narrowing·레거시 루트 회귀) — AC 55 passed · 전체 337 passed + 1 skipped",
-      "completed_at": "2026-10-13T00:40:48+0900"
+      "completed_at": "2026-10-13T00:41:12+0900"
     },
     {
       "step": 7,
