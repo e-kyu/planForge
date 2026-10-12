@@ -35,8 +35,9 @@ export const uploadSource = (pid: number, file: File) =>
 
 ### 2. `frontend/src/features/sources/viewmodels/useSources.ts`
 
-- `uploadM.mutationFn` 확장: 각 파일에 대해 기존 클라 선거부(`MAX_MB * 1024 * 1024` —
-  zip 포함 동일 2MB) 유지, `uploadSource` 응답을 누적해 리턴.
+- `uploadM.mutationFn` 확장: 각 파일에 대해 기존 클라 선거부(`MAX_MB * 1024 * 1024`) 유지,
+  `.zip` 파일은 `MAX_ZIP_MB`(30MB — 백엔드 `MAX_ZIP_BYTES`와 동일)로 분기,
+  `uploadSource` 응답을 누적해 리턴.
 - 신규 상태 `uploadReport`:
 
 ```typescript
@@ -53,7 +54,7 @@ export type UploadReport = {
 ### 3. `frontend/src/features/sources/views/SourcesPanel.tsx`
 
 - `accept=".md,.txt,.json,.csv,.zip"` (multiple 유지)
-- 안내문 갱신: zip 해제 지원·"zip 내부도 동일 규칙(확장자·2MB·UTF-8)"·"덮어쓰기는 하지 않음" 명시.
+- 안내문 갱신: zip 해제 지원·"zip 파일 자체 최대 30MB, zip 내부도 동일 규칙(확장자·2MB·UTF-8)"·"덮어쓰기는 하지 않음" 명시.
 - `uploadReport` 렌더:
   - `skipped.length > 0`면 `Banner`(에러가 아닌 정보 계열)로 스킵 목록 `이름 — 사유` 나열.
   - `savedCount > 0`면 저장 개수 표시 (쿼리 무효화로 목록은 이미 갱신됨).
@@ -92,8 +93,9 @@ npm run build        # tsc --noEmit 포함
   서버 데이터는 반드시 viewmodel 훅을 경유한다 (가이드 §4.3).
 - `types.gen.ts`를 손으로 편집하지 마라. 이유: 자동생성물이다; 표시 로직 조정이 필요하면
   feature 코드에서 alias/파생 타입으로 처리하라.
-- 클라 선거부(2MB)를 제거하거나 zip에 완화하지 마라 — 이유: 백엔드 zip 자체 한도가 2MB로
-  고정되어 있어 클라 완화는 UX만 나쁘고 거부 409를 유발한다.
+- 클라 선거부(텍스트 2MB)를 제거하거나 텍스트 파일에 완화하지 마라 — 이유: 백엔드 단건
+  소스 한도가 2MB로 고정되어 있어 클라 완화는 UX만 나쁘고 거부 409를 유발한다. zip
+  파일 자체만 백엔드 `MAX_ZIP_BYTES`(30MB) 기준으로 별도 선거부한다.
 - 서버에 이미 존재하는 소스에 대한 UI 덮어쓰기 유도를 만들지 마라 — 이유: 덮어쓰기 금지(409)는
   "소스도 기록의 일부"라는 계약이다.
 - 기존 기능(개요 편집기·삭제 모달)을 깨뜨리지 마라.

@@ -3,7 +3,7 @@ import { Download, FileCode, FileText, Trash2, Upload, X } from "lucide-react";
 import type { SourceFile } from "../../../api/client";
 import { Banner, Button, Empty, fmtBytes } from "../../../shared/components/ui";
 import { useOverviewMeta } from "../viewmodels/useOverview";
-import { MAX_MB, useSources } from "../viewmodels/useSources";
+import { MAX_MB, MAX_ZIP_MB, useSources } from "../viewmodels/useSources";
 import OverviewEditor from "./OverviewEditor";
 
 const fmtEpoch = (sec: number) => {
@@ -155,7 +155,7 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
           <div className="panel-foot">
             <span className="hint sources-foot-desc">
               인터뷰 에이전트와 기획서 생성의 기초 팩트로 활용될 수집 문서를 등록·관리합니다. (.md .txt .json .csv, 최대 {MAX_MB}MB · UTF-8 · PDF 미지원)
-              zip 업로드는 압축을 해제해 등록하며, zip 내부 파일도 동일 규칙(확장자·{MAX_MB}MB·UTF-8)이 적용됩니다. 기존 소스는 덮어쓰지 않습니다.
+              zip 업로드는 압축을 해제해 등록하며 (zip 파일 자체는 최대 {MAX_ZIP_MB}MB), zip 내부 파일도 동일 규칙(확장자·{MAX_MB}MB·UTF-8)이 적용됩니다. 기존 소스는 덮어쓰지 않습니다.
             </span>
             <label className="upload-label">
               <Upload aria-hidden="true" />

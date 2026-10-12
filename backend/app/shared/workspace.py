@@ -137,8 +137,16 @@ def sanitize_source_filename(name: str) -> str:
     return cleaned
 
 
-MAX_ZIP_MEMBERS = 200                         # zip 멤버 수 상한 (채택+기각 포함)
-MAX_ZIP_UNCOMPRESSED_BYTES = 8 * 1024 * 1024  # zip 압축 전 합계 상한 (zip-bomb 방어)
+# zip 멤버 수 상한 — extract_zip이 채택·기각·디렉터리 엔트리를 포함한 zip의 전체
+# 엔트리를 합산해 검사한다 (하위 폴더·빈 폴더 엔트리가 많은 아카이브 대응).
+# 2026-10-12: 200 → 3000 확장 (실사용 하위폴더 아카이브에서 200 도달 사례).
+MAX_ZIP_MEMBERS = 3000
+# zip 파일 자체(컨테이너) 상한 — 단건 텍스트 소스 상한(MAX_SOURCE_BYTES)과 별개로 크게 둔다.
+# 대본·문서 아카이브(압축 해제 전 원본 zip)를 통째로 받기 위한 값.
+MAX_ZIP_BYTES = 30 * 1024 * 1024              # 30MB
+# zip 압축 전 합계 상한 (zip-bomb 방어) — 컨테이너 30MB의 4배. 텍스트 압축비 3-4배를
+# 가정한 방어선으로, 컨테이너 한도를 올릴 때 같은 비율을 유지한다(비례 축소 = 폭탄 방어 유지).
+MAX_ZIP_UNCOMPRESSED_BYTES = MAX_ZIP_BYTES * 4
 
 _DRIVE_COMPONENT_RE = re.compile(r"^[A-Za-z]:$")
 

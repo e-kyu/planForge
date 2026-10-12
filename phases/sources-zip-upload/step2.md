@@ -22,8 +22,9 @@
 ### 1. `backend/app/shared/workspace.py`에 상수·헬퍼 추가
 
 ```python
-MAX_ZIP_MEMBERS = 200                       # zip 멤버 수 상한 (채택+기각 포함)
-MAX_ZIP_UNCOMPRESSED_BYTES = 8 * 1024 * 1024  # zip 압축 전 합계 상한 (zip-bomb 방어)
+MAX_ZIP_MEMBERS = 3000                      # zip 멤버 수 상한 (채택+기각+디렉터리 엔트리 포함 — 2026-10-12 200에서 확장)
+MAX_ZIP_BYTES = 30 * 1024 * 1024            # zip 파일 자체 상한 — 단건 텍스트 소스(2MB)와 분리
+MAX_ZIP_UNCOMPRESSED_BYTES = MAX_ZIP_BYTES * 4  # zip 압축 전 합계 상한 (zip-bomb 방어 — 압축비 4배 가정)
 
 def sanitize_source_relpath(member: str) -> str | None:
     """zip 멤버 상대경로 → 성분별 정규화된 POSIX 상대경로. 구조적 기각 시 None."""
@@ -55,7 +56,8 @@ def extract_zip(data: bytes, dest: Path) -> tuple[list[str], list[tuple[str, str
   파일시스템 경로가 되어 Zip Slip이 성립한다. 반드시 `zf.open(info).read()`로 바이트만 꺼내
   `sanitize_source_relpath`로 정규화한 상대경로에 직접 `mkdir`(parents) + `write_bytes`한다.
 - **zip 자체 결함 → `SourceError` 전체 거부** (이 시점 어떤 파일도 기록되지 않아야 한다):
-  `zipfile.BadZipFile`, `len(data) > MAX_SOURCE_BYTES`(zip 자체 2MB), 멤버 수 >
+  `zipfile.BadZipFile`, `len(data) > MAX_ZIP_BYTES`(zip 자체 30MB — 2026-10-12 2MB에서
+  확장, 멤버별·단건 소스 한도 2MB는 유지), 멤버 수 >
   `MAX_ZIP_MEMBERS`, `infolist()`의 `file_size` 합 > `MAX_ZIP_UNCOMPRESSED_BYTES`.
 - **2페이즈**: ① 전 멤버 사전 스캔(정규화·확장자·file_size·수집 대상 합 판정) ② 스캔에서
   수집 확정된 멤버만 순서대로 읽고 기록. 사전 스캔에서 스킵 확정된 멤버는 절대 읽지 않는다
@@ -94,12 +96,12 @@ tmp_path 기반 단위 테스트. zip은 테스트 코드에서 `zipfile`로 메
 - `__MACOSX/x/_.y.md`·`.DS_Store`류 숨김 성분 → 기각 보고
 - cp949 멤버명 복원: `ZipInfo`에 `filename`을 cp437로 강제 인코딩해 넣고(flag_bits에
   0x800 없음) 복원 결과로 저장되는지 — 멤버명에 한글이 살아있는지 단언
-- 멤버 2MB+ 초과 → 스킵 보고 (zip 자체는 2MB 이하)
+- 멤버 2MB+ 초과 → 스킵 보고 (zip 자체는 30MB 이하)
 - 기존 소스 충돌: dest에 미리 동명 파일 배치 → 스킵 보고, 기존 파일 내용 불변
 - zip 내부 중복 경로 → 두 번째부터 스킵 보고
 - 손상 zip(랜덤 바이트) → `SourceError`
 - 멤버 수 초과 / 해제 총량 초과 → `SourceError`
-- zip 자체 2MB+ → `SourceError`
+- zip 자체 30MB+ → `SourceError`
 - 전체 실패 시 dest에 아무 파일도 기록되지 않음을 단언 (디렉터리 생성도 없어도 무방하나
   *파일은 반드시 0개*)
 

@@ -12,9 +12,11 @@ import zipfile
 
 import pytest
 
+from app.modules.sources.application import zip_sources
 from app.modules.sources.application.zip_sources import extract_zip
 from app.shared.workspace import (
     MAX_SOURCE_BYTES,
+    MAX_ZIP_BYTES,
     MAX_ZIP_MEMBERS,
     MAX_ZIP_UNCOMPRESSED_BYTES,
     SourceError,
@@ -23,7 +25,7 @@ from app.shared.workspace import (
 
 
 def _zip_bytes(members: list[tuple[str, bytes]]) -> bytes:
-    # deflate — 무압축(STORED) 기본값이면 반복 바이너리 멤버가 zip 자체 2MB 상한을
+    # deflate — 무압축(STORED) 기본값이면 반복 바이너리 멤버가 zip 자체 상한을
     # 먼저 건드려 멤버별 스킵·총량 케이스를 검증할 수 없다.
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -143,7 +145,7 @@ def test_oversized_member_skipped_not_rejected(tmp_path):
     data = _zip_bytes([("big.txt", b"x" * (MAX_SOURCE_BYTES + 1)),
                        ("ok.md", "정상".encode())])
     saved, skipped = extract_zip(data, tmp_path)
-    assert saved == ["ok.md"]                          # zip 자체는 2MB 이하 → 전체 거부 아님
+    assert saved == ["ok.md"]                          # zip 자체는 30MB 이하 → 전체 거부 아님
     assert skipped == [("big.txt", "파일이 너무 큽니다")]
     assert _files(tmp_path) == ["ok.md"]
 
@@ -190,8 +192,11 @@ def test_member_count_exceeded_raises(tmp_path):
     assert _files(tmp_path) == []
 
 
-def test_uncompressed_total_exceeded_raises(tmp_path):
-    payload = b"a" * 1_700_000                          # 1.7MB × 5 ≈ 8.5MB > 8MB (개별은 2MB 이하)
+def test_uncompressed_total_exceeded_raises(tmp_path, monkeypatch):
+    # 실상수(컨테이너 30MB × 4 = 120MB)로는 fixture가 과대 — 메커니즘 검증을 위해
+    # 상수를 zip_sources 모듈 네임스페이스에서 축소해 총량 초과 대역을 측정한다.
+    monkeypatch.setattr(zip_sources, "MAX_ZIP_UNCOMPRESSED_BYTES", 1024 * 1024)
+    payload = b"a" * 300_000                            # 0.3MB × 5 = 1.5MB > 1MB (개별은 2MB 이하)
     members = [(f"big{i}.txt", payload) for i in range(5)]
     with pytest.raises(SourceError):
         extract_zip(_zip_bytes(members), tmp_path)
@@ -199,10 +204,30 @@ def test_uncompressed_total_exceeded_raises(tmp_path):
 
 
 def test_zip_itself_over_max_bytes_rejected(tmp_path):
-    blob = os.urandom(MAX_SOURCE_BYTES + 64 * 1024)     # 비압축성 → zip 크기 > 2MB
+    blob = os.urandom(MAX_ZIP_BYTES + 64 * 1024)        # 비압축성 → zip 크기 > 30MB
     with pytest.raises(SourceError):
         extract_zip(_zip_bytes([("noise.txt", blob)]), tmp_path)
     assert _files(tmp_path) == []
+
+
+def test_zip_over_old_2mb_limit_accepted(tmp_path):
+    """컨테이너 한도 2MB→30MB 확장 회귀 — 비압축성 멤버(UTF-8 아님)로 zip 크기를
+    ~2.1MB로 만든다. 구 한도로는 SourceError 전체 거부였으나 이제 수용되어
+    멤버별 UTF-8 스킵 보고로 처리된다."""
+    members = [(f"noise{i}.txt", os.urandom(700 * 1024)) for i in range(3)]
+    saved, skipped = extract_zip(_zip_bytes(members), tmp_path)
+    assert saved == []
+    assert skipped == [(f"noise{i}.txt", "UTF-8 텍스트 파일만 저장할 수 있습니다")
+                       for i in range(3)]
+    assert _files(tmp_path) == []
+
+
+def test_zip_limit_constants_scaled_together():
+    """컨테이너 한도(30MB)가 단건 소스 한도와 분리되어 있고, 해제 총량 한도가
+    압축비 4배 방어 비율을 유지하며 비례했음을 고정 — zip-bomb 방어 유지 계약."""
+    assert MAX_ZIP_BYTES == 30 * 1024 * 1024
+    assert MAX_ZIP_UNCOMPRESSED_BYTES == MAX_ZIP_BYTES * 4
+    assert MAX_ZIP_BYTES > MAX_SOURCE_BYTES
 
 
 def test_max_members_boundary_accepted(tmp_path):
@@ -212,8 +237,9 @@ def test_max_members_boundary_accepted(tmp_path):
     assert skipped == []
 
 
-def test_total_boundary_accepted(tmp_path):
-    payload = b"a" * 1_500_000                          # 1.5MB × 5 = 7.5MB ≤ 8MB
-    members = [(f"big{i}.txt", payload) for i in range(5)]
+def test_total_boundary_accepted(tmp_path, monkeypatch):
+    monkeypatch.setattr(zip_sources, "MAX_ZIP_UNCOMPRESSED_BYTES", 1024 * 1024)
+    payload = b"a" * 250_000                            # 0.25MB × 4 = 1.0MB ≤ 1MB
+    members = [(f"big{i}.txt", payload) for i in range(4)]
     saved, _ = extract_zip(_zip_bytes(members), tmp_path)
     assert saved == [m[0] for m in members]

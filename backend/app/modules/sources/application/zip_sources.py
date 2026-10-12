@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.shared.workspace import (
     MAX_SOURCE_BYTES,
+    MAX_ZIP_BYTES,
     MAX_ZIP_MEMBERS,
     MAX_ZIP_UNCOMPRESSED_BYTES,
     SOURCE_EXTS,
@@ -44,8 +45,8 @@ def extract_zip(data: bytes, dest: Path) -> tuple[list[str], list[tuple[str, str
     전체 거부 — 이 시점 어떤 파일도 기록되지 않는다. 개별 멤버 결함은 스킵으로
     보고하고 나머지를 저장한다. 기존 소스는 절대 덮지 않는다(덮어쓰기 금지 원칙).
     """
-    if len(data) > MAX_SOURCE_BYTES:
-        raise SourceError(f"파일이 너무 큽니다 (최대 {MAX_SOURCE_BYTES // (1024 * 1024)}MB)")
+    if len(data) > MAX_ZIP_BYTES:
+        raise SourceError(f"zip 파일이 너무 큽니다 (최대 {MAX_ZIP_BYTES // (1024 * 1024)}MB)")
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as e:
