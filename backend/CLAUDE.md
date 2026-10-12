@@ -8,8 +8,10 @@
 
 - `app/main.py` — FastAPI 앱 진입점. API 전체 목록은 `app/main.py`·OpenAPI 참조.
 - `app/api.py` — 라우터 조립.
-- `app/modules/` — 도메인 모듈 7종: `projects` · `sources` · `interview` · `facts` ·
-  `plans` · `derivatives` · `jobs` · `review`. 새 기능은 기존 모듈을 템플릿으로 복제.
+- `app/modules/` — 도메인 모듈 9종: `projects` · `sources` · `interview` · `facts` ·
+  `plans` · `derivatives` · `jobs` · `review` · `docloops`(문서별 루프 상태머신 —
+  리프 모듈, 타 모듈 facade를 import하지 않는다·ADR 결정 22). 새 기능은 기존 모듈을
+  템플릿으로 복제.
 - `app/agents/` — 인터뷰 에이전트 등 에이전트 계층.
 - `app/shared/` — 모듈 간 공용 코드 (`workspace.py`, `llm.py` 등).
 - `planforge/` — 결정론 파이프라인 패키지: `derive.py`(plan → 파생물) ·

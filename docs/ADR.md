@@ -368,6 +368,61 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       parser/agent 수정이 필요해 의도 제외) — 프롬프트 규칙 + 검수(review) 단계가
       후속 방어선.
 
+22. **다중 문서 루프 (doc-loop) — 문서 정체성·상태머신·문서별 워크스페이스** (2026-10-13, `doc-loop`, steps 0~10)
+    - 배경: 파이프라인은 문서 1개("제안서") 전제로 동작했다 — 승인본 1개, 세션,
+      미러·산출물 경로가 모두 프로젝트 루트에 걸렸다. 요청서의 다중 문서 태그(원칙 6)는
+      plan 본문 필터링만 가능했고, "문서별 승인→생성→검수→재수정 사이클"이 없었다.
+    - 결정 1 (신규 리프 모듈 `docloops`): facts 템플릿 복제(application service +
+      facade 재수출 + presentation + infrastructure/models). 의존성 방향은
+      **projects/plans/interview → docloops** 한 방향이고, docloops는 어떤 모듈의
+      facade도 import하지 않는다(받은 값만 다룬다 — 모듈 경계 계약 유지).
+      커밋은 호출자 트랜잭션(facts.facade 패턴 — flush만).
+    - 결정 2 (문서 정체성 = 영문 슬러그 3종): `DOC_KINDS`가 slug·한글 라벨의 SSOT —
+      `("proposal","제안서")·("uiux-design","UI·UX설계서")·("dev-design","개발설계서")`,
+      생성 순서 = 활성화 순서. 계획 본문의 한글 어휘(`- 산출 문서:`·`[문서: ...]` 태그)는
+      유지 → `planforge/**` 파서·필터·빌더 **무수정**(바이트 동일 이식본 계약 보존).
+      와이어·DB·프론트는 slug만 다루고, 한글 라벨은 `DocLoopOut.label`로 노출
+      (프론트 하드코딩 0).
+    - 결정 3 (레이아웃 권위 = DB 행): `doc_loops` 행(alembic b7c4d9e2f6a1 —
+      doc_loops 신설 + plans/interview_sessions/builds nullable doc_slug)이 문서별
+      레이아웃 적용 여부의 권위다. `has_doc_layout`이 None(빈 집합)이면 기존 flat
+      구조로 계속 동작 — **기존 프로젝트 이관(마이그레이션)은 별도 이터레이션(미확정)**.
+    - 결정 4 (문서 루프 상태머신 = 단방향 래치): `locked → active → done`.
+      승인 훅 `on_plan_approved`는 plans 승인 트랜잭션 내(커밋 전) 호출 — DOC_KINDS
+      순서상 다음 문서의 잠금만 해제하고, 되돌리지 않는다. done 문서는 세션 재생성
+      (재작업)을 허용하고, locked만 세션 생성을 막는다(require_session_doc 게이트).
+      done 문서의 재잠금은 (미확정).
+    - 결정 5 (승인 전이 문서 스코프 좁힘): "프로젝트당 승인본 1개"를 **"문서당 승인본
+      1개"로 좁힌다.** `_scoped_supersede`가 승인본 교체를 문서 스코프로 한정하고,
+      `doc_slug=None`(레거시)은 `is_(None)` 명시 분기로 기존 불변식을 유지한다.
+      검수(§2 세대 대응성)도 문서 스코프로 좁혀 다른 문서 빌드의 red 오탐을 제거.
+    - 결정 6 (version_no 프로젝트 전체 단조 유지): `uq_project_planver` 무변경 —
+      버전 번호는 문서별로 재시작하지 않는다. 문서별 재채번은 (미확정)으로 Phase 2
+      후보.
+    - 결정 7 (facts는 프로젝트 공유, 미러만 문서별): 팩트 저장소·인터뷰 로그는
+      프로젝트 단위 권위를 유지하고, plan 미러·compact 미러 등 파일 산출만
+      `doc_ws_root`로 기록한다. 문서별 compact 미러는 Phase 2 (미확정).
+    - 결정 8 (`Build.file_path` 형식 보존): `"output/..."` 상대 형식은 유지하되
+      ws 루트가 문서별로 결정된다 — 파일 경로 계약 형식을 보존하고 경로 결정 권위만
+      `app/shared/workspace.py doc_ws_root`(DB 행 권위·존재 판정 금지·validate_slug
+      트래버설 방어) + `ensure_doc_ws`(멱등 지연 생성, `DOC_WS_SUBDIRS` = work·
+      output·docs·assets, sources는 루트 공유)로 이동.
+    - 구현 범위: 스키마(step 0) → 워크스페이스 헬퍼(1) → docloops 서비스·facade(2) →
+      읽기 API·프로젝트 라이프사이클 통합(3) → 인터뷰 doc_slug 스레딩 + 계약 4세트
+      어휘 확장(4) → 승인·revise 문서 스코프(5) → derive·빌드·검수 문서별 ws(6) →
+      계약 재export + 타입 갱신(7) → 프론트 라우팅·훅 doc 차원(8) → 프로젝트 카드 문서
+      버튼 3종(9). 프론트는 `DOC_SLUGS`를 백엔드 DOC_KINDS 순서·철자 동기로 유지.
+    - 불변: openapi 계약은 docloops GET·DocLoopOut·doc_slug 필드 추가만
+      (`npm run gen:types` 동반 — step 7), planforge 엔진·빌더 무수정, 인터뷰 턴
+      계약 구조(tools 스키마· 검증 재시도) 무변경 — 어휘(area 3종→4종)만 확장,
+      기존 승인·채번·SSOT 원칙 전부 유지(문서 차원이 파생으로 붙는다).
+    - 리스크 수용: (1) 레거시 프로젝트는 doc_slug만 저장하고 루트 경로에 머문다 —
+      이관 미실행 상태의 의도적 동작. (2) 인터뷰 localStorage 키는 레거시
+      `pf-session-{pid}`·doc 라우트 `pf-session-{pid}-{doc}` 병존(마이그레이션·삭제
+      없음). (3) done 문서 재작업 시 이전 산출물이 남는다 — 채번이 덮어쓰기 없으므로
+      추적 가능(원칙 5). (4) 재잠금·문서별 재채번·문서별 compact 미러·plan 상호
+      참조는 Phase 2 인터뷰 대상으로 (미확정) 보존.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.
