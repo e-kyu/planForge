@@ -137,6 +137,37 @@ def sanitize_source_filename(name: str) -> str:
     return cleaned
 
 
+MAX_ZIP_MEMBERS = 200                         # zip 멤버 수 상한 (채택+기각 포함)
+MAX_ZIP_UNCOMPRESSED_BYTES = 8 * 1024 * 1024  # zip 압축 전 합계 상한 (zip-bomb 방어)
+
+_DRIVE_COMPONENT_RE = re.compile(r"^[A-Za-z]:$")
+
+
+def sanitize_source_relpath(member: str) -> str | None:
+    """zip 멤버 상대경로 → 성분별 정규화된 POSIX 상대경로. 구조적 기각 시 None.
+
+    zip 해제는 사용자가 정확히 검증할 수 없는 일괄 경로라 `..`·절대경로·숨김 성분
+    등 구조적 취약점은 치환해 통과시키지 않고 None으로 기각한다(안전 쪽 설계
+    의도). 살아남은 개별 성분에는 단건 업로드와 동일 규약
+    (sanitize_source_filename — 금지 문자 '_' 치환·트레일링 공백/점 제거)을
+    적용하고, 성분을 '/'.join한 POSIX 상대경로를 반환한다.
+    """
+    raw = (member or "").replace("\\", "/")
+    if raw.startswith("/") or raw.endswith("/"):
+        return None  # 절대경로 / 최종 성분이 비는 경우(디렉터리만 남는 등)
+    parts: list[str] = []
+    for comp in raw.split("/"):
+        if not comp or comp.startswith(".") or comp.startswith("__MACOSX"):
+            return None  # 빈 성분·'.'/'..'·숨김·__MACOSX*·._* 성분 — 구조적 기각
+        if _DRIVE_COMPONENT_RE.fullmatch(comp):
+            return None  # 드라이브 성분 (Windows c:)
+        try:
+            parts.append(sanitize_source_filename(comp))
+        except SourceError:
+            return None
+    return "/".join(parts)
+
+
 def validate_source_file(name: str, data: bytes) -> str:
     """업로드 검증(§5): 확장자 화이트리스트·용량 상한·UTF-8 텍스트. 정규화된 이름 반환."""
     cleaned = sanitize_source_filename(name)
