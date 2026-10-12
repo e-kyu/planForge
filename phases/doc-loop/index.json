@@ -88,7 +88,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:49:03+0900",
       "summary": "기능 종료 선언 문서화 스텝(코드 0행 수정) — docs/ADR.md 결정 22 신설(신규 리프 모듈 docloops + 의존성 projects/plans/interview→docloops 단방향 · DOC_KINDS slug 3종 SSOT + 한글 어휘 plan 본문 유지·planforge/** 무수정 · 레이아웃 권위=doc_loops DB 행(레거시 flat 유지, 이관은 별도 이터레이션 미확정) · 단방향 래치 locked→active→done + 승인 트랜잭션 내 on_plan_approved 훅(done 재잠금 미확정) · 승인본 문서당 1개로 좁힘(doc_slug=None is_(None) 분기) · version_no 프로젝트 전체 단조 유지(문서별 재채번 미확정) · facts 프로젝트 공유+미러만 문서별(compact 문서별 미러 미확정) · Build.file_path 상대 형식 보존·경로 결정 권위 doc_ws_root/ensure_doc_ws로 이동) · backend/CLAUDE.md 모듈 목록 정정(7종 표기→실제 9종 — 실제 불일치 8개 항목 나열이었음, docloops 리프 모듈 주석 추가) · docs/ARCHITECTURE.md docloops 반영(모듈 9종·리프 의존성 방향 한 줄·workspaces/{doc}/ 4 subdirs 분기 표기) — AC 전체 pytest 337 passed + 1 skipped · npm run build(tsc --noEmit 포함) 통과",
-      "completed_at": "2026-10-13T00:55:00+0900"
+      "completed_at": "2026-10-13T00:55:11+0900"
     }
   ],
   "created_at": "2026-10-13T00:04:23+0900"
