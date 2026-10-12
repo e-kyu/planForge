@@ -30,16 +30,18 @@ def make_session(app):
 
 
 def insert_plan(app, project_id, version_no=1, *, status="approved", origin="edit",
-                docs=("제안서",), markdown=None) -> int:
+                docs=("제안서",), markdown=None, doc_slug=None) -> int:
     """plan 행을 직접 적립해 plan.id를 돌려준다 (승인 게이트 통과용 시드 — plan 생성·
-    수정 API가 아닌 직접 적립). status·origin은 API 문자열과 같은 소문자 값을 받는다."""
+    수정 API가 아닌 직접 적립). status·origin은 API 문자열과 같은 소문자 값을 받는다.
+    doc_slug는 세대가 속한 문서(루프) 식별자 (None = 레거시/문서 무관)."""
     from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
 
     with session_factory(app)() as s:
         plan = Plan(project_id=project_id, version_no=version_no,
                     markdown=markdown or plan_sample_markdown(),
                     docs=list(docs), parsed_ok=True,
-                    status=PlanStatus(status), origin=PlanOrigin(origin))
+                    status=PlanStatus(status), origin=PlanOrigin(origin),
+                    doc_slug=doc_slug)
         s.add(plan)
         s.commit()
         return plan.id

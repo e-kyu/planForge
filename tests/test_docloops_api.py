@@ -9,8 +9,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from _helpers import make_project, make_session
+from sqlalchemy import select
+
+from _helpers import insert_plan, make_project, make_session
 from app.modules.docloops.facade import delete_project_data, list_loops
+from app.modules.interview.infrastructure.models import (
+    InterviewSession,
+    SessionPhase,
+    SessionStatus,
+)
 from app.modules.plans.facade import PlanOrigin, PlanStatus, create_generation
 
 DOC_SLUGS = ["proposal", "uiux-design", "dev-design"]
@@ -179,3 +186,120 @@ def test_list_plans_doc_slug_filter(client):
     assert len(prop) == 1 and prop[0]["doc_slug"] == "proposal"
     dev = client.get(f"/api/projects/{pid}/plans?doc_slug=dev-design").json()
     assert len(dev) == 1 and dev[0]["doc_slug"] == "dev-design"
+
+
+# ---------------------------------------------------------------- step 5 — plan 승인의 문서 스코프 (plans-doc-threading)
+
+def _loop_statuses(client, pid: int) -> dict[str, str]:
+    return {d["doc_slug"]: d["status"]
+            for d in client.get(f"/api/projects/{pid}/docloops").json()}
+
+
+def _approve_doc_plan(client, app, pid: int, version_no: int,
+                      doc_slug: str | None) -> int:
+    plan_id = insert_plan(app, pid, version_no, status="draft", doc_slug=doc_slug)
+    r = client.post(f"/api/plans/{plan_id}/approve")
+    assert r.status_code == 200, r.text
+    return plan_id
+
+
+def test_approval_propagates_doc_loop(client, app):
+    """승인 전파 — proposal plan 승인 → proposal done·uiux active·dev locked,
+    이어 uiux plan 승인 → dev active. 루프 진행 훅은 승인 트랜잭션 안(com.commit 전)에서
+    docloops.facade.on_plan_approved로만 흐른다."""
+    pid = make_project(client, "docapprovethread")
+    _approve_doc_plan(client, app, pid, 1, "proposal")
+    assert _loop_statuses(client, pid) == {
+        "proposal": "done", "uiux-design": "active", "dev-design": "locked"}
+
+    _approve_doc_plan(client, app, pid, 2, "uiux-design")
+    assert _loop_statuses(client, pid) == {
+        "proposal": "done", "uiux-design": "done", "dev-design": "active"}
+
+
+def test_reapproval_keeps_latch_and_row_count(client, app):
+    """proposal 재승인(세대 교체)에도 래치가 역전되지 않는다 — done은 done,
+    active 이상 다음 문서의 재잠금 없음, 루프 행은 3개 유지."""
+    pid = make_project(client, "docapprovelatch")
+    _approve_doc_plan(client, app, pid, 1, "proposal")
+    _approve_doc_plan(client, app, pid, 2, "uiux-design")
+
+    _approve_doc_plan(client, app, pid, 3, "proposal")  # proposal 새 세대 재승인
+    assert _loop_statuses(client, pid) == {
+        "proposal": "done", "uiux-design": "done", "dev-design": "active"}
+    assert len(client.get(f"/api/projects/{pid}/docloops").json()) == 3
+
+
+def test_approval_completes_only_scoped_session(client, app):
+    """proposal plan 승인 시 PLAN_REVIEW 페이즈인 uiux 세션의 페이즈는 UNCHANGED —
+    step 4 complete_plan_review_sessions(doc_slug narrowing) 연동."""
+    pid = make_project(client, "docapprovesess")
+    with make_session(client) as db:
+        p = InterviewSession(project_id=pid, doc_slug="proposal",
+                             phase=SessionPhase.PLAN_REVIEW)
+        u = InterviewSession(project_id=pid, doc_slug="uiux-design",
+                             phase=SessionPhase.PLAN_REVIEW)
+        db.add_all([p, u])
+        db.commit()
+        p_id, u_id = p.id, u.id
+
+    _approve_doc_plan(client, app, pid, 1, "proposal")
+    with make_session(client) as db:
+        rows = {s.id: s for s in db.scalars(
+            select(InterviewSession).where(InterviewSession.project_id == pid)).all()}
+        assert rows[p_id].phase == SessionPhase.APPROVED
+        assert rows[p_id].status == SessionStatus.DONE
+        assert rows[u_id].phase == SessionPhase.PLAN_REVIEW  # 건드리지 않는다
+        assert rows[u_id].status != SessionStatus.DONE
+
+
+def test_approval_writes_doc_scoped_mirror(client, app):
+    """문서 plan 승인의 미러는 문서별 하위(ws/{doc_slug}/plan.md)로 기록되고 루트
+    plan.md는 만들지 않는다. 레거시(None) plan 승인은 루트 미러를 만든다 (기존 계약)."""
+    pid = make_project(client, "docapprovmirror")
+    _approve_doc_plan(client, app, pid, 1, "proposal")
+    wsroot = _ws_dir(client) / "docapprovmirror"
+    assert (wsroot / "proposal" / "plan.md").is_file()
+    assert not (wsroot / "plan.md").exists()
+
+    # 레거시(None) plan 승인 — doc_ws_root 계약상 루트 경로
+    _approve_doc_plan(client, app, pid, 2, None)
+    assert (wsroot / "plan.md").is_file()
+
+
+def test_supersede_is_doc_scoped(client, app):
+    """proposal v1 승인 → uiux plan 승인 → proposal v2 승인: proposal v1만
+    superseded가 되고 uiux 승인 plan은 APPROVED로 유지된다 — 전역 SUPERSEDED
+    전이의 문서 스코프 축소가 이 테스트의 핵심이다."""
+    pid = make_project(client, "docscopesupersede")
+    v1 = _approve_doc_plan(client, app, pid, 1, "proposal")
+    v2 = _approve_doc_plan(client, app, pid, 2, "uiux-design")
+    v3 = _approve_doc_plan(client, app, pid, 3, "proposal")
+
+    plans = {p["id"]: p for p in client.get(f"/api/projects/{pid}/plans").json()}
+    assert plans[v1]["status"] == "superseded"
+    assert plans[v2]["status"] == "approved"  # 다른 문서 승인본은 유지
+    assert plans[v3]["status"] == "approved"
+
+    # ?doc_slug= 필터 — 승인 상태에서도 문서 세대만 좁혀 보인다
+    prop = client.get(f"/api/projects/{pid}/plans?doc_slug=proposal").json()
+    assert [p["id"] for p in prop] == [v1, v3]
+    assert all(p["doc_slug"] == "proposal" for p in prop)
+
+
+def test_legacy_project_approval_stays_root_path(client, app):
+    """doc_loops 행 없는(레거시) 프로젝트의 승인·미러가 전부 루트 경로로 동작한다
+    (DB 시드 기준 — 행을 지워 재검증). 승인본 교체 스코프도 None(NULL) 스코프로
+    좁혀 기존 동작과 동일하다."""
+    pid = _legacy_project(client, "docapprovpregacy")
+    v1 = _approve_doc_plan(client, app, pid, 1, None)
+    v2 = _approve_doc_plan(client, app, pid, 2, None)
+
+    wsroot = _ws_dir(client) / "docapprovpregacy"
+    assert (wsroot / "plan.md").is_file()
+    assert not any((wsroot / s).exists() for s in DOC_SLUGS)  # 문서 하위 생성 없음
+    assert client.get(f"/api/projects/{pid}/docloops").json() == []
+
+    plans = {p["id"]: p for p in client.get(f"/api/projects/{pid}/plans").json()}
+    assert plans[v1]["status"] == "superseded"
+    assert plans[v2]["status"] == "approved"

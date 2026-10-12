@@ -6,8 +6,6 @@
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from planforge.plan import PlanError
 
 from app.modules.jobs.facade import report_progress
@@ -18,6 +16,7 @@ from app.shared.workspace import write_plan_mirror
 from ..facade import PlanOrigin, PlanStatus, create_generation, get_plan
 from ..infrastructure.models import Plan
 from .planrevise import PlanReviseError, run_plan_revise, validate_plan_markdown
+from .service import _mirror_root
 
 
 def run_plan_revise_job(ctx, session, job) -> dict:
@@ -70,8 +69,11 @@ def run_plan_revise_job(ctx, session, job) -> dict:
         raise PlanError("LLM 결과에 변경이 없습니다 — plan 세대를 만들지 않았습니다")
 
     new_plan = create_generation(session, plan.project_id, markdown=md, docs=parsed.docs,
-                                 parsed_ok=True, origin=PlanOrigin.REVIEW)
-    # SSOT 미러 — revise_plan과 동일: DRAFT 세대도 미러를 갱신한다
-    write_plan_mirror(Path(project.workspace_path), md)
+                                 parsed_ok=True, origin=PlanOrigin.REVIEW,
+                                 doc_slug=plan.doc_slug)
+    # SSOT 미러 — revise_plan과 동일: DRAFT 세대도 미러를 갱신한다 (문서 plan은
+    # 문서별 하위 경로 — job 세션에서 has_doc_layout을 판정한다)
+    write_plan_mirror(_mirror_root(session, plan.project_id, project.workspace_path,
+                                   plan.doc_slug), md)
     return {"plan_id": new_plan.id, "version_no": new_plan.version_no,
             "applied_count": len(selected)}
