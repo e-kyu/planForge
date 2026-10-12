@@ -137,6 +137,45 @@ def sanitize_source_filename(name: str) -> str:
     return cleaned
 
 
+# zip 멤버 수 상한 — extract_zip이 채택·기각·디렉터리 엔트리를 포함한 zip의 전체
+# 엔트리를 합산해 검사한다 (하위 폴더·빈 폴더 엔트리가 많은 아카이브 대응).
+# 2026-10-12: 200 → 3000 확장 (실사용 하위폴더 아카이브에서 200 도달 사례).
+MAX_ZIP_MEMBERS = 3000
+# zip 파일 자체(컨테이너) 상한 — 단건 텍스트 소스 상한(MAX_SOURCE_BYTES)과 별개로 크게 둔다.
+# 대본·문서 아카이브(압축 해제 전 원본 zip)를 통째로 받기 위한 값.
+MAX_ZIP_BYTES = 30 * 1024 * 1024              # 30MB
+# zip 압축 전 합계 상한 (zip-bomb 방어) — 컨테이너 30MB의 4배. 텍스트 압축비 3-4배를
+# 가정한 방어선으로, 컨테이너 한도를 올릴 때 같은 비율을 유지한다(비례 축소 = 폭탄 방어 유지).
+MAX_ZIP_UNCOMPRESSED_BYTES = MAX_ZIP_BYTES * 4
+
+_DRIVE_COMPONENT_RE = re.compile(r"^[A-Za-z]:$")
+
+
+def sanitize_source_relpath(member: str) -> str | None:
+    """zip 멤버 상대경로 → 성분별 정규화된 POSIX 상대경로. 구조적 기각 시 None.
+
+    zip 해제는 사용자가 정확히 검증할 수 없는 일괄 경로라 `..`·절대경로·숨김 성분
+    등 구조적 취약점은 치환해 통과시키지 않고 None으로 기각한다(안전 쪽 설계
+    의도). 살아남은 개별 성분에는 단건 업로드와 동일 규약
+    (sanitize_source_filename — 금지 문자 '_' 치환·트레일링 공백/점 제거)을
+    적용하고, 성분을 '/'.join한 POSIX 상대경로를 반환한다.
+    """
+    raw = (member or "").replace("\\", "/")
+    if raw.startswith("/") or raw.endswith("/"):
+        return None  # 절대경로 / 최종 성분이 비는 경우(디렉터리만 남는 등)
+    parts: list[str] = []
+    for comp in raw.split("/"):
+        if not comp or comp.startswith(".") or comp.startswith("__MACOSX"):
+            return None  # 빈 성분·'.'/'..'·숨김·__MACOSX*·._* 성분 — 구조적 기각
+        if _DRIVE_COMPONENT_RE.fullmatch(comp):
+            return None  # 드라이브 성분 (Windows c:)
+        try:
+            parts.append(sanitize_source_filename(comp))
+        except SourceError:
+            return None
+    return "/".join(parts)
+
+
 def validate_source_file(name: str, data: bytes) -> str:
     """업로드 검증(§5): 확장자 화이트리스트·용량 상한·UTF-8 텍스트. 정규화된 이름 반환."""
     cleaned = sanitize_source_filename(name)
@@ -180,9 +219,10 @@ def read_sources_context(sources_dirs: list[Path],
                          total_chars: int = MAX_SOURCE_TOTAL_CHARS) -> str:
     """인터뷰 소스 컨텍스트 수집 (FR-2.1). 텍스트 파일만, 파일별·전체 크기 상한.
 
-    기존 정렬 순서(디렉토리 순 → 이름순)를 유지한 greedy 배분 — 파일 상한과 전체 예산
-    중 작은 쪽까지만 주입한다. 절단 시 마커를 붙여 LLM이 미완 소스를 온전한 것으로
-    오판하지 않게 한다.
+    하위 디렉토리까지 재귀 수집하되 기존 정렬 순서(디렉토리 순 → 상대경로 코드포인트순)
+    를 유지한 greedy 배분 — 파일 상한과 전체 예산 중 작은 쪽까지만 주입한다. 절단 시
+    마커를 붙여 LLM이 미완 소스를 온전한 것으로 오판하지 않게 한다. 헤더·미주입 목록의
+    경로는 POSIX 상대경로(as_posix) 고정 — 크로스플랫폼 결정론.
     """
     parts: list[str] = []
     skipped: list[str] = []
@@ -190,13 +230,14 @@ def read_sources_context(sources_dirs: list[Path],
     for d in sources_dirs:
         if not d.is_dir():
             continue
-        for f in sorted(d.iterdir()):
-            if not f.is_file():
-                continue
+        files = sorted((f for f in d.rglob("*") if f.is_file()),
+                       key=lambda f: f.relative_to(d).as_posix())
+        for f in files:
+            rel = f.relative_to(d).as_posix()
             if f.suffix.lower() not in SOURCE_EXTS:
                 continue
             if remaining <= 0:
-                skipped.append(f.name)
+                skipped.append(rel)
                 continue
             try:
                 text = f.read_text(encoding="utf-8-sig")
@@ -206,7 +247,7 @@ def read_sources_context(sources_dirs: list[Path],
             if len(text) > budget:
                 text = text[:budget] + f"\n...(절단: 주입 상한 {budget:,}자 초과)"
             remaining -= len(text)
-            parts.append(f"### 소스: {f.name}\n{text}")
+            parts.append(f"### 소스: {rel}\n{text}")
     if skipped:
         parts.append(f"(전체 상한 도달로 미주입: {', '.join(skipped)})")
     return "\n\n".join(parts)

@@ -22,3 +22,19 @@ class OverviewOut(BaseModel):
 
 class OverviewSave(BaseModel):
     content: str
+
+
+class SkipOut(BaseModel):
+    """스킵된 zip 멤버 보고 — 원명(정규화 전)으로 사용자가 원본 zip과 대조할 수 있게 한다."""
+    name: str
+    reason: str
+
+
+class UploadResult(BaseModel):
+    """소스 업로드 응답 — 기존 단일 SourceOut의 래핑 확장.
+
+    zip 업로드는 멤버마다 저장/스킵이 갈리므로 saved·skipped를 함께 보고한다. 단일
+    파일은 saved 1건·skipped 빈 배열이다 (거부는 409 — 스킵이 아니라 거부다).
+    """
+    saved: list[SourceOut]
+    skipped: list[SkipOut]

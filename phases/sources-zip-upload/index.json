@@ -1,0 +1,56 @@
+{
+  "project": "planforge",
+  "phase": "sources-zip-upload",
+  "steps": [
+    {
+      "step": 0,
+      "name": "recursive-sources-context",
+      "status": "completed",
+      "started_at": "2026-10-12T22:21:54+0900",
+      "completed_at": "2026-10-12T22:26:04+0900",
+      "summary": "read_sources_context를 rglob 재귀 수집으로 변경(정렬 키·헤더·미주입 목록을 POSIX 상대경로로 고정) — 기존 7개 테스트 무수정 통과 + 신규 3개 케이스 추가, 전체 스위트 녹색"
+    },
+    {
+      "step": 1,
+      "name": "source-path-guard-and-recursive-listing",
+      "status": "completed",
+      "started_at": "2026-10-12T22:26:04+0900",
+      "completed_at": "2026-10-12T22:28:49+0900",
+      "summary": "_list_dir을 rglob 재귀+POSIX 상대경로 name으로 전환, _validated_source_path를 하위경로 허용+..·절대경로 차단+resolve containment로 재설계, delete·download 3개 라우트 {name:path} 전환 — 기존 테스트 무수정 통과 + 하위경로 roundtrip·성분 경유 트래버설 차단 신규 2건, 전체 스위트 녹색(272 passed)"
+    },
+    {
+      "step": 2,
+      "name": "zip-extraction-core",
+      "status": "completed",
+      "started_at": "2026-10-12T22:28:49+0900",
+      "completed_at": "2026-10-12T22:35:58+0900",
+      "summary": "workspace에 MAX_ZIP_MEMBERS·MAX_ZIP_UNCOMPRESSED_BYTES·sanitize_source_relpath(구조적 기각+성분 치환) 신설, sources/application/zip_sources.py extract_zip으로 2페이즈 사전스캔+바이트 직접 기록(extractall 금지·cp437→cp949 멤버명 복원·덮어쓰기 금지) 구현 — 신규 18건, 회귀 3종 51 passed, 전체 스위트 290 passed"
+    },
+    {
+      "step": 3,
+      "name": "upload-api-zip-and-upload-result",
+      "status": "completed",
+      "started_at": "2026-10-12T22:35:58+0900",
+      "completed_at": "2026-10-12T22:40:00+0900",
+      "summary": "schemas에 SkipOut·UploadResult(saved·skipped 래핑) 신설, upload_source를 .zip 분기로 확장(zip은 extract_zip 소비 + SourceError 409 전체 거부, 스킵 보고 201 / 단일 파일 409 거부 시맨틱 유지) — 기존 upload 테스트 래핑 구조 갱신 + zip 통합 6건 신설, 회귀 3종 57 passed, 전체 스위트 296 passed"
+    },
+    {
+      "step": 4,
+      "name": "contract-type-regen",
+      "status": "completed",
+      "started_at": "2026-10-12T22:40:01+0900",
+      "completed_at": "2026-10-12T22:42:44+0900",
+      "summary": "openapi.json 재export(venv python — 계약 렌더링 일치 환경) 후 npm run gen:types로 types.gen.ts 재생성 — UploadResult(saved: SourceOut[]·skipped: SkipOut[])·SkipOut(name·reason) 추가, POST sources 응답 SourceOut→UploadResult 전환, {name} path 파라미터 반영 — 소스 코드 수편집 0, diff가 계약 변경 3종으로 제한됨, test_sources_api.py 29 passed·전체 스위트 296 passed, npm run build 녹색"
+    },
+    {
+      "step": 5,
+      "name": "frontend-zip-accept-and-report",
+      "status": "completed",
+      "started_at": "2026-10-12T22:42:45+0900",
+      "completed_at": "2026-10-12T22:44:10+0900",
+      "summary": "sources feature를 UploadResult 계약에 맞춤 — uploadSource 리턴 UploadResult 전환(client alias 추출), uploadM이 파일별 응답을 savedCount·skipped로 누적해 uploadReport 상태 신설(다음 업로드 시작 시 클리어), SourcesPanel accept에 .zip 추가·안내문에 zip 해제·내부 동일 규칙·덮어쓰기 없음 명시·스킵 목록 info 배너(이름 — 사유) 렌더 — types.gen.ts 재생성 diff 0, npm run build 녹색"
+    }
+  ],
+  "created_at": "2026-10-12T22:21:54+0900",
+  "completed_at": "2026-10-12T22:44:10+0900"
+}

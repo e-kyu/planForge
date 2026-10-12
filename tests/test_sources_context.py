@@ -65,6 +65,33 @@ def test_missing_dir_ignored(tmp_path):
     assert read_sources_context([tmp_path / "없는디렉토리"]) == ""
 
 
+def test_nested_file_injected_with_relative_posix_header(tmp_path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _write(sub, "nested.md", "하위 본문")
+    ctx = read_sources_context([tmp_path])
+    assert ctx == "### 소스: sub/nested.md\n하위 본문"
+
+
+def test_mixed_flat_and_nested_files_sorted_by_relative_path(tmp_path):
+    _write(tmp_path, "a.md", "최상위")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _write(sub, "z.md", "하위")
+    ctx = read_sources_context([tmp_path])
+    assert ctx.index("### 소스: a.md") < ctx.index("### 소스: sub/z.md")
+    assert "### 소스: sub/z.md\n하위" in ctx
+
+
+def test_nested_unreadable_and_non_whitelist_skipped(tmp_path):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    _write(sub, "ok.md", "정상")
+    (sub / "image.png").write_bytes(b"\x89PNG")
+    (sub / "cp949.txt").write_bytes("\xb1\xdb\xc0\xce".encode("latin-1"))
+    assert read_sources_context([tmp_path]) == "### 소스: sub/ok.md\n정상"
+
+
 def test_default_baseline_doc_injected_whole():
     """글로벌 베이스라인 문서가 기본 상한에서 절단 없이 온전 주입되는지 회귀 확인."""
     doc_dir = Path(__file__).resolve().parents[1] / "sources"

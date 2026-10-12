@@ -12,12 +12,22 @@ import { errMsg } from "../../../shared/lib/errMsg";
  * 삭제는 확인 모달을 거친다 (useProjects의 delTarget 패턴과 동일). */
 
 export const MAX_MB = 2;
+// 백엔드 MAX_ZIP_BYTES(30MB)와 동일 — zip 파일 자체(컨테이너) 선거부.
+// 단건 텍스트 파일(max 2MB)과 상한이 다르므로 .zip만 이 값을 적용한다.
+export const MAX_ZIP_MB = 30;
+
+/** 업로드 결과 보고 — UploadResult(saved·skipped)를 파일 갯수만큼 누적해 뷰에 노출한다. */
+export type UploadReport = {
+  savedCount: number;
+  skipped: { name: string; reason: string }[];
+};
 
 export function useSources(pid: number) {
   const qc = useQueryClient();
   const ownQ = useQuery({ queryKey: ["sources", pid], queryFn: () => fetchProjectSources(pid) });
   const globalQ = useQuery({ queryKey: ["sources", "global"], queryFn: fetchGlobalSources });
   const [error, setError] = useState<string | null>(null);
+  const [uploadReport, setUploadReport] = useState<UploadReport | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function refresh() {
@@ -29,15 +39,22 @@ export function useSources(pid: number) {
 
   const uploadM = useMutation({
     mutationFn: async (fileList: FileList) => {
+      let savedCount = 0;
+      let skipped: UploadReport["skipped"] = [];
       for (const f of Array.from(fileList)) {
-        if (f.size > MAX_MB * 1024 * 1024) {
-          throw new Error(`${f.name}: ${MAX_MB}MB 초과`);
+        const mb = f.name.toLowerCase().endsWith(".zip") ? MAX_ZIP_MB : MAX_MB;
+        if (f.size > mb * 1024 * 1024) {
+          throw new Error(`${f.name}: ${mb}MB 초과`);
         }
-        await uploadSource(pid, f);
+        const r = await uploadSource(pid, f);
+        savedCount += r.saved.length;
+        skipped = skipped.concat(r.skipped);
       }
+      return { savedCount, skipped } as UploadReport;
     },
-    onSuccess: async () => {
+    onSuccess: async (report) => {
       setError(null);
+      setUploadReport(report);
       await refresh();
     },
     onError: (e) => setError(errMsg(e)),
@@ -81,9 +98,11 @@ export function useSources(pid: number) {
     files: ownQ.data ?? null,
     globalFiles: globalQ.data ?? null,
     error,
+    uploadReport,
     upload: (fileList: FileList | null) => {
       if (!fileList || fileList.length === 0) return;
       setError(null);
+      setUploadReport(null); // 다음 업로드 시작 시 이전 보고를 클리어
       uploadM.mutate(fileList);
     },
     delTarget,
