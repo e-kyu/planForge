@@ -7,7 +7,8 @@
       "name": "doc-loop-schema",
       "status": "completed",
       "started_at": "2026-10-13T00:04:23+0900",
-      "summary": "alembic b7c4d9e2f6a1 (doc_loops 신설 + plans/interview_sessions/builds nullable doc_slug) · docloops 모듈 스켈레톤(DocLoop·DocLoopStatus) · app/modules/__init__.py 집계 등록 · test_alembic_upgrade.py 기대 테이블 11개 갱신 — upgrade/downgrade/재upgrade 사이클 통과, 전체 pytest 298 passed"
+      "summary": "alembic b7c4d9e2f6a1 (doc_loops 신설 + plans/interview_sessions/builds nullable doc_slug) · docloops 모듈 스켈레톤(DocLoop·DocLoopStatus) · app/modules/__init__.py 집계 등록 · test_alembic_upgrade.py 기대 테이블 11개 갱신 — upgrade/downgrade/재upgrade 사이클 통과, 전체 pytest 298 passed",
+      "completed_at": "2026-10-13T00:07:22+0900"
     },
     {
       "step": 1,
