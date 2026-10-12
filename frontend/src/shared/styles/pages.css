@@ -393,6 +393,78 @@
   cursor: not-allowed;
 }
 
+/* 문서 버튼 행 — 카드 본체(.project-row)의 형제 요소 (버튼 중첩 금지 — step 9).
+ * 라벨·상태는 백엔드 docloops 응답(DocLoopOut)이 권위. */
+.project-docs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+.project-doc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  color: var(--navy);
+  background: var(--surface-sub);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color var(--speed), border-color var(--speed), background var(--speed);
+}
+
+.project-doc-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.project-doc-btn:hover:not(:disabled) {
+  color: var(--blue);
+  border-color: var(--light-blue);
+}
+
+.project-doc-btn:focus-visible {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: var(--ring);
+}
+
+.project-doc-btn-active {
+  color: var(--blue);
+}
+
+.project-doc-btn-locked {
+  color: var(--text-sub);
+  background: transparent;
+  font-weight: 500;
+  opacity: 0.6;
+}
+
+.project-doc-btn-done {
+  color: var(--ok);
+  border-color: rgba(47, 133, 90, 0.35);
+  background: rgba(47, 133, 90, 0.07);
+}
+
+.project-doc-btn-done:hover:not(:disabled) {
+  color: #276b48;
+  border-color: rgba(47, 133, 90, 0.6);
+  background: rgba(47, 133, 90, 0.12);
+}
+
+/* 최신 plan 세대 표기 — 버튼 내 축약 (표시는 선택: plan_version 있을 때만) */
+.project-doc-btn-ver {
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: var(--text-sub);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
