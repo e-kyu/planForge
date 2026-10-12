@@ -2,7 +2,7 @@
 """소스 API (FR-2.1 + §5 업로드 검증) 테스트."""
 from __future__ import annotations
 
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from app.shared.workspace import read_sources_context
 
@@ -241,6 +241,60 @@ def test_source_delete_and_download_reject_traversal(client, db_env):
         r = client.delete(f"/api/projects/{pid}/sources/{encoded}")
         assert r.status_code == 404, encoded
     assert plan.read_text(encoding="utf-8") == "# plan"
+
+
+# ---------------------------------------------------------------- 하위 경로 소스 (재귀 목록·접근)
+
+def test_recursive_listing_and_subpath_roundtrip(client, db_env):
+    pid = make_project(client, "src-demo", "소스 데모")
+    sub = db_env / "src-demo" / "sources" / "회의"
+    sub.mkdir()
+    (sub / "sub노트.md").write_text("# 회의 메모", encoding="utf-8")
+
+    # 목록: 하위 경로 소스가 POSIX 상대경로 name으로 나온다 (dir 라벨은 유지)
+    r = client.get(f"/api/projects/{pid}/sources")
+    assert r.status_code == 200, r.text
+    items = [s for s in r.json() if s["name"] == "회의/sub노트.md"]
+    assert len(items) == 1
+    assert items[0]["dir"] == "project"
+    assert items[0]["size"] == len("# 회의 메모".encode("utf-8"))
+    assert isinstance(items[0]["mtime"], float)
+
+    # 하위경로 download roundtrip — 내용 일치
+    q = quote("회의/sub노트.md", safe="")
+    r = client.get(f"/api/projects/{pid}/sources/{q}/download")
+    assert r.status_code == 200, r.text
+    assert r.content == "# 회의 메모".encode("utf-8")
+
+    # 하위경로 delete roundtrip — 목록에서 소멸 (비게 된 하위 디렉터리는 잔존 — 파일만 목록)
+    r = client.delete(f"/api/projects/{pid}/sources/{q}")
+    assert r.status_code == 204, r.text
+    r = client.get(f"/api/projects/{pid}/sources")
+    assert [s["name"] for s in r.json() if s["name"] == "회의/sub노트.md"] == []
+    assert not (sub / "sub노트.md").exists()
+    assert (sub / "sub노트.md").parent.is_dir()
+
+
+def test_subpath_access_rejects_escape_above_sources(client, db_env):
+    """하위 성분 경유 트래버설 — 회의/../.. 로 sources/ 밖 침투 시도는 404로 통일 거부."""
+    pid = make_project(client, "src-demo", "소스 데모")
+    sub = db_env / "src-demo" / "sources" / "회의"
+    sub.mkdir()
+    (sub / "노트.md").write_text("메모", encoding="utf-8")
+    outside = db_env / "sources-root.md"  # sources/ 밖 — 접근 불가해야 한다
+    outside.write_text("# outside", encoding="utf-8")
+
+    for tail in ("..%2F..%2Fsources-root.md", "..%5C..%5Csources-root.md",
+                 "%2E%2E%2Fsources-root.md"):
+        r = client.get(f"/api/projects/{pid}/sources/회의/{tail}/download")
+        assert r.status_code == 404, tail
+        r = client.delete(f"/api/projects/{pid}/sources/회의/{tail}")
+        assert r.status_code == 404, tail
+    # 정상 하위경로는 계속 접근 가능 — 거부가 과잉 차단이 아님을 짝으로 확인
+    r = client.get(f"/api/projects/{pid}/sources/{quote('회의/노트.md', safe='')}/download")
+    assert r.status_code == 200, r.text
+    assert r.content == "메모".encode("utf-8")
+    assert outside.read_text(encoding="utf-8") == "# outside"
 
 
 # ---------------------------------------------------------------- 글로벌 소스 다운로드 (읽기 전용)

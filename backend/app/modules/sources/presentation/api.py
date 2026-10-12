@@ -39,22 +39,37 @@ _SOURCE_MEDIA = {".md": "text/markdown", ".txt": "text/plain",
 
 
 def _list_dir(d: Path, dir_label: str) -> list[SourceOut]:
+    """소스 목록 — 하위 디렉토리까지 재귀 수집한다.
+
+    name은 POSIX 상대경로로 고정한다 (read_sources_context의 정렬 키·헤더와 동일
+    규약). 플랫 소스는 상대경로 == 파일명이라 기존 출력과 동일하다.
+    """
     out: list[SourceOut] = []
     if d.is_dir():
-        for f in sorted(d.iterdir()):
-            if f.is_file():
-                st = f.stat()
-                out.append(SourceOut(name=f.name, size=st.st_size, dir=dir_label,
-                                     mtime=st.st_mtime))
+        files = sorted((f for f in d.rglob("*") if f.is_file()),
+                       key=lambda f: f.relative_to(d).as_posix())
+        for f in files:
+            st = f.stat()
+            out.append(SourceOut(name=f.relative_to(d).as_posix(),
+                                 size=st.st_size, dir=dir_label, mtime=st.st_mtime))
     return out
 
 
 def _validated_source_path(src: Path, name: str) -> Path:
-    """DELETE·download 공용 — sources/ 밖(트래버설) 접근을 차단하고 파일을 확정한다."""
-    if any(sep in name for sep in ("/", "\\")) or ".." in name:
+    """DELETE·download 공용 — sources/ 내 상대 하위경로만 허용한다 (zip 구조 대응).
+
+    빈 경로·`..` 트래버설·절대경로(드라이브 포함)는 404로 통일 거부한다 — 존재 여부
+    누설 방지 규약. 역슬래시는 URL에서 구분자로 해석될 수 없어 성분 분해 전 슬래시로
+    치환한다 (구분자 문자 자체가 경로 침투). resolve() + containment(is_relative_to)
+    는 심링크 등 경로 조작의 최종 방어선이다.
+    """
+    parts = [p for p in (name or "").replace("\\", "/").split("/") if p]
+    if not parts or any(p == ".." for p in parts) or \
+       (len(parts) == 1 and len(parts[0]) > 1 and parts[0][1] == ":"
+        and parts[0][0].isalpha()):
         raise http_404(f"소스 없음: {name}")
-    target = src / name
-    if not target.is_file():
+    target = (src / Path(*parts)).resolve()
+    if not (target.is_file() and target.is_relative_to(src.resolve())):
         raise http_404(f"소스 없음: {name}")
     return target
 
@@ -91,7 +106,7 @@ def upload_source(project_id: int, file: UploadFile, db: Session = Depends(get_d
     return SourceOut(name=name, size=st.st_size, dir="project", mtime=st.st_mtime)
 
 
-@router.delete("/sources/{name}", status_code=204)
+@router.delete("/sources/{name:path}", status_code=204)
 def delete_source(project_id: int, name: str, db: Session = Depends(get_db),
                   settings: Settings = Depends(get_settings)):
     src = project_sources_dir(db, project_id)
@@ -126,7 +141,7 @@ def save_overview(project_id: int, body: OverviewSave, db: Session = Depends(get
                        mtime=target.stat().st_mtime)
 
 
-@router.get("/sources/{name}/download")
+@router.get("/sources/{name:path}/download")
 def download_source(project_id: int, name: str, db: Session = Depends(get_db)):
     """소스 대역파일 다운로드 — DELETE /sources/{name}과 대칭 (파일 경로 검증 공유)."""
     target = _validated_source_path(project_sources_dir(db, project_id), name)
@@ -138,7 +153,7 @@ def list_global_sources(settings: Settings = Depends(get_settings)):
     return _list_dir(settings.global_sources_dir, "global")
 
 
-@global_router.get("/{name}/download")
+@global_router.get("/{name:path}/download")
 def download_global_source(name: str, settings: Settings = Depends(get_settings)):
     """글로벌 소스 다운로드 — 쓰기·삭제 없는 읽기 전용 경로 (프로젝트 download와 검증 공유)."""
     target = _validated_source_path(settings.global_sources_dir, name)
