@@ -180,9 +180,10 @@ def read_sources_context(sources_dirs: list[Path],
                          total_chars: int = MAX_SOURCE_TOTAL_CHARS) -> str:
     """인터뷰 소스 컨텍스트 수집 (FR-2.1). 텍스트 파일만, 파일별·전체 크기 상한.
 
-    기존 정렬 순서(디렉토리 순 → 이름순)를 유지한 greedy 배분 — 파일 상한과 전체 예산
-    중 작은 쪽까지만 주입한다. 절단 시 마커를 붙여 LLM이 미완 소스를 온전한 것으로
-    오판하지 않게 한다.
+    하위 디렉토리까지 재귀 수집하되 기존 정렬 순서(디렉토리 순 → 상대경로 코드포인트순)
+    를 유지한 greedy 배분 — 파일 상한과 전체 예산 중 작은 쪽까지만 주입한다. 절단 시
+    마커를 붙여 LLM이 미완 소스를 온전한 것으로 오판하지 않게 한다. 헤더·미주입 목록의
+    경로는 POSIX 상대경로(as_posix) 고정 — 크로스플랫폼 결정론.
     """
     parts: list[str] = []
     skipped: list[str] = []
@@ -190,13 +191,14 @@ def read_sources_context(sources_dirs: list[Path],
     for d in sources_dirs:
         if not d.is_dir():
             continue
-        for f in sorted(d.iterdir()):
-            if not f.is_file():
-                continue
+        files = sorted((f for f in d.rglob("*") if f.is_file()),
+                       key=lambda f: f.relative_to(d).as_posix())
+        for f in files:
+            rel = f.relative_to(d).as_posix()
             if f.suffix.lower() not in SOURCE_EXTS:
                 continue
             if remaining <= 0:
-                skipped.append(f.name)
+                skipped.append(rel)
                 continue
             try:
                 text = f.read_text(encoding="utf-8-sig")
@@ -206,7 +208,7 @@ def read_sources_context(sources_dirs: list[Path],
             if len(text) > budget:
                 text = text[:budget] + f"\n...(절단: 주입 상한 {budget:,}자 초과)"
             remaining -= len(text)
-            parts.append(f"### 소스: {f.name}\n{text}")
+            parts.append(f"### 소스: {rel}\n{text}")
     if skipped:
         parts.append(f"(전체 상한 도달로 미주입: {', '.join(skipped)})")
     return "\n\n".join(parts)
