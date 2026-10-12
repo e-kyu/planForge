@@ -28,8 +28,9 @@ from app.shared.workspace import (
     validate_source_file,
 )
 
+from ..application.zip_sources import extract_zip
 from ..facade import project_overview_path, project_sources_dir
-from .schemas import OverviewOut, OverviewSave, SourceOut
+from .schemas import OverviewOut, OverviewSave, SkipOut, SourceOut, UploadResult
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["sources"])
 global_router = APIRouter(prefix="/api/sources", tags=["sources"])
@@ -89,11 +90,41 @@ def list_sources(project_id: int, db: Session = Depends(get_db),
     return _list_dir(project_sources_dir(db, project_id), "project")
 
 
-@router.post("/sources", status_code=201, response_model=SourceOut)
+def _source_out(src: Path, rel: str) -> SourceOut:
+    """저장 완료 소스의 SourceOut — rel은 플랫 이름 또는 POSIX 상대경로 (목록과 동일 규약)."""
+    target = src / rel
+    st = target.stat()
+    return SourceOut(name=rel, size=st.st_size, dir="project", mtime=st.st_mtime)
+
+
+@router.post("/sources", status_code=201, response_model=UploadResult)
 def upload_source(project_id: int, file: UploadFile, db: Session = Depends(get_db),
                   settings: Settings = Depends(get_settings)):
+    """소스 업로드 — .zip은 해제 결과를, 단일 파일은 그대로를 저장한다.
+
+    응답 계약 확장: 기존 단일 SourceOut → UploadResult(saved·skipped) 래핑.
+    - zip 멤버의 덮어쓰기 금지는 거부가 아니라 스킵 보고로 원칙을 유지한다 — zip은
+      사용자가 일괄 해제 결과를 미리 검증할 수 없는 일괄 경로라 1멤버 충돌로 나머지를
+      전부 거부하지 않는다 (경계: "사용자 명시 선택 vs 일괄 해제 결과").
+    - 단일 파일의 거부는 409 그대로다 — 명시적으로 고른 파일 하나의 거부를 스킵으로
+      조용히 넘기면 사용자가 실패를 인지하지 못한다 (기존 계약 유지).
+    - .zip 자체는 소스로 저장되지 않는다 — 해제 결과만 소스가 된다 (_SOURCE_MEDIA에
+      .zip 항목 없음 — download 경로를 통과하지 않는다).
+    - extract_zip은 2페이즈 설계상 자체 결함(SourceError) 시 어떤 파일도 기록하지
+      않았으므로 409 전체 거부로 변환해도 워크스페이스는 무손상이다.
+    """
     src = project_sources_dir(db, project_id)
     data = file.file.read()
+
+    if Path(file.filename or "").suffix.lower() == ".zip":
+        try:
+            rels, skipped = extract_zip(data, src)
+        except SourceError as e:
+            raise http_409(str(e)) from e
+        return UploadResult(saved=[_source_out(src, rel) for rel in rels],
+                            skipped=[SkipOut(name=name, reason=reason)
+                                     for name, reason in skipped])
+
     try:
         name = validate_source_file(file.filename or "", data)
     except SourceError as e:
@@ -102,8 +133,7 @@ def upload_source(project_id: int, file: UploadFile, db: Session = Depends(get_d
     if target.exists():
         raise http_409(f"같은 이름의 소스가 이미 있습니다: {name}")
     target.write_bytes(data)
-    st = target.stat()
-    return SourceOut(name=name, size=st.st_size, dir="project", mtime=st.st_mtime)
+    return UploadResult(saved=[_source_out(src, name)], skipped=[])
 
 
 @router.delete("/sources/{name:path}", status_code=204)

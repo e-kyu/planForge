@@ -2,6 +2,8 @@
 """소스 API (FR-2.1 + §5 업로드 검증) 테스트."""
 from __future__ import annotations
 
+import io
+import zipfile
 from urllib.parse import quote, unquote
 
 from app.shared.workspace import read_sources_context
@@ -35,8 +37,9 @@ def test_upload_list_delete_source(client, db_env):
                                     "text/markdown")})
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body == {"name": "요구사항.md", "size": body["size"], "dir": "project",
-                    "mtime": body["mtime"]}
+    assert body == {"saved": [{"name": "요구사항.md", "size": body["saved"][0]["size"],
+                               "dir": "project", "mtime": body["saved"][0]["mtime"]}],
+                    "skipped": []}
     assert (db_env / "src-demo" / "sources" / "요구사항.md").read_bytes() == \
         "# 요구\n- v2.0".encode("utf-8")
 
@@ -90,18 +93,115 @@ def test_upload_filename_traversal_and_forbidden_chars_sanitized(client, db_env)
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("../../evil.md", b"x", "text/markdown")})
     assert r.status_code == 201, r.text
-    assert r.json()["name"] == "evil.md"
+    assert r.json()["saved"][0]["name"] == "evil.md"
     assert not (db_env / "evil.md").exists()
 
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("보고:서브*?.md", b"x", "text/markdown")})
     assert r.status_code == 201
-    assert r.json()["name"] == "보고_서브__.md"
+    assert r.json()["saved"][0]["name"] == "보고_서브__.md"
 
     # 정규화 후 빈 이름
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("...", b"x", "text/markdown")})
     assert r.status_code == 409
+
+
+# ---------------------------------------------------------------- zip 업로드 (UploadResult)
+
+def _zip_bytes(members: list[tuple[str, bytes]]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, payload in members:
+            zf.writestr(name, payload)
+    return buf.getvalue()
+
+
+def test_upload_zip_extracts_subpaths(client, db_env):
+    pid = make_project(client, "src-demo", "소스 데모")
+    data = _zip_bytes([("sub/메모.md", "하위 메모".encode("utf-8")),
+                       ("회의.md", "회의 본문".encode("utf-8"))])
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("자료.zip", data, "application/zip")})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert [s["name"] for s in body["saved"]] == ["sub/메모.md", "회의.md"]
+    assert body["skipped"] == []
+    assert body["saved"][0] == {"name": "sub/메모.md", "size": body["saved"][0]["size"],
+                                "dir": "project", "mtime": body["saved"][0]["mtime"]}
+    # 하위 경로까지 실제 워크스페이스에 기록되어 목록·download 경로와 연결된다
+    assert (db_env / "src-demo" / "sources" / "sub" / "메모.md").read_bytes() == \
+        "하위 메모".encode("utf-8")
+    r = client.get(f"/api/projects/{pid}/sources")
+    assert [s["name"] for s in r.json()] == ["sub/메모.md", "회의.md"]
+
+
+def test_upload_zip_skipped_members_reported(client, db_env):
+    pid = make_project(client, "src-demo", "소스 데모")
+    data = _zip_bytes([("img/logo.png", b"\x89PNG\r\n\x1a\n"),
+                       ("legacy.txt", "레거시".encode("cp949")),
+                       ("ok/메모.md", "정상".encode("utf-8"))])
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("자료.zip", data, "application/zip")})
+    assert r.status_code == 201, r.text
+    saved = [s["name"] for s in r.json()["saved"]]
+    assert saved == ["ok/메모.md"]                       # 나머지는 살아서 저장된다
+    skipped = r.json()["skipped"]
+    assert skipped == [{"name": "img/logo.png", "reason": "지원하지 않는 확장자"},
+                       {"name": "legacy.txt",
+                        "reason": "UTF-8 텍스트 파일만 저장할 수 있습니다"}]
+    assert not (db_env / "src-demo" / "sources" / "img").exists()
+
+
+def test_upload_zip_all_skipped_reports_201(client, db_env):
+    """saved 0건 + skipped만 있어도 201 — 스킵 보고가 응답 본문의 책임이다."""
+    pid = make_project(client, "src-demo", "소스 데모")
+    data = _zip_bytes([("img/photo.png", b"\x89PNG"),
+                       ("../escape.md", "탈출".encode())])
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("자료.zip", data, "application/zip")})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["saved"] == []
+    assert [s["name"] for s in body["skipped"]] == ["img/photo.png", "../escape.md"]
+    assert not (db_env / "src-demo" / "sources").exists() or \
+        not any((db_env / "src-demo" / "sources").rglob("*"))
+
+
+def test_upload_zip_corrupt_409_writes_nothing(client, db_env):
+    pid = make_project(client, "src-demo", "소스 데모")
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("손상.zip", b"not a zip at all", "application/zip")})
+    assert r.status_code == 409
+    assert "손상" in r.json()["detail"]
+    src = db_env / "src-demo" / "sources"
+    assert not src.is_dir() or not any(p.is_file() for p in src.rglob("*"))
+
+
+def test_upload_single_file_reject_stays_409_after_zip_support(client):
+    """단일 파일 거부 시맨틱 보존 — zip 스킵과 무관하게 명시 선택 파일은 거부(409)다."""
+    pid = make_project(client, "src-demo", "소스 데모")
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("악성.exe", b"x", "application/octet-stream")})
+    assert r.status_code == 409
+    assert "지원하지 않는 확장자" in r.json()["detail"]
+
+
+def test_upload_zip_member_conflict_skipped_existing_kept(client, db_env):
+    pid = make_project(client, "src-demo", "소스 데모")
+    client.post(f"/api/projects/{pid}/sources",
+                files={"file": ("메모.md", "# 기존", "text/markdown")})
+    data = _zip_bytes([("메모.md", "zip 내용".encode("utf-8")),
+                       ("새문서.md", "새로".encode("utf-8"))])
+    r = client.post(f"/api/projects/{pid}/sources",
+                    files={"file": ("자료.zip", data, "application/zip")})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert [s["name"] for s in body["saved"]] == ["새문서.md"]
+    assert body["skipped"] == [{"name": "메모.md",
+                                "reason": "같은 이름의 소스가 이미 있습니다"}]
+    assert (db_env / "src-demo" / "sources" / "메모.md").read_bytes() == \
+        "# 기존".encode("utf-8")                        # 무덮어쓰기 — 기존 유지
 
 
 def test_deleted_source_404_and_unknown_project_404(client):
