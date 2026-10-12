@@ -134,7 +134,7 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
 | `facade.py` | **타 모듈에 공개하는 함수만 모은 공개 계약** |
 
 **모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
-`facade.py` 공개 함수 또는 `shared/` 경유. 결정·편차는 루트 `docs/architecture-decisions.md`에
+`facade.py` 공개 함수 또는 `shared/` 경유. 결정·편차는 루트 `docs/ADR.md`에
 기록한다.
 
 ### `app/shared/` — 공용 계층
@@ -316,7 +316,7 @@ python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
   색 `NAVY/BLUE/LIGHT_BLUE/BG/BG_SOFT/TEXT/TEXT_SUB/LINE/ACCENT`,
   `FONT="Malgun Gothic"`, 크기(`SIZE_COVER_TITLE=40` 등), 좌표(`MARGIN=0.6` 등).
   토큰 변경 시 4종 세트(theme.py·빌더 리터럴·fixture·frontend `tokens.css`)를
-  동시 점검해야 한다 — 절차는 `docs/token-checklist.md`.
+  동시 점검해야 한다 — 절차는 `docs/UI_GUIDE.md` §토큰 변경 절차.
 
 ### `llm/` — provider 추상화 + tool 루프 오케스트레이션
 

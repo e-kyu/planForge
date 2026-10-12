@@ -6,6 +6,8 @@ deadline 중단, base_url 우선순위. fake ChatOpenAI(p._llm)로 검증한다.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from langchain_core.messages import (AIMessage, AIMessageChunk, HumanMessage,
                                      SystemMessage, ToolMessage)
@@ -30,6 +32,19 @@ def test_load_config_loads_all_profiles(tmp_path):
 
 def _tcc(name, args, index):
     return {"name": name, "args": args, "id": None, "index": index, "type": "tool_call"}
+
+
+def test_load_config_profiles():
+    """config.example.json 로드 — ollama·openai·azure를 섞어 각 프로바이더 설정 형태를
+    보여주는 예시(편차 13) 기준. "_"로 시작하는 설명 키는 무시돼야 통과한다."""
+    profiles = load_config(Path(__file__).parent.parent / "backend" / "planforge" / "config.example.json")
+    assert set(profiles) == {"interview", "derive", "review", "plan_revise"}
+    assert profiles["interview"].provider == "azure"
+    assert profiles["derive"].model == "gpt-5.6-luna"  # config.example.json 샘플 모델과 동기
+    assert profiles["review"].provider == "ollama"
+    assert profiles["review"].model == "gemma4:26b"
+    assert profiles["plan_revise"].provider == "openai"
+    assert profiles["plan_revise"].model == "gpt-5.6-luna"  # plan_revise 프로필 로드 (review 폴백 버그 수정)
 
 
 def test_base_url_env_override(monkeypatch):

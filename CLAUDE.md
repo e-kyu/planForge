@@ -29,14 +29,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. **다중 문서 태그**: `[문서: 제안서+개발설계서]` 태그로 문서별 필터링, 문서별 목차 재채번.
 7. **디자인 토큰 4종 세트**: 색·폰트·여백 토큰 변경 시 **토큰(theme.py)·렌더러(빌더)·
    계약 fixture(tests/fixtures/*.sample.json)·프론트 미러(tokens.css)** 를 반드시 동시
-   점검·수정 — 좌표 규격 변경이면 fixture 갱신 (절차: `docs/token-checklist.md`).
+   점검·수정 — 좌표 규격 변경이면 fixture 갱신 (절차: `docs/UI_GUIDE.md` §토큰 변경 절차).
    하나만 고치는 PR은 리뷰에서 반려.
 8. **골격 검증**: 파생물 생성 전 표지·목차·마무리·내용 슬라이드 각 1개 이상 검증, 미달 시 중단.
 
 ## 아키텍처 요점
 
 **구조**: 가이드(`sources/default_architecture_guidelines.md`) 적용 — 백엔드 모듈러 모놀리식
-(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/architecture-decisions.md`.
+(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/ADR.md`.
 **모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
 `facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 모듈·feature를 템플릿으로 복제.
 
@@ -81,7 +81,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider 어댑터 계층으로만 한다
   (`chat_fn`/`stream_fn` dict 계약 유지). anthropic SDK 사용 금지.
 - 인터뷰 턴 계약(도구 전용 출력·ask_questions 스키마·검증 재시도):
-  `docs/interview-turn-contract.md` — 계약 파일(interview.md 프롬프트·tools.py
+  `docs/INTERVIEW-TURN-CONTRACT.md` — 계약 파일(interview.md 프롬프트·tools.py
   스키마/검증·이 문서·테스트)은 동시 점검·수정한다 (토큰 4종 세트 절차와 동일 —
   하나만 고치는 PR은 반려).
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
@@ -109,7 +109,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 명령어
 
 - 가상환경: `backend/.venv` (`.vscode/settings.json`이 인터프리터로 지정).
-- 슬래시: `/kickoff`(세션 진입점) · `/contract`(계약 테스트) · `/numcheck`(수치 무결성)
+- 슬래시: `/harness`(하네스 워크플로우) · `/review`(변경사항 리뷰 체크리스트)
 - CLI (backend/에서): `python -m planforge parse|numcheck|build-ppt|build-doc|derive ...`
 - DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/planforge.db`.
   스키마 변경은 `alembic revision`으로 마이그레이션 추가(개발용 `init_db`는 alembic 대체로만).
@@ -117,4 +117,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 타입 갱신: backend/ `python scripts/export_openapi.py` → frontend/ `npm run gen:types`
 - API 전체 목록은 `backend/app/main.py`·OpenAPI 참조.
 - 배포: `docker compose build && docker compose up -d`
-- 토큰 변경 절차: `docs/token-checklist.md` (원칙 7)
+- 토큰 변경 절차: `docs/UI_GUIDE.md` §토큰 변경 절차 (원칙 7)
+
+## 하네스 워크플로우 (/harness)
+
+step 기반 자동 실행 하네스(`scripts/execute.py`)를 제공한다. 워크플로우 상세는
+`/harness` 슬래시 커맨드 참조 — A탐색(docs) → B논의 → C Step 설계 → D
+`phases/` 파일 생성 → E 실행.
+
+- 위치 규약: `phases/index.json`·`phases/{task}/index.json`·`step{N}.md`는 커밋
+  대상. `step{N}-output.json`·`phase*-output.json`은 gitignored 실행 산출물.
+- 실행: `python scripts/execute.py {task}` — `feat-{task}` 브랜치 자동 생성,
+  완료 step summary를 다음 step 컨텍스트로 누적, 최대 3회 자가 교정, feat/chore
+  2단계 커밋, KST 타임스탬프 기록. 안전망 테스트:
+  `python -m pytest scripts/test_execute.py -q`.
+- **우선관계**: 하네스 step 세션에서도 이 파일의 설계 원칙 계약 8개가 최상위다.
+  step은 `claude -p --dangerously-skip-permissions` 자식 세션으로 실행되지만
+  SSOT 가드훅(`guard_ssot.py`)·Bash 가드훅(`guard_bash.py`)은 자식 세션에서도
+  동작한다 — step에서 파생물을 직접 수정하려 하면 차단되는 것이 정상 동작이다.
+- `/harness-init`은 이식하지 않았다. planForge는 CLAUDE.md·docs 셋팅이 완료된
+  프로젝트이고 개발요청 원문(AGENT-DEV-REQUEST.md)은 git 이력에만 존재하므로
+  플레이스홀더 치환 단계가 필요 없다.

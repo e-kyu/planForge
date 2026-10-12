@@ -6,17 +6,30 @@ from urllib.parse import unquote
 
 from app.shared.workspace import read_sources_context
 
+from _helpers import make_project
+
 OVERVIEW = "overview.md"  # shared.workspace.OVERVIEW_NAME — 하드코딩으로 계약 고정
 
 
-def _mk(client, slug="src-demo"):
-    r = client.post("/api/projects", json={"slug": slug, "title": "소스 데모"})
-    assert r.status_code == 201, r.text
-    return r.json()["id"]
+def test_get_settings_reads_env_freshly(monkeypatch, tmp_path):
+    """Settings 캐시 없음 — get_settings는 호출마다 os.environ을 재독록한다(config.py 계약).
+
+    아래 두 테스트(test_global_sources_readonly_listing·test_global_source_download_
+    roundtrip)가 캐시 리셋 없이 monkeypatch.setenv로 GLOBAL_SOURCES_DIR을 재구성하는
+    것은 이 계약의 암묵 의존이다 — 명시 잠금으로 승격한다. 프로덕션 무변경.
+    """
+    from app.shared.config import get_settings
+
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(tmp_path / "a"))
+    s1 = get_settings()
+    monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(tmp_path / "b"))
+    s2 = get_settings()
+    assert s1.global_sources_dir != s2.global_sources_dir
+    assert s2.global_sources_dir == tmp_path / "b"
 
 
 def test_upload_list_delete_source(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("요구사항.md", "# 요구\n- v2.0".encode("utf-8"),
                                     "text/markdown")})
@@ -38,7 +51,7 @@ def test_upload_list_delete_source(client, db_env):
 
 
 def test_upload_rejects_bad_extension(client):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     for fname in ("악성.exe", "스크립트.js", "그림.png", "확장자없음"):
         r = client.post(f"/api/projects/{pid}/sources",
                         files={"file": (fname, b"x", "application/octet-stream")})
@@ -46,7 +59,7 @@ def test_upload_rejects_bad_extension(client):
 
 
 def test_upload_rejects_oversize_and_non_utf8(client):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     big = b"a" * (2 * 1024 * 1024 + 1)
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("큰파일.md", big, "text/markdown")})
@@ -60,7 +73,7 @@ def test_upload_rejects_oversize_and_non_utf8(client):
 
 
 def test_upload_duplicate_conflict_and_overwrite_never(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     data = b"# v1"
     client.post(f"/api/projects/{pid}/sources",
                 files={"file": ("요구.md", data, "text/markdown")})
@@ -72,7 +85,7 @@ def test_upload_duplicate_conflict_and_overwrite_never(client, db_env):
 
 
 def test_upload_filename_traversal_and_forbidden_chars_sanitized(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     # 경로 성분 제거 — 서버의 다른 디렉토리에 쓰일 수 없다
     r = client.post(f"/api/projects/{pid}/sources",
                     files={"file": ("../../evil.md", b"x", "text/markdown")})
@@ -92,7 +105,7 @@ def test_upload_filename_traversal_and_forbidden_chars_sanitized(client, db_env)
 
 
 def test_deleted_source_404_and_unknown_project_404(client):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.delete(f"/api/projects/{pid}/sources/없는파일.md")
     assert r.status_code == 404
     r = client.get("/api/projects/9999/sources")
@@ -107,7 +120,7 @@ def test_global_sources_readonly_listing(client, db_env, monkeypatch):
     glob.mkdir(parents=True)
     (glob / "공용-메뉴얼.txt").write_text("공용 소스", encoding="utf-8")
     monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
-    # get_settings는 환경변수를 매 요청 새로 읽는다 — 캐시 리셋 없이 재구성됨
+    # get_settings는 env를 매 요청 새로 읽는다 — 잠금: test_get_settings_reads_env_freshly
     r = client.get("/api/sources")
     items = [s for s in r.json() if s["name"] == "공용-메뉴얼.txt"]
     assert len(items) == 1
@@ -124,7 +137,7 @@ def _overview_path(db_env, slug="src-demo"):
 
 
 def test_overview_missing_returns_empty(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.get(f"/api/projects/{pid}/overview")
     assert r.status_code == 200, r.text
     assert r.json() == {"exists": False, "content": "", "size": 0, "mtime": None}
@@ -133,7 +146,7 @@ def test_overview_missing_returns_empty(client, db_env):
 
 
 def test_overview_put_creates_lf_no_bom(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.put(f"/api/projects/{pid}/overview", json={"content": "# 프로젝트 개요\n\n## 목적"})
     assert r.status_code == 200, r.text
     body = r.json()
@@ -145,7 +158,7 @@ def test_overview_put_creates_lf_no_bom(client, db_env):
 
 
 def test_overview_put_overwrites_and_normalizes_newlines(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r1 = client.put(f"/api/projects/{pid}/overview", json={"content": "# v1"})
     assert r1.status_code == 200, r1.text
     # 소스 업로드의 409-무덮어쓰기와 달리 개요는 업서트가 유일한 쓰기 경로
@@ -156,7 +169,7 @@ def test_overview_put_overwrites_and_normalizes_newlines(client, db_env):
 
 
 def test_overview_get_roundtrip(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     content = "# 프로젝트 개요\n\n인터뷰 기본자료"
     client.put(f"/api/projects/{pid}/overview", json={"content": content})
     r = client.get(f"/api/projects/{pid}/overview")
@@ -168,7 +181,7 @@ def test_overview_get_roundtrip(client, db_env):
 
 
 def test_overview_put_rejects_empty(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     for content in ("", "   \n  "):
         r = client.put(f"/api/projects/{pid}/overview", json={"content": content})
         assert r.status_code == 409
@@ -177,7 +190,7 @@ def test_overview_put_rejects_empty(client, db_env):
 
 
 def test_overview_put_rejects_oversize(client):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.put(f"/api/projects/{pid}/overview",
                    json={"content": "a" * (2 * 1024 * 1024 + 1)})
     assert r.status_code == 409
@@ -194,7 +207,7 @@ def test_overview_unknown_project_404(client):
 # ---------------------------------------------------------------- 소스 다운로드 (DELETE와 대칭)
 
 def test_source_download_roundtrip(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     client.put(f"/api/projects/{pid}/overview", json={"content": "# 개요 본문"})
     client.post(f"/api/projects/{pid}/sources",
                 files={"file": ("메뉴얼.txt", "일반 소스 본문".encode("utf-8"), "text/plain")})
@@ -211,13 +224,13 @@ def test_source_download_roundtrip(client, db_env):
 
 
 def test_source_download_missing_404(client):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     r = client.get(f"/api/projects/{pid}/sources/{OVERVIEW}/download")
     assert r.status_code == 404
 
 
 def test_source_delete_and_download_reject_traversal(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     plan = db_env / "src-demo" / "plan.md"  # sources/ 밖 — 접근 불가해야 한다
     plan.write_text("# plan", encoding="utf-8")
     # httpx는 URL의 '.' 세그먼트를 클라이언트에서 정규화해 버리므로(앱 미도달),
@@ -236,6 +249,7 @@ def test_global_source_download_roundtrip(client, db_env, monkeypatch):
     glob = db_env / "global-sources"
     glob.mkdir(parents=True)
     (glob / "공용-메뉴얼.txt").write_text("공용 소스 본문", encoding="utf-8")
+    # env 재독록 계약(잠금: test_get_settings_reads_env_freshly)이 setenv를 그대로 반영한다
     monkeypatch.setenv("GLOBAL_SOURCES_DIR", str(glob))
 
     r = client.get("/api/sources/공용-메뉴얼.txt/download")
@@ -266,7 +280,7 @@ def test_global_source_download_missing_and_traversal(client, db_env, monkeypatc
 
 
 def test_overview_in_sources_list_and_interview_context(client, db_env):
-    pid = _mk(client)
+    pid = make_project(client, "src-demo", "소스 데모")
     content = "# 프로젝트 개요\n\n인터뷰 기본자료로 활용된다"
     client.put(f"/api/projects/{pid}/overview", json={"content": content})
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fakes import FakeLLM, tool_call
+from _helpers import make_project
 
 from app.modules.facts.application.compact import build_context, run_llm_compact
 
@@ -15,12 +16,6 @@ PROPOSAL = {
          "reason": "#3이 최종 확정값"},
     ],
 }
-
-
-def _project(client) -> int:
-    r = client.post("/api/projects", json={"slug": "compact-t", "title": "x"})
-    assert r.status_code == 201
-    return r.json()["id"]
 
 
 def _fact(client, pid: int, content: str, source: str = "사내 집계") -> int:
@@ -49,7 +44,7 @@ def test_run_llm_compact_failure_is_lossless():
 # ---------------------------------------------------------------- API 게이트
 
 def _seed(client) -> tuple[int, dict]:
-    pid = _project(client)
+    pid = make_project(client, "compact-t")
     ids = {
         "old1": _fact(client, pid, "3분기 매출 12.4억 원 (임시 추산)"),
         "old2": _fact(client, pid, "3분기 매출 12.4억 원 (부서별 합산)"),
@@ -60,46 +55,52 @@ def _seed(client) -> tuple[int, dict]:
     return pid, ids
 
 
-def test_compact_preview_filters_invalid_and_unconfirmed(client, app):
-    pid, ids = _seed(client)
+def test_compact_preview_filters_invalid_and_unconfirmed(llm_app_factory):
+    """create_app(llm_overrides=...) 계약 경로로 주입 — state 직접 대입 금지
+    (compact는 derive 프로필 차용). 새 DB라 fact id는 결정론적(1..5) — PROPOSAL
+    상수와 동일한 근거로 keep_id=3·archive_ids를 하드코딩하고, 응답은 _seed의
+    실제 ids로 대조한다."""
     llm = FakeLLM([tool_call("propose_compact", {
         "summary": "중복 발견",
         "groups": [
-            {"topic": "매출", "keep_id": ids["final"],
-             "archive_ids": [ids["old1"], ids["old2"], ids["unconf"], 999, 999]},
-            {"topic": "나쁜 그룹", "keep_id": 999, "archive_ids": [ids["solo"]]},
-            {"topic": "빈 그룹", "keep_id": ids["solo"], "archive_ids": []},
+            {"topic": "매출", "keep_id": 3, "archive_ids": [1, 2, 4, 999, 999]},
+            {"topic": "나쁜 그룹", "keep_id": 999, "archive_ids": [5]},
+            {"topic": "빈 그룹", "keep_id": 5, "archive_ids": []},
         ],
     })])
-    app.state.llm_overrides = {"derive": llm}
-    r = client.post(f"/api/projects/{pid}/facts/compact")
-    assert r.status_code == 200, r.text
-    out = r.json()
-    assert out["ok"] is True and len(out["groups"]) == 1
-    g = out["groups"][0]
-    assert g["keep_id"] == ids["final"]
-    # (미확정)·미존재 id는 결정론 강제로 제거, keep만 남은 그룹은 제외
-    assert g["archive_ids"] == [ids["old1"], ids["old2"]]
+    with llm_app_factory({"derive": llm}) as kit:
+        client = kit.client
+        pid, ids = _seed(client)
+        r = client.post(f"/api/projects/{pid}/facts/compact")
+        assert r.status_code == 200, r.text
+        out = r.json()
+        assert out["ok"] is True and len(out["groups"]) == 1
+        g = out["groups"][0]
+        assert g["keep_id"] == ids["final"]
+        # (미확정)·미존재 id는 결정론 강제로 제거, keep만 남은 그룹은 제외
+        assert g["archive_ids"] == [ids["old1"], ids["old2"]]
 
 
-def test_compact_preview_llm_failure_is_lossless(client, app):
-    pid, _ = _seed(client)
-    app.state.llm_overrides = {"derive": FakeLLM([{"content": "?", "tool_calls": []}] * 2)}
-    r = client.post(f"/api/projects/{pid}/facts/compact")
-    out = r.json()
-    assert out["ok"] is False and out["warning"] and out["groups"] == []
-    facts = client.get(f"/api/projects/{pid}/facts").json()
-    assert len(facts) == 5 and all(f["status"] == "active" for f in facts)
+def test_compact_preview_llm_failure_is_lossless(llm_app_factory):
+    llm = FakeLLM([{"content": "?", "tool_calls": []}] * 2)
+    with llm_app_factory({"derive": llm}) as kit:
+        client = kit.client
+        pid, _ = _seed(client)
+        r = client.post(f"/api/projects/{pid}/facts/compact")
+        out = r.json()
+        assert out["ok"] is False and out["warning"] and out["groups"] == []
+        facts = client.get(f"/api/projects/{pid}/facts").json()
+        assert len(facts) == 5 and all(f["status"] == "active" for f in facts)
 
 
 def test_compact_preview_needs_two_facts(client):
-    pid = _project(client)
+    pid = make_project(client, "compact-t")
     _fact(client, pid, "단일 팩트")
     out = client.post(f"/api/projects/{pid}/facts/compact").json()
     assert out["ok"] is True and out["groups"] == []
 
 
-def test_compact_apply_archives_and_rewrites_mirror(client, app, db_env):
+def test_compact_apply_archives_and_rewrites_mirror(client):
     pid, ids = _seed(client)
     body = {"groups": [{"topic": "매출", "keep_id": ids["final"],
                         "archive_ids": [ids["old1"], ids["old2"], ids["unconf"]]}]}
@@ -128,7 +129,7 @@ def test_compact_apply_archives_and_rewrites_mirror(client, app, db_env):
     assert "3분기 매출 12.4억 원 (임시 추산)" in arch
 
 
-def test_compact_apply_skips_missing_ids(client, app, db_env):
+def test_compact_apply_skips_missing_ids(client):
     pid, ids = _seed(client)
     body = {"groups": [{"topic": "매출", "keep_id": 999,
                         "archive_ids": [ids["old1"], ids["old2"]]}]}

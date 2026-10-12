@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""LLM 도구 루프의 LangGraph 오케스트레이션 (docs/architecture-decisions.md 편차 11).
+"""LLM 도구 루프의 LangGraph 오케스트레이션 (docs/ADR.md 편차 11).
 
 derive(스키마·numcheck 재시도)·plan_revise(포맷 재시도)·review·compact(nudge)가
 공유하는 단일 패턴 — "chat_fn 호출 → 도구 누락이면 nudge / 검증 실패면 tool 피드백

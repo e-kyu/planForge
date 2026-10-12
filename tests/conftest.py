@@ -37,11 +37,17 @@ def test_engine(db_env):
 
 
 @pytest.fixture()
-def app(db_env, test_engine):
+def llm_overrides():
+    """create_app에 주입하는 프로필별 LLM 오버라이드 — 기본 None(실 provider 계약 동일)."""
+    return None
+
+
+@pytest.fixture()
+def app(db_env, test_engine, llm_overrides):
     from app.main import create_app
 
     # 워커 루프 비활성 — 테스트는 run_job을 직접 호출해 결정론적으로 검증한다
-    return create_app(start_worker=False)
+    return create_app(start_worker=False, llm_overrides=llm_overrides)
 
 
 @pytest.fixture()
@@ -50,3 +56,27 @@ def client(app):
 
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture()
+def llm_app_factory(db_env, test_engine):
+    """프로필별 LLM 오버라이드를 주입한 앱+클라이언트 킷 팩토리.
+
+    create_app(llm_overrides=...)의 계약 경로를 강제한다 — app.state.llm_overrides에
+    직접 대입하는 주입은 금지(C6). with llm_app_factory({"interview": fake}) as kit:
+    로 kit.client·kit.app을 쓴다."""
+    from contextlib import contextmanager
+
+    from fastapi.testclient import TestClient
+
+    @contextmanager
+    def _factory(overrides=None):
+        from types import SimpleNamespace
+
+        from app.main import create_app
+
+        app = create_app(start_worker=False, llm_overrides=overrides or {})
+        with TestClient(app) as client:
+            yield SimpleNamespace(app=app, client=client)
+
+    return _factory

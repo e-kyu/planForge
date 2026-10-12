@@ -21,7 +21,7 @@
 - `src/api/types.gen.ts`는 **자동 생성물** — 손으로 편집하지 않는다. 갱신은 backend에서
   `python scripts/export_openapi.py` 실행 후 `npm run gen:types`.
 - 디자인 토큰은 `tokens.css`(미러) — 토큰 변경 시 루트 원칙 7의 4종 세트 동시 점검
-  (`docs/token-checklist.md` 절차).
+  (`docs/UI_GUIDE.md` §토큰 변경 절차).
 
 ## 실행·명령
 

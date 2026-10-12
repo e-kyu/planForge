@@ -3,7 +3,7 @@
 인터뷰 프로필 LLM이 한 턴에 반환해야 할 구조와 서버의 강제 방식을 기술한다.
 모델(특히 소형 모델)을 교체해도 이 계약이 유지되도록 하는 것이 목적이다 — 구조 준수를
 프롬프트에만 맡지 않고 서버 검증 + 같은 턴 내 재시도로 기계적으로 잠근다. 이 문서를
-고치지 않고 계약을 바꾸는 PR은 반려한다 (`docs/token-checklist.md`의 토큰 4종 세트와
+고치지 않고 계약을 바꾸는 PR은 반려한다 (CLAUDE.md 설계 원칙 7의 토큰 4종 세트와
 동일 성격).
 
 ## 턴 출력 프로토콜 (도구 전용)
@@ -106,7 +106,7 @@
 |---|---|---|---|
 | 1 | `backend/app/agents/tools.py` | `INTERVIEW_TOOLS` 스키마 + `validate_tool_args` (권위·기준점) | **수정** |
 | 2 | `backend/app/modules/interview/application/prompts/interview.md` | 런타임 LLM 프롬프트 — 계약 서술의 원문 | **수정** — 같은 계약으로 |
-| 3 | `docs/interview-turn-contract.md` | 이 대조표 | **수정** — 같은 계약으로 |
+| 3 | `docs/INTERVIEW-TURN-CONTRACT.md` | 이 대조표 | **수정** — 같은 계약으로 |
 | 4 | `tests/test_agents_tools.py` · `tests/test_interview_api.py` | 스키마 잠금·재시도 잠금 (스크립트된 가짜 LLM) | **수정** — 새 위반 케이스 회귀 테스트 추가 |
 
 하나만 고치는 PR은 리뷰에서 반려한다.

@@ -247,7 +247,7 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       정규화·빈 라벨 거부, description은 문자열 검사. (2) provider — `ProfileConfig
       .tool_choice`(기본 auto) → `bind_tools` 전달(하드코딩 "auto" 대체; "required"는
       도구 미호출 모델이 도구만 호출하게 강제). 계약 외 값은 생성 시점 ValueError.
-      계약 문서 `docs/interview-turn-contract.md` 신설(계약 4종 동시 점검 + 모델 교체
+      계약 문서 `docs/INTERVIEW-TURN-CONTRACT.md` 신설(계약 4종 동시 점검 + 모델 교체
       체크리스트 — CLAUDE.md 규칙 절차 참조).
     - 불변: `chat_fn`/`stream_fn` dict 계약·이벤트 포맷·`_to_lc_messages` 위치·
       `max_retries=0`·anthropic 금지·OpenAPI/프론트 무변경(`pending_questions`

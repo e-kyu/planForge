@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""인터뷰 턴 루프의 LangGraph 오케스트레이션 (docs/architecture-decisions.md 편차 10).
+"""인터뷰 턴 루프의 LangGraph 오케스트레이션 (docs/ADR.md 편차 10).
 
 턴 1건 = 그래프 1회 invoke. checkpointer 없음 — 세션 상태(phase·round_no·pending_*)
 는 DB(interview_sessions)가 SSOT이고, 게이트(/answers·/facts/confirm·/key-messages)는

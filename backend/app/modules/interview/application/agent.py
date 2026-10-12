@@ -51,7 +51,7 @@ PLAN_FIX_ATTEMPTS = 3  # write_plan 검증 실패 재시도 한도 (포맷 오�
 
 # write_plan 포맷 검증 실패 시 ERROR 피드백에 붙는 치료안 — 파서 메시지는 결정론 파이프라인
 # 공용(derive·numcheck·CLI)이라 파서를 건드리지 않고, LLM 대면 피드백만 앱 계층에서 관리한다.
-# 교정 예 두 건은 실세션 수업 기반(docs/interview-turn-contract.md 실패 수업 참조): 목차를
+# 교정 예 두 건은 실세션 수업 기반(docs/INTERVIEW-TURN-CONTRACT.md 실패 수업 참조): 목차를
 # `- 내용:`, 표 데이터 행을 `- 행:`으로 쓴 임의 키 위반이 동일 반복돼 PLAN_FIX_ATTEMPTS를
 # 소진했다 — ask_questions 검증기(결정 18)와 같은 "원문+치료안" 형태로 재시도 1회 수렴을 노린다.
 PLAN_BULLET_CHEATSHEET = (

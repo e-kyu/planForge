@@ -83,8 +83,36 @@ def correct_report_payload() -> dict:
     }
 
 
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _fixture_md(name: str) -> str:
+    return (_FIXTURES / name).read_text(encoding="utf-8-sig")
+
+
 def plan_sample_markdown() -> str:
-    return (Path(__file__).parent / "fixtures" / "plan.sample.md").read_text(encoding="utf-8-sig")
+    return _fixture_md("plan.sample.md")
+
+
+def multidoc_plan_markdown() -> str:
+    """다문서 샘플(제안서+개발설계서) — 검수 doc-tag·목차 대조 테스트용."""
+    return _fixture_md("plan.multidoc.md")
+
+
+def plan_skeleton_bad_markdown() -> str:
+    """골격 미달 plan — 표지·목차·마무리 누락(원칙 8 위반) 검증 게이트 테스트용.
+    메타에 '산출 문서' 생략 → 파서 기본 문서('제안서') fallback 경로도 함께 잠근다."""
+    return _fixture_md("plan.skeleton_bad.md")
+
+
+def plan_interview_design_markdown() -> str:
+    """인터뷰 e2e 설계 결정 설문 시나리오의 최종 plan (개발설계서 단독 문서)."""
+    return _fixture_md("plan.interview-design.md")
+
+
+def plan_interview_proposal_markdown() -> str:
+    """인터뷰 e2e 제안서 아크 시나리오의 최종 plan (제안서 단독 문서)."""
+    return _fixture_md("plan.interview-proposal.md")
 
 class FakeStreamLLM:
     """stream_fn 계약(provider.stream) 가짜 — 인터뷰 에이전트 턴 스크립트.

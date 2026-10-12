@@ -5,10 +5,6 @@
 잠근다 — FakeLLM.calls 어설션이 각 사이트 테스트와 같은 형태다.
 """
 import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 from fakes import FakeLLM, tool_call
 from planforge.llm.loops import run_tool_loop

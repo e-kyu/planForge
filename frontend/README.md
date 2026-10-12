@@ -151,7 +151,7 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
   2. **화면 전용 토큰**(미러 아님) — surface/shadow/space/radius/`--header-h`/`--container`.
 - **토큰 4종 세트 계약(원칙 7)**: SSOT는 `backend/planforge/builders/theme.py`이며
   theme.py(권위) · 빌더 리터럴 · `tests/fixtures` · `frontend/tokens.css`를 **동시
-  점검·수정**해야 한다. 절차는 `docs/token-checklist.md` — 하나만 고치는 PR은 반려된다.
+  점검·수정**해야 한다. 절차는 `docs/UI_GUIDE.md` §토큰 변경 절차 — 하나만 고치는 PR은 반려된다.
 - 반응형은 미디어쿼리(768/1024/800/480px 등)로 처리한다.
 
 ## 스모크 스크립트
@@ -185,5 +185,5 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 - 인터뷰 턴 추가/변경 시 **POST=SSE 계약**을 유지한다(새 EventSource GET 금지).
 - plan 데이터의 유일 원본은 백엔드 DB(`plans.markdown`)다. 프론트는 plan을 고치면
   항상 revise API로 새 세대를 만들고, 직접 덮어쓰는 경로를 만들지 않는다(SSOT).
-- 디자인 토큰 변경은 `docs/token-checklist.md` 절차(4종 세트 동시 수정)를 따른다.
+- 디자인 토큰 변경은 `docs/UI_GUIDE.md` 절차(4종 세트 동시 수정)를 따른다.
 - 아이콘은 lucide-react만, 새 UI 라이브러리 도입은 금지(의존성 최소 원칙).

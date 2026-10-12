@@ -2,38 +2,23 @@
 """plan API 테스트 — 승인 게이트(FR-2.9)·세대 교체·수정 게이트(FR-4.3)."""
 from __future__ import annotations
 
-from fakes import plan_sample_markdown
-
-
-def _make_project(client) -> int:
-    client.post("/api/projects", json={"slug": "plan-demo", "title": "plan 데모"})
-    return 1
-
-
-def _insert_plan(app, project_id: int, version_no: int = 1, status: str = "draft") -> int:
-    from app.shared.db import make_session_factory
-    from app.modules.plans.infrastructure.models import Plan, PlanOrigin, PlanStatus
-
-    with make_session_factory(app.state.settings.database_url)() as s:
-        plan = Plan(project_id=project_id, version_no=version_no,
-                    markdown=plan_sample_markdown(), docs=["제안서", "개발설계서"],
-                    parsed_ok=True, status=PlanStatus(status), origin=PlanOrigin.INTERVIEW)
-        s.add(plan)
-        s.commit()
-        return plan.id
+from fakes import plan_sample_markdown, plan_skeleton_bad_markdown
+from _helpers import insert_plan, make_project
 
 
 def test_list_and_get_plans(client, app):
-    pid = _make_project(client)
-    _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    insert_plan(app, pid, 1, status="draft", origin="interview",
+                docs=("제안서", "개발설계서"))
     r = client.get(f"/api/projects/{pid}/plans")
     assert r.status_code == 200 and len(r.json()) == 1
     assert r.json()[0]["version_no"] == 1 and r.json()[0]["status"] == "draft"
 
 
 def test_approve_flow_and_supersede(client, app, db_env):
-    pid = _make_project(client)
-    v1 = _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    v1 = insert_plan(app, pid, 1, status="draft", origin="interview",
+                     docs=("제안서", "개발설계서"))
     assert client.post(f"/api/plans/{v1}/approve").status_code == 200
 
     # 승인 후 재승인 → 409
@@ -59,8 +44,9 @@ def test_approve_flow_and_supersede(client, app, db_env):
 
 
 def test_revise_invalid_markdown_422(client, app):
-    pid = _make_project(client)
-    plan_id = _insert_plan(app, pid, 1)
+    pid = make_project(client, "plan-demo", "plan 데모")
+    plan_id = insert_plan(app, pid, 1, status="draft", origin="interview",
+                          docs=("제안서", "개발설계서"))
     bad = "# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n\n## 슬라이드 목록\n"
     r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": bad})
     assert r.status_code == 422
@@ -75,8 +61,8 @@ def test_revise_invalid_markdown_422(client, app):
 
     # 파싱은 통과하지만 골격이 미달이면 422 — 단일 권위가 SkeletonError를 문서명 포함
     # PlanError로 감싼다 (전파되면 500이 됐던 결함의 잠금)
-    skel = ("# 기획\n\n## 메타\n- 목적: x\n\n## 핵심 메시지 (3개)\n1. a\n2. b\n3. c\n"
-            "\n## 슬라이드 목록\n\n### 1. [유형: 표] 데이터\n- 표: [항목 | 값]\n  - 항목1 | 1\n")
+    # fixtures/plan.skeleton_bad.md — 표지·목차·마무리 누락 (메타 산출 문서 생략 → 기본 문서 fallback)
+    skel = plan_skeleton_bad_markdown()
     r = client.post(f"/api/plans/{plan_id}/revise", json={"markdown": skel})
     assert r.status_code == 422
     assert "plan 골격 검증 실패" in r.json()["detail"]

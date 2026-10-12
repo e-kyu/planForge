@@ -2,6 +2,8 @@
 """프로젝트 API (FR-1) 테스트."""
 from __future__ import annotations
 
+from _helpers import session_factory
+
 
 def test_create_project_makes_workspace(client, db_env):
     r = client.post("/api/projects", json={"slug": "demo-proj", "title": "데모 프로젝트"})
@@ -47,12 +49,6 @@ def test_patch_project_archive(client, db_env):
 
 # ---------------------------------------------------------------- 삭제 (FR-1 확장)
 
-def _session_factory(client):
-    from app.shared.db import make_session_factory
-
-    return make_session_factory(client.app.state.settings.database_url)
-
-
 def _seed_children(client):
     """추적성 사슬 전체를 적립한다: 세션→메시지, 팩트, plan, 파생물, 빌드, 검수, job(done)."""
     from sqlalchemy import select, func
@@ -67,7 +63,7 @@ def _seed_children(client):
     from app.modules.plans.infrastructure.models import Plan
     from app.modules.review.infrastructure.models import ReviewReport
 
-    sf = _session_factory(client)
+    sf = session_factory(client)
     with sf() as s:
         sess = InterviewSession(project_id=1)
         s.add(sess)
@@ -115,7 +111,7 @@ def test_delete_project_blocked_by_active_job(client, db_env):
     client.post("/api/projects", json={"slug": "busy", "title": "실행 중"})
     from app.modules.jobs.infrastructure.models import Job, JobStatus, JobType
 
-    with _session_factory(client)() as s:
+    with session_factory(client)() as s:
         s.add(Job(project_id=1, type=JobType.REVIEW, status=JobStatus.QUEUED,
                   payload={}))
         s.commit()
