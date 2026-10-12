@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-10-13T00:11:00+0900",
       "summary": "docloops application/application-service + facade 구현 — backend/app/modules/docloops/application/service.py(DOC_KINDS·doc_label·init_project_loops·list_loops·has_doc_layout·require_session_doc·on_plan_approved·delete_project_data: 단방향 래치 locked→active→done, 커밋은 호출자 트랜잭션, http_404/409 헬퍼) · facade.py 재수출(facts 패턴, __all__) · 리프 모듈 계약(타 모듈 facade import 0) · tests/test_docloops_service.py 10건 신설 — AC 10 passed · 전체 314 passed + 1 skipped",
-      "completed_at": "2026-10-13T00:30:00+0900"
+      "completed_at": "2026-10-13T00:18:02+0900"
     },
     {
       "step": 3,
