@@ -581,6 +581,7 @@
           "plans"
         ],
         "summary": "List Plans",
+        "description": "plan 세대 목록 — doc_slug가 주어지면 그 문서의 세대만 (None = 전체, 기존 동작).",
         "operationId": "list_plans_api_projects__project_id__plans_get",
         "parameters": [
           {
@@ -590,6 +591,22 @@
             "schema": {
               "type": "integer",
               "title": "Project Id"
+            }
+          },
+          {
+            "name": "doc_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doc Slug"
             }
           }
         ],
@@ -939,6 +956,22 @@
             "schema": {
               "type": "integer",
               "title": "Project Id"
+            }
+          },
+          {
+            "name": "doc_slug",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Doc Slug"
             }
           }
         ],
@@ -1910,6 +1943,53 @@
         }
       }
     },
+    "/api/projects/{project_id}/docloops": {
+      "get": {
+        "tags": [
+          "docloops"
+        ],
+        "summary": "List Docloops",
+        "description": "문서 루프 3건(proposal·uiux-design·dev-design 순정렬) — 프로젝트 목록 화면이\n문서 버튼 상태(locked/active/done)를 N+1 없이 알기 위한 읽기 계약.\n\ndoc_loops 행이 없는 프로젝트(레거시)는 []를 반환한다 — 프론트는 빈 목록을\n\"레거시 프로젝트\"로 보고 문서 버튼을 렌더링하지 않는다.",
+        "operationId": "list_docloops_api_projects__project_id__docloops_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocLoopOut"
+                  },
+                  "title": "Response List Docloops Api Projects  Project Id  Docloops Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -2199,6 +2279,17 @@
             ],
             "title": "Doc"
           },
+          "doc_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Slug"
+          },
           "fmts": {
             "anyOf": [
               {
@@ -2279,6 +2370,51 @@
           "created_at"
         ],
         "title": "DerivativeOut"
+      },
+      "DocLoopOut": {
+        "properties": {
+          "doc_slug": {
+            "type": "string",
+            "title": "Doc Slug"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "plan_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Version"
+          },
+          "plan_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_slug",
+          "label",
+          "status"
+        ],
+        "title": "DocLoopOut"
       },
       "FactCreate": {
         "properties": {
@@ -2729,6 +2865,17 @@
             "type": "integer",
             "title": "Version No"
           },
+          "doc_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Slug"
+          },
           "markdown": {
             "type": "string",
             "title": "Markdown"
@@ -2887,6 +3034,14 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "docloops": {
+            "items": {
+              "$ref": "#/components/schemas/DocLoopOut"
+            },
+            "type": "array",
+            "title": "Docloops",
+            "default": []
           }
         },
         "type": "object",
@@ -2993,7 +3148,19 @@
         "title": "ReviewOut"
       },
       "SessionCreate": {
-        "properties": {},
+        "properties": {
+          "doc_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Slug"
+          }
+        },
         "type": "object",
         "title": "SessionCreate"
       },
@@ -3006,6 +3173,17 @@
           "project_id": {
             "type": "integer",
             "title": "Project Id"
+          },
+          "doc_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Slug"
           },
           "phase": {
             "type": "string",
@@ -3113,6 +3291,7 @@
         "required": [
           "id",
           "project_id",
+          "doc_slug",
           "phase",
           "round_no",
           "status",

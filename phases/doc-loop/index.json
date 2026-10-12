@@ -61,7 +61,10 @@
     {
       "step": 7,
       "name": "contract-types",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-13T00:41:12+0900",
+      "summary": "계약 재export(backend venv) + 프론트 타입 갱신 — openapi.json 181행(diff: docloops 신설 GET /api/projects/{pid}/docloops·DocLoopOut·ProjectOut.docloops 내장·PlanOut/SessionOut/SessionCreate/DerivativeCreate/BuildOut.doc_slug·list_plans·outputs doc_slug query) · npm run gen:types로 types.gen.ts 97행 반영 — step 8·9 소비용 타입: components[\"schemas\"][\"DocLoopOut\"](status·doc_slug·title·label), ProjectOut.docloops: DocLoopOut[], doc_slug 필드는 PlanOut/SessionOut 등 optional(string | null) · npm run build(tsc --noEmit 포함) 통과 — 기존 코드 무수정(optional 필드 추가)",
+      "completed_at": "2026-10-13T00:41:49+0900"
     },
     {
       "step": 8,

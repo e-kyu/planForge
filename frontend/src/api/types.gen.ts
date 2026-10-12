@@ -185,7 +185,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Plans */
+        /**
+         * List Plans
+         * @description plan 세대 목록 — doc_slug가 주어지면 그 문서의 세대만 (None = 전체, 기존 동작).
+         */
         get: operations["list_plans_api_projects__project_id__plans_get"];
         put?: never;
         post?: never;
@@ -629,6 +632,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{project_id}/docloops": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Docloops
+         * @description 문서 루프 3건(proposal·uiux-design·dev-design 순정렬) — 프로젝트 목록 화면이
+         *     문서 버튼 상태(locked/active/done)를 N+1 없이 알기 위한 읽기 계약.
+         *
+         *     doc_loops 행이 없는 프로젝트(레거시)는 []를 반환한다 — 프론트는 빈 목록을
+         *     "레거시 프로젝트"로 보고 문서 버튼을 렌더링하지 않는다.
+         */
+        get: operations["list_docloops_api_projects__project_id__docloops_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -752,6 +779,8 @@ export interface components {
             kind: string;
             /** Doc */
             doc?: string | null;
+            /** Doc Slug */
+            doc_slug?: string | null;
             /** Fmts */
             fmts?: string[] | null;
         };
@@ -775,6 +804,19 @@ export interface components {
             attempts: number;
             /** Created At */
             created_at: unknown;
+        };
+        /** DocLoopOut */
+        DocLoopOut: {
+            /** Doc Slug */
+            doc_slug: string;
+            /** Label */
+            label: string;
+            /** Status */
+            status: string;
+            /** Plan Version */
+            plan_version?: number | null;
+            /** Plan Id */
+            plan_id?: number | null;
         };
         /** FactCreate */
         FactCreate: {
@@ -938,6 +980,8 @@ export interface components {
             project_id: number;
             /** Version No */
             version_no: number;
+            /** Doc Slug */
+            doc_slug?: string | null;
             /** Markdown */
             markdown: string;
             /** Docs */
@@ -991,6 +1035,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Docloops
+             * @default []
+             */
+            docloops: components["schemas"]["DocLoopOut"][];
         };
         /** ProjectUpdate */
         ProjectUpdate: {
@@ -1023,13 +1072,18 @@ export interface components {
             created_at: unknown;
         };
         /** SessionCreate */
-        SessionCreate: Record<string, never>;
+        SessionCreate: {
+            /** Doc Slug */
+            doc_slug?: string | null;
+        };
         /** SessionOut */
         SessionOut: {
             /** Id */
             id: number;
             /** Project Id */
             project_id: number;
+            /** Doc Slug */
+            doc_slug: string | null;
             /** Phase */
             phase: string;
             /** Round No */
@@ -1524,7 +1578,9 @@ export interface operations {
     };
     list_plans_api_projects__project_id__plans_get: {
         parameters: {
-            query?: never;
+            query?: {
+                doc_slug?: string | null;
+            };
             header?: never;
             path: {
                 project_id: number;
@@ -1755,7 +1811,9 @@ export interface operations {
     };
     list_outputs_api_projects__project_id__outputs_get: {
         parameters: {
-            query?: never;
+            query?: {
+                doc_slug?: string | null;
+            };
             header?: never;
             path: {
                 project_id: number;
@@ -2399,6 +2457,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_docloops_api_projects__project_id__docloops_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocLoopOut"][];
                 };
             };
             /** @description Validation Error */
