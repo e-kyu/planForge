@@ -15,7 +15,7 @@
       "name": "source-path-guard-and-recursive-listing",
       "status": "completed",
       "started_at": "2026-10-12T22:26:04+0900",
-      "completed_at": "2026-10-12T22:28:37+0900",
+      "completed_at": "2026-10-12T22:28:49+0900",
       "summary": "_list_dir을 rglob 재귀+POSIX 상대경로 name으로 전환, _validated_source_path를 하위경로 허용+..·절대경로 차단+resolve containment로 재설계, delete·download 3개 라우트 {name:path} 전환 — 기존 테스트 무수정 통과 + 하위경로 roundtrip·성분 경유 트래버설 차단 신규 2건, 전체 스위트 녹색(272 passed)"
     },
     {
