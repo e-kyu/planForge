@@ -11,7 +11,8 @@ import json
 import pytest
 
 from app.agents.tools import MAX_SUGGESTIONS
-from _helpers import run_queue
+from _helpers import make_session, run_queue
+from app.modules.docloops.facade import DocLoop, DocLoopStatus
 from fakes import (
     FakeLLM,
     FakeStreamLLM,
@@ -81,6 +82,15 @@ def _setup(sclient) -> int:
     r = sclient.post("/api/projects/1/interview/sessions", json={})
     assert r.status_code == 201
     return r.json()["id"]
+
+
+def _activate_docloop(client, pid: int, doc_slug: str) -> None:
+    """doc_loops 행을 ACTIVE로 세팅 — locked 409 방지 (tests/test_docloops_api.py의
+    직접 DB 접근 패턴). proposal 루프는 생성 직후 active라 후속 문서(dev-design 등)에만 쓴다."""
+    with make_session(client) as db:
+        row = db.query(DocLoop).filter_by(project_id=pid, doc_slug=doc_slug).one()
+        row.status = DocLoopStatus.ACTIVE
+        db.commit()
 
 
 def test_interview_full_flow_to_plan_approval(base_kit, db_env):
@@ -232,8 +242,8 @@ DESIGN_PLAN_MARKDOWN = plan_interview_design_markdown()
 
 
 DESIGN_TURNS = [
-    # 턴1 kick: 가설(산출 문서 목록 첫 확정) + 설계 결정 설문 라운드 1
-    ("가설 초안: 산출 문서는 개발설계서 단독 — 설계 결정 설문을 진행한다.", [
+    # 턴1 kick: 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) + 설계 결정 설문 라운드 1
+    ("이번 인터뷰는 개발설계서 단독 인터뷰다. 가설 초안: 설계 결정 설문을 진행한다.", [
         ("update_checklist", {"items": [
             {"id": "d1", "area": "개발설계서", "text": "아키텍처 스타일·시스템 구성 확정",
              "done": False},
@@ -286,12 +296,14 @@ def design_kit(llm_app_factory):
 
 
 def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
-    """개발설계서 설계 결정 설문 — 가설(문서 목록 첫 확정) → 설계 질문 → 설계 결정 팩트
-    → 핵심 메시지 → plan(결정표·구성·비목표) → 승인."""
+    """개발설계서 설계 결정 설문 — 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) → 설계
+    질문 → 설계 결정 팩트 → 핵심 메시지 → plan(결정표·구성·비목표) → 승인.
+    세션은 doc_slug=dev-design로 고정 — 문서 목록을 묻지 않는다(step 2)."""
     dclient, design_llm = design_kit.client, design_kit.fake
     dclient.post("/api/projects", json={"slug": "design-e2e", "title": "설계 아크 e2e"})
-    r = dclient.post("/api/projects/1/interview/sessions", json={})
-    assert r.status_code == 201
+    _activate_docloop(dclient, 1, "dev-design")  # proposal 승인 없이 개발설계서 세션 허용
+    r = dclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "dev-design"})
+    assert r.status_code == 201, r.text
     sid = r.json()["id"]
 
     # kick — 가설 선제시 + 설계 질문 카드
@@ -322,7 +334,8 @@ def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
     assert "레이어드 모놀리식" in contents
     assert "대안 Django는 전환 비용으로 제외" in contents
     assert "(미확정)" in contents
-    log = db_env / "design-e2e" / "docs" / "interview-log.md"
+    # interview-log 미러 — 문서 세션은 문서별 ws 루트에 기록된다 (doc_loops 행 권위)
+    log = db_env / "design-e2e" / "dev-design" / "docs" / "interview-log.md"
     assert "레이어드 모놀리식" in log.read_text(encoding="utf-8")
     s = dclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "key_message_gate"
@@ -343,8 +356,8 @@ def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
     s = dclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "approved" and s["status"] == "done"
 
-    # plan.md 미러 — 결정표·(미확정)·구성이 원문 그대로 보존된다
-    mirror = (db_env / "design-e2e" / "plan.md").read_text(encoding="utf-8")
+    # plan.md 미러 — 결정표·(미확정)·구성이 원문 그대로 보존된다 (문서별 ws 루트)
+    mirror = (db_env / "design-e2e" / "dev-design" / "plan.md").read_text(encoding="utf-8")
     assert mirror == DESIGN_PLAN_MARKDOWN
     from planforge.plan import filter_slides, parse_plan_text, validate_skeleton
 
@@ -364,8 +377,8 @@ PROPOSAL_PLAN_MARKDOWN = plan_interview_proposal_markdown()
 
 
 PROPOSAL_TURNS = [
-    # 턴1 kick: 가설(제안서 단독) + 제안서 아크 주제 그룹 질문
-    ("가설 초안: 산출 문서는 제안서 단독 — 제안서 아크(현황·문제 정의 → 영향·기회 → …)를 진행한다.", [
+    # 턴1 kick: 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) + 제안서 아크 주제 그룹 질문
+    ("이번 인터뷰는 제안서 단독 인터뷰다. 가설 초안: 제안서 아크(현황·문제 정의 → 영향·기회 → …)를 진행한다.", [
         ("update_checklist", {"items": [
             {"id": "p1", "area": "제안서", "text": "핵심 메시지 3개 후보 사용자 승인 / 근거 확보",
              "done": False},
@@ -426,13 +439,13 @@ def proposal_kit(llm_app_factory):
 
 
 def test_interview_proposal_arc_full_flow_to_plan_approval(proposal_kit, db_env):
-    """제안서 서사 아크 — 가설(제안서 단독) → 아크 주제 그룹 질문 → 아크 팩트(주장+근거,
-    (미확정)) → 핵심 메시지(아크 세 축 1:1) → plan(아크 순서 슬라이드·(미확정) 원문 보존)
-    → 승인."""
+    """제안서 서사 아크 — 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) → 아크 주제 그룹
+    질문 → 아크 팩트(주장+근거, (미확정)) → 핵심 메시지(아크 세 축 1:1) → plan(아크 순서
+    슬라이드·(미확정) 원문 보존) → 승인. 세션은 doc_slug=proposal로 고정(step 2)."""
     pclient, proposal_llm = proposal_kit.client, proposal_kit.fake
     pclient.post("/api/projects", json={"slug": "proposal-e2e", "title": "제안서 아크 e2e"})
-    r = pclient.post("/api/projects/1/interview/sessions", json={})
-    assert r.status_code == 201
+    r = pclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "proposal"})
+    assert r.status_code == 201, r.text
     sid = r.json()["id"]
 
     # kick — 가설 선제시 + 제안서 아크 질문 카드
@@ -464,7 +477,8 @@ def test_interview_proposal_arc_full_flow_to_plan_approval(proposal_kit, db_env)
     assert "파이프라인 자동화" in contents
     assert "상시 대시보드는 실측 성과 검토 중" in contents
     assert "(미확정)" in contents
-    log = db_env / "proposal-e2e" / "docs" / "interview-log.md"
+    # interview-log 미러 — 문서 세션은 문서별 ws 루트에 기록된다 (doc_loops 행 권위)
+    log = db_env / "proposal-e2e" / "proposal" / "docs" / "interview-log.md"
     assert "파이프라인 자동화" in log.read_text(encoding="utf-8")
     s = pclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "key_message_gate"
@@ -485,8 +499,8 @@ def test_interview_proposal_arc_full_flow_to_plan_approval(proposal_kit, db_env)
     s = pclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "approved" and s["status"] == "done"
 
-    # plan.md 미러 — 아크 순서 슬라이드·(미확정)이 원문 그대로 보존된다 (SSOT)
-    mirror = (db_env / "proposal-e2e" / "plan.md").read_text(encoding="utf-8")
+    # plan.md 미러 — 아크 순서 슬라이드·(미확정)이 원문 그대로 보존된다 (문서별 ws 루트, SSOT)
+    mirror = (db_env / "proposal-e2e" / "proposal" / "plan.md").read_text(encoding="utf-8")
     assert mirror == PROPOSAL_PLAN_MARKDOWN
     from planforge.plan import filter_slides, parse_plan_text, validate_skeleton
 

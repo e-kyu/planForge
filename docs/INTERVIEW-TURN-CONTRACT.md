@@ -125,6 +125,16 @@ enum이 아니라 설명 문자열의 소프트 어휘다 — 검증 권위는 `
 확장했다 — `tools.py` 설명 문자열과 `interview.md` 체크리스트 `[UI·UX설계서]` 항목·
 합집합 조건을 동시 갱신 (계약 4세트 동시 점검 — 구조 스키마·`validate_tool_args`는 무변경).
 
+2026-10-13 인터뷰 산출 문서 질문 제거 (doc-loop 정합): 세션이 doc_slug로 고정된 뒤
+산출 문서 확정 질문은 모순이라 제거했다 — interview.md의 "첫 확정 항목 = 산출 문서
+목록" 절차·다중 아크 분기·합집합 체크리스트 조건을 단일 문서 기준으로 재작성하고,
+agent.py `_turn_context`가 doc_slug → doc_label(docloops facade)을 "이번 인터뷰
+문서" 블록으로 매턴 주입한다. 레거시(doc_slug NULL) 세션은 주입 없이 문서를 묻지
+않고 plan 메타 산출 문서 라인을 쓰지 않는다(파서 default '제안서'). write_plan 정합
+가드는 agent.py 앱 계층 피드백(파서·스키마 무변경) — **tools.py는 점검 후
+무수정**(도구 스키마에 산출 문서 개념 없음). plan_revise("산출 문서 메타 라인
+유지" 지시)·compact 무수정.
+
 ## 모델 교체 시 체크리스트
 
 1. `backend/planforge/config.json`의 프로필을 교체한다 — 도구 호출이 흔들리는 모델이면
