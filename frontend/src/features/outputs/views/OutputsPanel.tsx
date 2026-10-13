@@ -49,7 +49,9 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
     selPreview,
     closePreview,
   } = useOutputs(pid, doc);
-  const [docSel, setDocSel] = useState<string>("");
+  // docLabelSel: plan 본문 `- 산출 문서:` 라인의 한글 유형 라벨(생성 body.doc) —
+  // prop doc(문서 루프 슬러그, body.doc_slug)과는 다른 개념이다 (viewmodel이 doc_slug를 채운다).
+  const [docLabelSel, setDocLabelSel] = useState<string>("");
   // 배너 dismiss — 닫은 job id를 기억해 새 실패가 오면 배너가 다시 나타난다
   const [failedDismissId, setFailedDismissId] = useState<number | null>(null);
   const [residualDismissId, setResidualDismissId] = useState<number | null>(null);
@@ -60,7 +62,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
   const docs = (approvedPlan?.docs ?? []) as string[];
   // 대상 문서 미선택 해석 — 다중 문서 plan에서만 셀렉트가 보이므로 거기서는 실제 문서 선택을
   // 요구하고 생성 버튼을 잠근다 (단일 문서는 백엔드가 plan.docs[0]로 해석 — derive_build.py).
-  const docRequired = docs.length > 1 && !docSel;
+  const docRequired = docs.length > 1 && !docLabelSel;
   const visibleFailed = failedLatest.filter((j) => j.id !== failedDismissId);
   const recentJobs = [...jobs].reverse().slice(0, 5);
   // 수치 위반 잔여 배너 — job.result.findings의 측정값만 표현한다 (판정은 검수 단계, 결정 17)
@@ -83,7 +85,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
         {approvedPlan ? (
           <>
             {docs.length > 1 && (
-              <select className="doc-select" aria-label="대상 문서" value={docSel} onChange={(e) => setDocSel(e.target.value)}>
+              <select className="doc-select" aria-label="대상 문서" value={docLabelSel} onChange={(e) => setDocLabelSel(e.target.value)}>
                 <option value="" disabled>
                   문서유형선택
                 </option>
@@ -94,16 +96,16 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
                 ))}
               </select>
             )}
-            <Button onClick={() => enqueue("slides", docSel || undefined)} disabled={docRequired || busy}>
+            <Button onClick={() => enqueue("slides", docLabelSel || undefined)} disabled={docRequired || busy}>
               PPT 생성 (슬라이드)
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["md"])} disabled={docRequired || busy}>
+            <Button onClick={() => enqueue("report", docLabelSel || undefined, ["md"])} disabled={docRequired || busy}>
               MD 생성
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["html"])} disabled={docRequired || busy}>
+            <Button onClick={() => enqueue("report", docLabelSel || undefined, ["html"])} disabled={docRequired || busy}>
               HTML 생성
             </Button>
-            <Button onClick={() => enqueue("report", docSel || undefined, ["docx"])} disabled={docRequired || busy}>
+            <Button onClick={() => enqueue("report", docLabelSel || undefined, ["docx"])} disabled={docRequired || busy}>
               DOCX 생성
             </Button>
           </>

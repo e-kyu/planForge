@@ -65,8 +65,12 @@ export function useOutputs(pid: number, doc: DocSlug | null = null) {
   }
 
   const enqueueM = useMutation({
-    mutationFn: (body: { kind: "slides" | "report"; doc?: string; fmts?: string[] }) =>
-      enqueueDerivative(pid, body),
+    mutationFn: (body: {
+      kind: "slides" | "report";
+      doc_slug?: DocSlug;
+      doc?: string;
+      fmts?: string[];
+    }) => enqueueDerivative(pid, body),
     onSuccess: async (job) => {
       setNotice(`작업 큐 진입 (#${job.id}) — 워커가 직렬 처리합니다.`);
       seedJob(qc, pid, job);
@@ -79,11 +83,16 @@ export function useOutputs(pid: number, doc: DocSlug | null = null) {
     onSettled: () => setPending(false),
   });
 
-  function enqueue(kind: "slides" | "report", doc: string | undefined, fmts?: string[]) {
+  /** kind 외 두 문서 개념 구분 — docLabel: plan 본문 `- 산출 문서:` 라인의 한글 유형
+   * 라벨(제안서·UI·UX설계서…, View의 docLabelSel → body.doc), doc: 훅 파라미터의
+   * 루트 슬러그(DocSlug — 문서 루프 식별자 → body.doc_slug). */
+  function enqueue(kind: "slides" | "report", docLabel: string | undefined, fmts?: string[]) {
     setError(null);
     setNotice(null);
     setPending(true);
-    enqueueM.mutate({ kind, doc, fmts });
+    // doc이 null인 레거시(플랫) 라우트는 doc_slug 키를 아예 전달하지 않는다 —
+    // 백엔드 가드의 레거시 허용 계약과 짝 (doc-loop 프로젝트는 필수, 누락 시 409).
+    enqueueM.mutate({ kind, doc: docLabel, fmts, doc_slug: doc ?? undefined });
   }
 
   /** 미리보기 선택 — md는 본문을 당겨오고, 나머지 확장자는 프레임만 연다. */
