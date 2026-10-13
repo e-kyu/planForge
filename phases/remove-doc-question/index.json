@@ -8,7 +8,7 @@
       "status": "completed",
       "started_at": "2026-10-13T13:08:07+0900",
       "summary": "agent.py _turn_context() doc_slug 주입 블록(### 이번 인터뷰 문서 — docloops.doc_label facade 경유, 레거시 None 세션은 미주입) + _system_prompt 헤더 문구 갱신 + test_interview_api pos/neg assert — test_interview_api 26 passed·test_docloops_api 21 passed",
-      "completed_at": "2026-10-13T13:14:00+0900"
+      "completed_at": "2026-10-13T13:09:54+0900"
     },
     {
       "step": 1,
