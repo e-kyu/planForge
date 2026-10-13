@@ -12,7 +12,8 @@
     },
     {
       "dir": "remove-doc-question",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-10-13T13:16:23+0900"
     }
   ]
 }
