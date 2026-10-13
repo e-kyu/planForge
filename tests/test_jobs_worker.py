@@ -8,10 +8,10 @@ from _helpers import insert_plan, make_project, make_session, run_queue, session
 
 def test_derive_build_report_job_end_to_end(client, app, db_env):
     make_project(client, "queue-demo", "큐 데모")
-    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"))
+    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
 
     r = client.post(f"/api/projects/1/derivatives",
-                    json={"kind": "report", "fmts": ["md"]})
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     assert r.status_code == 202, r.text
     job_id = r.json()["id"]
 
@@ -34,15 +34,15 @@ def test_derive_build_report_job_end_to_end(client, app, db_env):
     # 산출물 v01 — 파일 존재 + fs 채번 미러
     outs = client.get("/api/projects/1/outputs").json()
     assert len(outs) == 1 and outs[0]["ext"] == "md" and outs[0]["version_no"] == 1
-    f = db_env / "queue-demo" / outs[0]["file_path"]
+    f = db_env / "queue-demo" / "proposal" / outs[0]["file_path"]
     assert f.is_file()
     assert "11.5시간" in f.read_text(encoding="utf-8")  # 수치 무결성
 
 
 def test_derive_build_slides_job_creates_pptx(client, app, db_env):
     make_project(client, "ppt-demo", "ppt")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
-    r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
+    r = client.post("/api/projects/1/derivatives", json={"kind": "slides", "doc_slug": "proposal"})
     assert r.status_code == 202
     job_id = r.json()["id"]
 
@@ -53,14 +53,14 @@ def test_derive_build_slides_job_creates_pptx(client, app, db_env):
     assert job["status"] == "done", job
     outs = client.get("/api/projects/1/outputs").json()
     assert len(outs) == 1 and outs[0]["ext"] == "pptx"
-    assert (db_env / "ppt-demo" / outs[0]["file_path"]).is_file()
+    assert (db_env / "ppt-demo" / "proposal" / outs[0]["file_path"]).is_file()
     # SSOT 미러: work/slides.json이 derive 경로에서만 기록됨
-    assert (db_env / "ppt-demo" / "work" / "slides.json").is_file()
+    assert (db_env / "ppt-demo" / "proposal" / "work" / "slides.json").is_file()
 
 
 def test_unapproved_plan_blocks_derive(client, app):
     make_project(client, "no-approve")
-    r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
+    r = client.post("/api/projects/1/derivatives", json={"kind": "report", "doc_slug": "proposal"})
     assert r.status_code == 409
     assert "승인" in r.json()["detail"]
 
@@ -71,9 +71,9 @@ def test_numeric_distortion_job_done_with_findings(client, app, db_env):
     왜곡 지속 LLM 변환 1회 → job done, 측정값 findings가 job.result에 영속 기록되고
     위반 수치가 실제 산출물 md에 남는다."""
     make_project(client, "fail-demo")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
     r = client.post("/api/projects/1/derivatives",
-                    json={"kind": "report", "fmts": ["md"]})
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     job_id = r.json()["id"]
 
     bad = correct_report_payload()
@@ -90,16 +90,16 @@ def test_numeric_distortion_job_done_with_findings(client, app, db_env):
     # 게이트 폐지 — 위반 수치가 실린 산출물이 실제로 채번돼 존재한다 (원칙 5 추적성)
     outs = client.get("/api/projects/1/outputs").json()
     assert outs and outs[0]["version_no"] == 1
-    md = db_env / "fail-demo" / outs[0]["file_path"]
+    md = db_env / "fail-demo" / "proposal" / outs[0]["file_path"]
     assert md.is_file() and "99" in md.read_text(encoding="utf-8")
 
 
 def test_llm_schema_failure_classified_as_schema_error(client, app, db_env):
     """스키마 위반 지속 소진 — error_class SCHEMA, 오류문에 builder 진단 실림 (결정 16)."""
     make_project(client, "schema-fail")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
     r = client.post("/api/projects/1/derivatives",
-                    json={"kind": "report", "fmts": ["md"]})
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     job_id = r.json()["id"]
 
     bad = correct_report_payload()
@@ -114,16 +114,16 @@ def test_llm_schema_failure_classified_as_schema_error(client, app, db_env):
     assert "필수 키 누락" in job["error"]     # builder가 낸 실제 진단
     assert "수치 무결성" not in job["error"]  # 거짓 라벨링 회귀 방지
     # 불완전 산출물이 output에 남지 않는다 (§5 원자성)
-    assert not list((db_env / "schema-fail" / "output").glob("*.md"))
+    assert not list((db_env / "schema-fail" / "proposal" / "output").glob("*.md"))
 
 
 def test_reds_auto_enqueue_review(client, app):
     """red 잔여 derive done → 검수 잡이 같은 커밋에 자동 큐잉되고, 그 잡이 같은 red를
     🔴 리포트로 판정한다 (수용 기준 3 e2e — 결정 17: 판정 권위는 검수 단계)."""
     make_project(client, "auto-review")
-    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"))
+    plan_id = insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
     r = client.post("/api/projects/1/derivatives",
-                    json={"kind": "report", "fmts": ["md"]})
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     derive_job_id = r.json()["id"]
 
     bad = correct_report_payload()
@@ -155,8 +155,8 @@ def test_reds_auto_enqueue_review(client, app):
 def test_clean_derive_no_auto_review(client, app):
     """클린 생성은 검수를 자동 큐잉하지 않는다 (결정 17 — 위반 있을 때만 자동)."""
     make_project(client, "clean-demo")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
-    r = client.post("/api/projects/1/derivatives", json={"kind": "slides"})
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
+    r = client.post("/api/projects/1/derivatives", json={"kind": "slides", "doc_slug": "proposal"})
     run_queue(app, FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
 
     job = client.get(f"/api/jobs/{r.json()['id']}").json()
@@ -186,9 +186,9 @@ def test_build_failure_leaves_no_derivative_or_output(client, app, db_env, monke
     """빌더 실패 → 고아 Derivative·산출물 파일 0건 (진행 불변식 회귀 — 도메인 행은
     atomic_build 이후에만 생성: report_progress 커밋이 조기 행 확정을 만들지 않는다)."""
     make_project(client, "build-fail")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
     r = client.post("/api/projects/1/derivatives",
-                    json={"kind": "report", "fmts": ["md"]})
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     job_id = r.json()["id"]
 
     import planforge.builders.build_doc as build_doc_mod
@@ -208,7 +208,7 @@ def test_build_failure_leaves_no_derivative_or_output(client, app, db_env, monke
     # 고아 없음 — 파생물행·빌드행·output 파일 모두 없어야 한다 (§5 원자성)
     assert client.get("/api/projects/1/derivatives").json() == []
     assert client.get("/api/projects/1/outputs").json() == []
-    assert not list((db_env / "build-fail" / "output").glob("*"))
+    assert not list((db_env / "build-fail" / "proposal" / "output").glob("*"))
 
 
 def test_claim_returns_none_on_empty_queue(app):
@@ -220,8 +220,8 @@ def test_claim_returns_none_on_empty_queue(app):
 
 def test_report_build_defaults_to_three_formats(client, app, db_env):
     make_project(client, "fmt-demo")
-    insert_plan(app, 1, docs=("제안서", "개발설계서"))
-    r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
+    insert_plan(app, 1, docs=("제안서", "개발설계서"), doc_slug="proposal")
+    r = client.post("/api/projects/1/derivatives", json={"kind": "report", "doc_slug": "proposal"})
     job_id = r.json()["id"]
 
     llm = FakeLLM([tool_call("write_report_json", correct_report_payload())])
@@ -296,10 +296,10 @@ def test_two_derive_jobs_run_to_done_in_id_order(client, app):
     from app.modules.jobs.infrastructure.models import Job
 
     make_project(client, "serial-demo")
-    insert_plan(app, 1, docs=("제안서",))
+    insert_plan(app, 1, docs=("제안서",), doc_slug="proposal")
     ids = []
     for _ in range(2):
-        r = client.post("/api/projects/1/derivatives", json={"kind": "report"})
+        r = client.post("/api/projects/1/derivatives", json={"kind": "report", "doc_slug": "proposal"})
         assert r.status_code == 202, r.text
         ids.append(r.json()["id"])
     assert ids == sorted(ids), "잡 id는 enqueue 순으로 단조 — FIFO 전제"

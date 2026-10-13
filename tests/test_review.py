@@ -106,21 +106,22 @@ def test_review_requires_approved_plan(client, app):
 
 def test_review_requires_derivatives(client, app):
     make_project(client, "rev-nod")
-    insert_plan(app, 1)
+    insert_plan(app, 1, doc_slug="proposal")
     r = client.post("/api/projects/1/reviews")
     assert r.status_code == 409
 
 
 def test_review_job_end_to_end(client, app):
     make_project(client, "rev-full")
-    plan_id = insert_plan(app, 1)
+    plan_id = insert_plan(app, 1, doc_slug="proposal")
 
     # 파생물 2종 생성 (fake LLM)
     run_derive(app, client, 1, "slides",
-               FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+               FakeLLM([tool_call("write_slides_json", correct_slides_payload())]),
+               doc_slug="proposal")
     run_derive(app, client, 1, "report",
                FakeLLM([tool_call("write_report_json", correct_report_payload())]),
-               fmts=["md"])
+               fmts=["md"], doc_slug="proposal")
 
     # 검수 큐 진입 → 실행 (review 프로필 fake LLM: 발견사항 2건 보고)
     r = client.post("/api/projects/1/reviews")
@@ -154,10 +155,11 @@ def test_review_detects_injected_numeric_distortion(client, app):
     from app.modules.derivatives.infrastructure.models import Derivative, DerivativeKind
 
     make_project(client, "rev-distort")
-    insert_plan(app, 1)
+    insert_plan(app, 1, doc_slug="proposal")
 
     job_id = run_derive(app, client, 1, "slides",
-                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]),
+                        doc_slug="proposal")
     assert client.get(f"/api/jobs/{job_id}").json()["status"] == "done"
 
     # 수치 왜곡 주입 — plan에 없는 13.5로 교체 (테스트 전용 주입, 앱 경로 아님)
@@ -186,10 +188,11 @@ def test_review_reports_stale_generation(client, app):
     from app.modules.derivatives.infrastructure.models import Build, Derivative, DerivativeKind
 
     make_project(client, "rev-gen")
-    plan_id = insert_plan(app, 1)
+    plan_id = insert_plan(app, 1, doc_slug="proposal")
 
     job_id = run_derive(app, client, 1, "slides",
-                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]))
+                        FakeLLM([tool_call("write_slides_json", correct_slides_payload())]),
+                        doc_slug="proposal")
     assert client.get(f"/api/jobs/{job_id}").json()["status"] == "done"
 
     # plan 세대 교체 — 새 승인 plan을 만들어 build를 '이전 세대'로 만든다
@@ -197,7 +200,8 @@ def test_review_reports_stale_generation(client, app):
     with make_session(app) as s:
         plan2 = Plan(project_id=1, version_no=2,
                      markdown=plan_sample_markdown(), docs=["제안서"],
-                     parsed_ok=True, status=PlanStatus.APPROVED, origin=PlanOrigin.EDIT)
+                     parsed_ok=True, status=PlanStatus.APPROVED, origin=PlanOrigin.EDIT,
+                     doc_slug="proposal")
         s.add(plan2)
         s.commit()
         new_plan_id = plan2.id
@@ -214,11 +218,11 @@ def test_review_reports_stale_generation(client, app):
 
 def test_review_llm_failure_keeps_deterministic_findings(client, app):
     make_project(client, "rev-llm-fail")
-    insert_plan(app, 1)
+    insert_plan(app, 1, doc_slug="proposal")
 
     run_derive(app, client, 1, "report",
                FakeLLM([tool_call("write_report_json", correct_report_payload())]),
-               fmts=["md"])
+               fmts=["md"], doc_slug="proposal")
 
     client.post("/api/projects/1/reviews")
     # review LLM이 도구 없이 텍스트만 반환 → 내용 검수 실패, 결정론 결과는 보존

@@ -371,23 +371,42 @@ def test_doc_scoped_outputs_listing_and_download(client, app):
     assert "11.5시간" in r.text  # 문서별 ws의 실제 파일을 스트리밍한다 (수치 무결성)
 
 
+def test_enqueue_derivative_requires_doc_slug_in_doc_loop(client):
+    """가드 — doc-loop 프로젝트(has_doc_layout)의 derive enqueue는 doc_slug 필수다.
+    None fallback은 문서별 승인본 공존 하에 래치 순서상 오문서 plan을 고르는 결함이므로
+    누락은 409, 미상 slug는 404(require_session_doc과 같은 관례)로 거부한다.
+    레거시(루프 행 없음)의 None 허용은 test_legacy_doc_none_derive_uses_project_root가 고정."""
+    pid = make_project(client, "docderiveguard")
+
+    r = client.post(f"/api/projects/{pid}/derivatives", json={"kind": "report"})
+    assert r.status_code == 409, r.text
+    assert "doc_slug" in r.json()["detail"]
+
+    r = client.post(f"/api/projects/{pid}/derivatives",
+                    json={"kind": "report", "doc_slug": "unknown-doc"})
+    assert r.status_code == 404, r.text
+
+
 def test_outputs_doc_slug_filter(client, app):
-    """?doc_slug= 필터 — 문서 루프의 산출물만 좁혀 보인다."""
+    """?doc_slug= 필터 — 문서 루프의 산출물만 좁혀 보인다 (가드로 인해 두 문서 모두
+    doc_slug를 실어 derive한다 — None derive는 doc-loop 프로젝트에서 차단됨)."""
     pid = make_project(client, "docoutfilter")
     insert_plan(app, pid, 1, doc_slug="proposal")
     _doc_derive(client, app, pid, "report", doc_slug="proposal", fmts=["md"])
-    insert_plan(app, pid, 2, doc_slug=None)
-    _doc_derive(client, app, pid, "report", fmts=["md"])
+    insert_plan(app, pid, 2, doc_slug="dev-design")
+    _doc_derive(client, app, pid, "report", doc_slug="dev-design", fmts=["md"])
 
     outs = client.get(f"/api/projects/{pid}/outputs").json()
     assert len(outs) == 2
     prop = client.get(f"/api/projects/{pid}/outputs?doc_slug=proposal").json()
     assert len(prop) == 1
+    dev = client.get(f"/api/projects/{pid}/outputs?doc_slug=dev-design").json()
+    assert len(dev) == 1
     with make_session(app) as db:
         rows = [b.doc_slug for b in db.scalars(
             select(Build).where(Build.project_id == pid)).all()]
         assert rows.count("proposal") == 1
-        assert None in rows
+        assert rows.count("dev-design") == 1
 
 
 def test_review_generation_check_is_doc_scoped(client, app):

@@ -66,9 +66,15 @@ def run_queue(app, llm, profile="derive"):
         s.close()
 
 
-def run_derive(app, client, pid: int, kind: str, llm, *, fmts=None) -> int:
-    """파생물 잡을 enqueue하고 즉시 큐를 실행해 잡 id를 돌려준다 (e2e 시드)."""
+def run_derive(app, client, pid: int, kind: str, llm, *, fmts=None,
+               doc_slug: str | None = None) -> int:
+    """파생물 잡을 enqueue하고 즉시 큐를 실행해 잡 id를 돌려준다 (e2e 시드).
+
+    doc-loop 프로젝트(make_project 시드)는 doc_slug 필수 가드(409)가 있으므로
+    문서 plan을 쓰는 시드에는 doc_slug를 함께 실어야 한다."""
     body = {"kind": kind}
+    if doc_slug is not None:
+        body["doc_slug"] = doc_slug
     if fmts:
         body["fmts"] = fmts
     r = client.post(f"/api/projects/{pid}/derivatives", json=body)

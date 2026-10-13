@@ -77,6 +77,22 @@ def base_kit(llm_app_factory):
         yield kit
 
 
+@pytest.fixture()
+def doc_e2e_kit(llm_app_factory):
+    """문서 세션 e2e 킷 — proposal 문서 세션용 (turn 4만 제안서 단독 plan으로 교체).
+
+    doc 세션의 write_plan 정합 가드(agent.py)는 plan 메타를 세션 문서(
+    `- 산출 문서: 제안서`) 단독으로 요구한다 — plan.sample.md(제안서+개발설계서
+    다문서)는 거부되므로 빌드 e2e는 문서 세션 전용 plan으로 진행한다."""
+    turns = BASE_TURNS[:3] + [
+        ("", [("write_plan", {"markdown": plan_interview_proposal_markdown()})]),
+    ]
+    fake = FakeStreamLLM(turns)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
+
+
 def _setup(sclient) -> int:
     sclient.post("/api/projects", json={"slug": "interview-e2e", "title": "인터뷰 e2e"})
     r = sclient.post("/api/projects/1/interview/sessions", json={})
@@ -206,10 +222,19 @@ def test_plan_validation_error_loops_back(base_kit):
     assert "plan_draft" in [n for n, _ in events]
 
 
-def test_interview_to_build_end_to_end(base_kit, db_env):
-    """수용 기준 1 — API로 인터뷰→빌드 e2e (report md 산출물)."""
-    sclient, sapp, fake_llm = base_kit.client, base_kit.app, base_kit.fake
-    sid = _setup(sclient)
+def test_interview_to_build_end_to_end(doc_e2e_kit, db_env):
+    """수용 기준 1 — API로 인터뷰→빌드 e2e (report md 산출물).
+
+    세션은 proposal 문서 세션(doc_slug 고정) — write_plan이 plan.doc_slug를 심고
+    derive·빌드 산출물은 문서별 ws(proposal/)에 채번된다. doc-loop 프로젝트의
+    derive enqueue는 doc_slug 필수 가드(409)라 요청도 doc_slug를 실은다."""
+    sclient, sapp, fake_llm = doc_e2e_kit.client, doc_e2e_kit.app, doc_e2e_kit.fake
+    sclient.post("/api/projects", json={"slug": "interview-e2e", "title": "인터뷰 e2e"})
+    # 제안서 루프는 생성 직후 active(require_session_doc 게이트 통과)
+    r = sclient.post("/api/projects/1/interview/sessions",
+                     json={"doc_slug": "proposal"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
     _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
     _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
@@ -219,7 +244,8 @@ def test_interview_to_build_end_to_end(base_kit, db_env):
     plan_id = events[[n for n, _ in events].index("plan_draft")][1]["plan_id"]
     assert sclient.post(f"/api/plans/{plan_id}/approve").status_code == 200
 
-    r = sclient.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
+    r = sclient.post("/api/projects/1/derivatives",
+                     json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     assert r.status_code == 202, r.text
     job_id = r.json()["id"]
 
@@ -231,7 +257,8 @@ def test_interview_to_build_end_to_end(base_kit, db_env):
     assert job["status"] == "done", job
     outs = sclient.get("/api/projects/1/outputs").json()
     assert len(outs) == 1 and outs[0]["version_no"] == 1
-    f = db_env / "interview-e2e" / outs[0]["file_path"]
+    # 문서 세션의 산출물은 문서별 ws 루트(doc_ws_root 권위)에 채번된다
+    f = db_env / "interview-e2e" / "proposal" / outs[0]["file_path"]
     assert f.is_file()
     assert "11.5시간" in f.read_text(encoding="utf-8")  # 수치 무결성
 

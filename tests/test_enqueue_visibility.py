@@ -26,9 +26,10 @@ def test_derive_enqueue_visible_to_other_session(client, app):
     from app.modules.jobs.infrastructure.models import Job, JobStatus
 
     make_project(client, "vis-derive", "가시")
-    insert_plan(app, 1)
+    insert_plan(app, 1, doc_slug="proposal")
 
-    r = client.post("/api/projects/1/derivatives", json={"kind": "report", "fmts": ["md"]})
+    r = client.post("/api/projects/1/derivatives",
+                    json={"kind": "report", "fmts": ["md"], "doc_slug": "proposal"})
     assert r.status_code == 202
     job_id = r.json()["id"]
 

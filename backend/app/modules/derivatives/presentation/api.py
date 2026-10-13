@@ -35,9 +35,17 @@ def enqueue_derivative(project_id: int, body: DerivativeCreate,
         if bad:
             raise http_409(f"지원하지 않는 포맷: {bad}")
 
-    # FR-2.9 승인 게이트 — 최신 승인 plan이 대상 (승인본 없으면 409). doc_slug가
-    # 주어지면 그 문서의 승인본으로 좁힌다. 큐 payload에는 doc_slug를 싣지 않는다 —
-    # 실행 시점 권위는 plan 행(plan.doc_slug)이고 이중 권위는 미정합을 만든다.
+    # FR-2.9 승인 게이트 — 최신 승인 plan이 대상 (승인본 없으면 409). doc-loop 프로젝트
+    # (has_doc_layout)는 doc_slug 필수 — None fallback은 문서별 승인본 공존 하에 래치
+    # 순서상 오문서 plan을 고른다. 레거시(루프 행 없음)만 None 허용. 미상 slug도 여기서
+    # 거부한다 (require_session_doc과 같은 404 관례). latest_approved의 None=문서 무관
+    # 계약은 유지 — plan 선택을 바로잡는 것은 이 호출자의 책임이다. 큐 payload에는
+    # doc_slug를 싣지 않는다 — 실행 시점 권위는 여전히 plan 행(plan.doc_slug)이고
+    # 이중 권위는 미정합을 만든다.
+    if body.doc_slug is None and docloops.has_doc_layout(db, project_id):
+        raise http_409("문서 루프 프로젝트에서는 doc_slug를 지정해야 합니다")
+    if body.doc_slug is not None and body.doc_slug not in {s for s, _ in docloops.DOC_KINDS}:
+        raise http_404(f"알 수 없는 문서 slug입니다: {body.doc_slug}")
     plan = latest_approved(db, project_id, doc_slug=body.doc_slug)
     if plan is None:
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")

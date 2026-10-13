@@ -407,6 +407,12 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       `app/shared/workspace.py doc_ws_root`(DB 행 권위·존재 판정 금지·validate_slug
       트래버설 방어) + `ensure_doc_ws`(멱등 지연 생성, `DOC_WS_SUBDIRS` = work·
       output·docs·assets, sources는 루트 공유)로 이동.
+    - 파생물 enqueue 가드 (2026-10-13, derive-doc-slug): POST /derivatives는 doc-loop
+      프로젝트(has_doc_layout)에선 doc_slug 필수(누락 409·미상 slug 404) — None
+      fallback이 문서별 승인본 공존 하에 래치 순서상 오문서 plan을 고르는 결함 수정
+      (latest_approved의 None=문서 무관 계약은 유지, 호출자 책임). 레거시는 None
+      허용 계약 유지. 실행 시점 권위는 여전히 plan 행(plan.doc_slug) — 큐 payload
+      계약 불변.
     - 구현 범위: 스키마(step 0) → 워크스페이스 헬퍼(1) → docloops 서비스·facade(2) →
       읽기 API·프로젝트 라이프사이클 통합(3) → 인터뷰 doc_slug 스레딩 + 계약 4세트
       어휘 확장(4) → 승인·revise 문서 스코프(5) → derive·빌드·검수 문서별 ws(6) →
