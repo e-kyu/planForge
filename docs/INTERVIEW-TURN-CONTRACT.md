@@ -100,6 +100,23 @@
 - 이력(interview_messages)에는 원본(raw) 도구 인자가 남는다 — 정규화(strip 등)는
   `pending_questions`·questions 이벤트(사용자 노출 payload)에만 적용된다.
 
+## 전송 계층 keepalive (`: ping` 코멘트 프레임)
+
+- LLM TTFB 대기·도구 실행처럼 큐가 오래 비는 유휴 구간에 SSE 코멘트 프레임
+  `: ping\n\n`을 흘려 전송 계층을 유지한다 — 프록시 유휴 타임아웃·half-open 연결
+  무한 대기 방지. (2026-10-13, `sse-keepalive` step 0)
+- **코멘트 프레임은 이벤트가 아니다** — `Event` 객체를 만들지 않는다:
+  `interview_messages` 미영속 · 리플레이 seq 커서 미소비 · 프론트 `parseFrame`
+  (`frontend/src/api/client.ts`)이 data 라인 없는 프레임을 null로 무시하므로
+  이벤트 핸들링 계약(D6)이 오염되지 않는다. 구현 위치는
+  `api.py _stream_turn.generate()` — 큐 `get(timeout=keepalive)` 빈 타임아웃마다
+  1프레임을 직접 yield한다.
+- 설정: `sse_keepalive_seconds`(기본 15초, `SSE_KEEPALIVE_SECONDS` 환경변수 —
+  `app/shared/config.py`, 소수 지원·0 이하이면 ping 없는 기존 동작).
+- 프론트 inactivity 타임아웃과의 결합: 프론트는 이 프레임을 **활동 신호**로 쓴다 —
+  다음 step에서 raw 바이트 청크 기준 유휴 판정(60초)으로 스트림을 중단한다.
+  ping이 도는 한 연결은 살아있는 것이고, ping이 끊긴 시점부터 유휴을 센다.
+
 ## 동시 점검 세트 (계약 4종)
 
 | # | 파일 | 결합 방식 | 계약 변경 시 |
@@ -134,6 +151,17 @@ agent.py `_turn_context`가 doc_slug → doc_label(docloops facade)을 "이번 �
 가드는 agent.py 앱 계층 피드백(파서·스키마 무변경) — **tools.py는 점검 후
 무수정**(도구 스키마에 산출 문서 개념 없음). plan_revise("산출 문서 메타 라인
 유지" 지시)·compact 무수정.
+
+2026-10-13 전송 계층 keepalive (`sse-keepalive` step 0): 유휴 구간 `: ping`
+코멘트 프레임 도입 — 위 "전송 계층 keepalive" 섹션 신설. **tools.py·interview.md는
+이 변경으로 점검 후 무수정** — 도구 스키마·프롬프트 계약(터치하는 계약이 이벤트
+D6라면 ping은 이벤트가 아니라 전송 계층 신호다)이 무변경이고, 계약 관련 코드
+변경은 `api.py _stream_turn`(큐 get 타임아웃 → 코멘트 프레임 yield)과
+`app/shared/config.py`(dead config `sse_keepalive_seconds`의 float 파싱·wiring)
+뿐이다. `Event.sse()` 포맷·이벤트 타입(`domain/events.py`)도 무수정 — ping은
+Event 객체로 만들어 이력에 영속하면 리플레이 오염·seq 커서 소비가 발생한다
+(progress_event의 emit-only 설계와 같은 맥락). `Event.sse()` 프레임 자체는
+`event:`+`data:` 조합으로 불변.
 
 ## 모델 교체 시 체크리스트
 

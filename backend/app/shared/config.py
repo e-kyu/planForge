@@ -29,7 +29,7 @@ class Settings:
         self.global_sources_dir: Path = Path(
             os.environ.get("GLOBAL_SOURCES_DIR", BACKEND_DIR.parent / "sources")
         )
-        self.sse_keepalive_seconds: int = int(os.environ.get("SSE_KEEPALIVE_SECONDS", "15"))
+        self.sse_keepalive_seconds: float = float(os.environ.get("SSE_KEEPALIVE_SECONDS", "15"))
 
 
 def get_settings() -> Settings:

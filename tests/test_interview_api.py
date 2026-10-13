@@ -7,6 +7,7 @@ write_plan → plan 승인 → derive/build e2e (FR-2 수용 시나리오 1).
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -37,6 +38,17 @@ def _sse_events(client, url, payload=None):
                 events.append((name, json.loads(line[6:])))
                 name = None
         return events
+
+
+def _sse_raw_lines(client, url, payload=None):
+    """POST + SSE 스트림 원문(raw) 라인 수집 — 코멘트 프레임(`: ping`) 감지용.
+
+    `_sse_events`는 `data: ` 라인만 수집하므로 코멘트 프레임을 감지할 수 없다.
+    (테스트 파일 간 import 금지 — 이 헬퍼는 이 파일 안에 둔다.)
+    """
+    with client.stream("POST", url, json=payload or {}) as r:
+        assert r.status_code == 200, r.read()
+        return list(r.iter_lines())
 
 
 # ------------------------------------------------------- 기본 흐름 턴 스크립트 (모듈 상수)
@@ -1211,3 +1223,63 @@ def test_update_checklist_area_vocabulary_uiux_design(llm_app_factory, db_env):
 
     s = kit.client.get(f"/api/interview/sessions/{sid}").json()
     assert {i["area"] for i in s["checklist"]} == {"UI·UX설계서", "개발설계서"}
+
+
+# ---------------------------------------------------------------------------
+# SSE 전송 계층 keepalive — 유휴 구간에 코멘트 프레임(`: ping`), 이벤트 아님 (미영속)
+
+PING_TURN = [
+    ("", [("ask_questions", {"round_summary": "뼈대 확인",
+                             "questions": [{"text": "q", "allow_free": True}]})]),
+]
+
+
+class _DelayedStreamLLM(FakeStreamLLM):
+    """FakeStreamLLM 지연 옵션 — 첫 delta 전에 keepalive보다 긴 지연을 흘린다.
+
+    LLM TTFB 대기 구간(큐가 비는 시간)을 재현해 유휴 keepalive ping 발동을 유도한다.
+    """
+
+    def __init__(self, turns, delay: float):
+        super().__init__(turns)
+        self.delay = delay
+
+    def stream(self, messages, tools=None):
+        self.calls.append(list(messages))
+        yield from ()  # 제너레이터화 — 소비(iterate) 전까지 sleep이 흐르지 않는다
+        time.sleep(self.delay)
+        text, calls = self.turns.pop(0)
+        if text:
+            yield {"type": "text", "delta": text}
+        for name, args in calls:
+            yield {"type": "tool_call", "name": name, "arguments": args}
+
+
+def test_keepalive_ping_frames_in_idle_gap(llm_app_factory):
+    """keepalive(0.2초)보다 긴 LLM TTFB 지연(0.5초)에 `: ping` 코멘트 프레임이
+    스트림 원문에 끼어든다 — 이벤트가 아니므로 data 프레임은 기존 계약 그대로다."""
+    fake = _DelayedStreamLLM(PING_TURN, delay=0.5)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.app.state.settings.sse_keepalive_seconds = 0.2
+        sid = _setup(kit.client)
+
+        lines = _sse_raw_lines(kit.client, f"/api/interview/sessions/{sid}/kick")
+
+    assert ": ping" in lines
+    # ping은 이벤트가 아니다 — data 프레임 계약은 기존 그대로(event: 프레임이 동일
+    # 스트림에 정상 실린다)이고, ping은 이력(GET /messages 리플레이)에 남지 않는다.
+    assert "event: questions" in lines and "event: done" in lines
+    msgs = kit.client.get(f"/api/interview/sessions/{sid}/messages").json()
+    assert all("ping" not in (m["content"] or "") for m in msgs)
+
+
+def test_keepalive_zero_emits_no_ping(llm_app_factory):
+    """keepalive=0이면 ping이 없다 — 기존 동작(무한 대기) 불변 잠금."""
+    fake = _DelayedStreamLLM(PING_TURN, delay=0.5)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.app.state.settings.sse_keepalive_seconds = 0
+        sid = _setup(kit.client)
+
+        lines = _sse_raw_lines(kit.client, f"/api/interview/sessions/{sid}/kick")
+
+    assert ": ping" not in lines

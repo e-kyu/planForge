@@ -19,6 +19,10 @@
       "dir": "derive-doc-slug",
       "status": "completed",
       "completed_at": "2026-10-13T13:54:50+0900"
+    },
+    {
+      "dir": "sse-keepalive",
+      "status": "pending"
     }
   ]
 }

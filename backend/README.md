@@ -142,6 +142,8 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
 - `config.py`: `DATABASE_URL`·`WORKSPACES_DIR`·`PLANFORGE_CONFIG`·`GLOBAL_SOURCES_DIR`·
   `SSE_KEEPALIVE_SECONDS` 환경변수를 읽는다. 기본값: DB는 저장소 루트
   `data/planforge.db`, 워크스페이스는 루트 `workspaces/`, 글로벌 소스는 루트 `sources/`.
+  `SSE_KEEPALIVE_SECONDS`(float, 기본 15)는 인터뷰 SSE 턴 유휴 구간에 `: ping`
+  코멘트 프레임을 흘리는 주기다(`api.py _stream_turn` — 미영속·이벤트 아님).
 - `db.py`: SQLAlchemy 2.x. SQLite 연결 리스너로 **WAL + foreign_keys=ON + busy_timeout
   5000**을 설정한다. URL별 엔진 캐시(`get_engine`)를 쓰고 테스트는
   `dispose_cached_engines`로 격리를 보장한다.

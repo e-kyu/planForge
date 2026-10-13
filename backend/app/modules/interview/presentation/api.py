@@ -137,10 +137,18 @@ def _stream_turn(settings, request: Request, session_id: int, user_message: str,
                 q.put(_SENTINEL)
                 db.close()
 
+        keepalive = max(0.0, float(settings.sse_keepalive_seconds))
         try:
             threading.Thread(target=work, daemon=True).start()
             while True:
-                ev = q.get()
+                # 유휴 구간(TTFB 대기·도구 실행)에 코멘트 프레임으로 전송 계층을 유지한다 —
+                # `: ping`은 이벤트가 아니다(Event 객체를 만들지 않는다): interview_messages
+                # 미영속·리플레이 커서 미소비·프론트 parseFrame 무시(D6 이벤트 계약 무변경).
+                try:
+                    ev = q.get(timeout=keepalive) if keepalive > 0 else q.get()
+                except queue.Empty:
+                    yield ": ping\n\n"      # SSE 코멘트 프레임 — 전송 계층 유지 신호
+                    continue
                 if ev is _SENTINEL:
                     break
                 yield ev.sse()
