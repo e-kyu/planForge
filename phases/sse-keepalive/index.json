@@ -8,7 +8,7 @@
       "status": "completed",
       "summary": "SSE 유휴 구간 `: ping` 코멘트 프레임 — api.py _stream_turn 큐 get 타임아웃 루프, sse_keepalive_seconds float 파싱+wiring, keepalive 회귀 테스트 2개, INTERVIEW-TURN-CONTRACT 전송 계층 keepalive 섹션, README 보정 (전체 pytest exit 0)",
       "started_at": "2026-10-13T21:30:38+0900",
-      "completed_at": "2026-10-13T21:55:00+0900"
+      "completed_at": "2026-10-13T21:37:19+0900"
     },
     {
       "step": 1,
