@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-10-13T13:51:03+0900",
       "summary": "outputs 3계층에 루프 doc_slug 전송 정비 — outputsApi.enqueueDerivative body에 doc_slug?: DocSlug 추가, useOutputs.enqueue 2인자를 docLabel로 rename해 plan 문서유형 라벨(doc)과 루트 슬러그(doc_slug: doc ?? undefined — 레거시 null 라우트는 키 미전달) 개념 분리·주석 고정, OutputsPanel docSel→docLabelSel rename(prop 계약 {pid,doc}·ProjectPage 무변경), AC npm run build 통과·types.gen.ts diff 0·전체 pytest 334 passed",
-      "completed_at": "2026-10-13T13:54:39+0900"
+      "completed_at": "2026-10-13T13:54:49+0900"
     }
   ],
   "created_at": "2026-10-13T13:45:09+0900"
