@@ -684,11 +684,35 @@ def test_system_prompt_carries_fewshot_and_reminder(base_kit):
     assert "현황·문제 정의" in sys1         # 제안서 아크 주제 그룹 ①
     assert "제안서 구성 가이드" in sys1      # plan 포맷의 제안서 배치 가이드 (개발설계서 가이드 대칭)
     assert "대안 | 요약 | 판단 | 상태" in sys1  # 해결책·차별성 결정표 헤더 예시
+    # 레거시 세션(doc_slug NULL)에는 문서 정체성 주입이 없다 (step 0 negative) —
+    # "이번 인터뷰 문서"는 헤더 문구에도 등장하므로 주입 블록 고유의 소제목으로 잠근다
+    assert "### 이번 인터뷰 문서" not in sys1
 
     _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
     sys2 = fake_llm.calls[1][0]["content"]
     assert "라운드 2 목표" in sys2  # 라운드 진행 → 서버 계산 번호 증가
+
+
+def test_doc_session_injects_doc_identity_into_system_prompt(base_kit):
+    """문서 세션(doc_slug 고정) — 시스템 프롬프트에 이번 인터뷰 문서 블록이 주입된다.
+
+    에이전트가 세션의 문서 정체성을 알지 못해 "이번 인터뷰로 확정할 산출 문서는
+    무엇인가요?"를 묻는 근원을 제거한다 (step 0). 라벨은 docloops.facade.doc_label
+    경유로 결정된다 — 프롬프트·tools.py는 이 단계에서 무수정."""
+    sclient, fake_llm = base_kit.client, base_kit.fake
+    sclient.post("/api/projects", json={"slug": "doc-context-e2e", "title": "문서 컨텍스트"})
+    # 제안서 루프는 생성 직후 active라 세션 게이트(require_session_doc)를 통과한다
+    r = sclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "proposal"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+    assert r.json()["doc_slug"] == "proposal"
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    sys1 = fake_llm.calls[0][0]["content"]
+    assert "이번 인터뷰 문서" in sys1
+    assert "제안서" in sys1
+    assert "문서 목록·선택을 묻거나 확정 항목으로" in sys1
 
 
 def test_round_summary_persisted_and_replayed(base_kit):

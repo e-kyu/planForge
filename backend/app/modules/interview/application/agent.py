@@ -114,7 +114,8 @@ class InterviewAgent:
     def _system_prompt(self) -> str:
         base = (PROMPTS_DIR / "interview.md").read_text(encoding="utf-8-sig")
         ctx = self._turn_context()
-        return (base + "\n\n## 이번 턴 주입 컨텍스트 (소스·확립 팩트 — 임의 추측 금지)\n\n" + ctx
+        return (base + "\n\n## 이번 턴 주입 컨텍스트 (이번 인터뷰 문서·소스·확립 팩트 — 임의 "
+                "추측 금지)\n\n" + ctx
                 + "\n\n## 이번 턴 ask_questions 리마인더 (완성 예시를 그대로 모방한다)\n\n"
                 + self._remind_ask())
 
@@ -135,6 +136,14 @@ class InterviewAgent:
 
     def _turn_context(self) -> str:
         parts: list[str] = []
+        if self.sess.doc_slug:  # 문서 세션 — 이번 인터뷰의 문서 정체성을 매턴 주입한다
+            label = docloops.doc_label(self.sess.doc_slug)  # facade 경유 — DOC_KINDS 직접 순회 금지
+            parts.append(
+                "### 이번 인터뷰 문서\n"
+                f"- 이번 인터뷰는 **{label}** 단독 문서 세션이다. 산출 문서는 서버가 세션 생성 시\n"
+                "  고정한 값이다 — 문서 목록·선택을 묻거나 확정 항목으로 다루지 않는다. plan 메타는\n"
+                f"  `- 산출 문서: {label}` 하나만 쓴다."
+            )
         src = read_sources_context(self.sources_dirs)
         if src:
             parts.append("### 소스 문서\n" + src)
