@@ -78,37 +78,87 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
 /** 인터뷰 SSE 이벤트 — backend/app/events.py Event(name, payload)와 대응 */
 export type SseEvent = { name: string; payload: Record<string, unknown> };
 
+/** 유휴 판정 기준 — 서버 keepalive(15s)의 4배 — 4회 소실 판정 (본수 방어). */
+const SSE_IDLE_TIMEOUT_MS = 60_000;
+
 /**
  * POST로 시작하는 SSE 스트림 소비. 답변/게이트 제출(REST POST)이 곧 스트림이 되는
  * 인터뷰 턴 계약(D6) — EventSource는 GET만 지원하므로 fetch 스트림으로 파싱한다.
+ *
+ * 유휴 타임아웃(기본 60초, 0 이하이면 없음): 바이트 청크가 60초 동안 오지 않으면
+ * 연결을 정리하고 ApiError(504)로 재제출 가능 상태로 복귀한다 — 서버 keepalive
+ * (`: ping` 코멘트 프레임)도 바이트 활동이므로 ping이 도는 한 연결은 계속 산다.
  */
 export async function apiSSE(
   path: string,
   body: unknown,
   onEvent: (ev: SseEvent) => void,
   signal?: AbortSignal,
+  idleTimeoutMs: number = SSE_IDLE_TIMEOUT_MS,
 ): Promise<void> {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!res.ok || !res.body) throw new ApiError(res.status, await errorText(res));
-  await parseSSE(res.body, onEvent);
+  const controller = new AbortController();
+  let idleAborted = false; // 유휴 타이머가 abort했는지 — 외부 취소와 구분한다
+  const onExternalAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", onExternalAbort);
+  }
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) throw new ApiError(res.status, await errorText(res));
+    await parseSSE(res.body, onEvent, {
+      idleTimeoutMs,
+      signal: controller.signal,
+      onIdle: () => {
+        idleAborted = true;
+        controller.abort();
+      },
+    });
+  } catch (e) {
+    // 유휴로 abort된 경우만 504로 변환 — 외부 수동 취소·fetch 단계 AbortError는 그대로 전파
+    if (idleAborted && e instanceof Error && e.name === "AbortError") {
+      throw new ApiError(504, "서버 응답이 지연되어 연결을 종료했습니다 — 다시 시도해 주세요");
+    }
+    throw e;
+  } finally {
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
 }
 
-/** 텍스트 이벤트 스트림을 `event:`/`data:` 프레임으로 분해한다. */
+/** 텍스트 이벤트 스트림을 `event:`/`data:` 프레임으로 분해한다.
+ *  `opts.idleTimeoutMs`(0 이하·미지정이면 타임아웃 없음) 동안 바이트 청크가 오지
+ *  않으면 `opts.onIdle`을 호출한다 — 파싱된 이벤트가 아닌 청크 기준이므로 코멘트
+ *  프레임도 유효 활동으로 간주된다. 스트림을 직접 정리할 수 없어 만료 처리는
+ *  타이머 소유 측(apiSSE — AbortController 보유)에 맡긴다. */
 export async function parseSSE(
   stream: ReadableStream<Uint8Array>,
   onEvent: (ev: SseEvent) => void,
+  opts?: { idleTimeoutMs?: number; signal?: AbortSignal; onIdle?: () => void },
 ): Promise<void> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buf = "";
+  const idleTimeoutMs = opts?.idleTimeoutMs ?? 0;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const resetIdle = () => {
+    if (idleTimeoutMs <= 0) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      idleTimer = undefined;
+      opts?.onIdle?.();
+    }, idleTimeoutMs);
+  };
   try {
+    resetIdle();
     for (;;) {
+      if (opts?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
       const { done, value } = await reader.read();
+      resetIdle(); // 바이트 청크마다 리셋 — `: ping` 코멘트 프레임도 활동이다
       if (done) break;
       buf += decoder.decode(value, { stream: true });
       let sep: number;
@@ -120,6 +170,7 @@ export async function parseSSE(
       }
     }
   } finally {
+    clearTimeout(idleTimer); // 정상 종료·오류 종료 모두 타이머 정리
     reader.releaseLock();
   }
 }
