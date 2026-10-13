@@ -351,6 +351,19 @@ class InterviewAgent:
             # (프롬프트만으로 임의 키 위반이 저지되지 않은 실세션 수업의 서버 쪽 대응).
             return (f"ERROR: plan 포맷 검증 실패 — {e}\n{PLAN_BULLET_CHEATSHEET}\n"
                     "이 표기를 그대로 모방해 write_plan을 다시 호출하라")
+        # 문서 정합 가드 (doc 세션) — 세션의 문서 정체성(doc_slug)과 plan 메타의 일치를
+        # 골격 검증 앞에서 잠근다. doc 세션에서 다른 문서 메타(`- 산출 문서: 개발설계서`)
+        # 가 수용되면 derive가 다른 문서 기준으로 슬라이드를 걸러낸다. 파서(planforge/)
+        # 는 무수정 계약이라 LLM 대면 ERROR 피드백으로만 되돌린다 (PLAN_BULLET_CHEATSHEET
+        # 와 같은 앱 계층 치료안 철학). 잘못된 문서 메타 기준 골격 오류를 내기 전에 문서부터
+        # 바로잡아 재시도 1회 수렴을 노린다. 레거시 세션(doc_slug None)은 가드 미적용 —
+        # 기존 다문서 plan의 write_plan 경로를 그대로 통과시킨다.
+        if self.sess.doc_slug:
+            expected = [docloops.doc_label(self.sess.doc_slug)]
+            if plan.docs != expected:
+                return (f"ERROR: 이 세션의 산출 문서는 '{expected[0]}' 단독이다 — 메타에 "
+                        f"`- 산출 문서: {expected[0]}`을 쓰고 슬라이드 [문서: ...] 태그는 쓰지 "
+                        "않은 뒤 write_plan을 다시 호출하라")
         # 골격 검증 (원칙 8) — SkeletonError는 PlanError가 아니므로 문서별로 잡아 ERROR
         # 피드백으로 되돌린다 (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다).
         # 문서별 루프라 어느 문서가 미달인지 함께 알려 재시도 1회에 수렴시킨다.

@@ -715,6 +715,65 @@ def test_doc_session_injects_doc_identity_into_system_prompt(base_kit):
     assert "문서 목록·선택을 묻거나 확정 항목으로" in sys1
 
 
+DOC_GUARD_KICK_TURN = ("가설 초안: 제안서 단독 문서 세션 — 제안서 아크를 진행한다.", [
+    ("ask_questions", {"round_summary": "뼈대 확인",
+                       "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
+])
+
+DOC_GUARD_TURNS = [
+    DOC_GUARD_KICK_TURN,
+    # 턴2 answers: 팩트 확인 게이트 제시
+    ("", [("save_facts", {"facts": [{"content": "f1", "source": "인터뷰"}]})]),
+    # 턴3 팩트 승인 후: 핵심 메시지 승인 카드
+    ("", [("confirm_key_messages", {"messages": ["a", "b", "c"]})]),
+    # 턴4 key-messages 승인 직후 — doc 세션(proposal)과 어긋난 개발설계서 메타 plan
+    ("", [("write_plan", {"markdown": DESIGN_PLAN_MARKDOWN})]),          # 정합 가드 ERROR
+    ("", [("write_plan", {"markdown": PROPOSAL_PLAN_MARKDOWN})]),        # 재호출 → OK
+]
+
+
+@pytest.fixture()
+def doc_guard_kit(llm_app_factory):
+    """문서 정합 가드 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 DOC_GUARD_TURNS)."""
+    fake = FakeStreamLLM(DOC_GUARD_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
+
+
+def test_write_plan_doc_mismatch_guard_loops_back(doc_guard_kit):
+    """write_plan 문서 정합 가드 — doc 세션(proposal)에서 다른 문서 메타(개발설계서) plan
+    은 골격 검증 앞에서 ERROR 피드백으로 되돌려진다. 세션은 FAILED가 아닌 재시도 가능
+    상태로 유지되고(plan_fixes 재시도 루프 참여), 같은 턴 안에서 올바른 제안서 메타로
+    재호출하면 plan_draft이 난다 (레거시 세션 가드 미적용은 기존 흐름 테스트가 잠근다)."""
+    sclient, fake_llm = doc_guard_kit.client, doc_guard_kit.fake
+    sclient.post("/api/projects", json={"slug": "doc-guard-e2e", "title": "문서 정합 가드"})
+    # 제안서 루프는 생성 직후 active라 세션 게이트(require_session_doc)를 통과한다
+    r = sclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "proposal"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "free_text": "답"}]})
+    _sse_events(sclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    events = _sse_events(sclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+
+    assert len(fake_llm.calls) == 5              # 게이트 3회 + 어긋난 호출 + 재호출
+    fb = [m["content"] for m in fake_llm.calls[4] if m["role"] == "tool"][-1]
+    assert fb.startswith("ERROR: 이 세션의 산출 문서는 '제안서' 단독이다")
+    assert "`- 산출 문서: 제안서`" in fb          # 치료안 — 쓸 메타 표기 안내
+    assert "쓰지 않은 뒤 write_plan을 다시 호출하라" in fb
+    assert "plan 골격 검증 실패" not in fb        # 가드가 골격 검증 앞에 있다 (설계 의도)
+    assert "plan 포맷 검증 실패" not in fb        # 파서 원문을 건드리지 않는다
+
+    draft = next(p for n, p in events if n == "plan_draft")
+    assert draft["docs"] == ["제안서"]
+    s = sclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["error"] is None  # FAILED 아님 — 재시도 상태로 수렴
+
+
 def test_round_summary_persisted_and_replayed(base_kit):
     """라운드 목표(round_summary)는 세션에 영속·SessionOut으로 노출되고, 이력
     questions EVENT 행 payload에도 summary가 실린다 — 재접속 리플레이(D6)에서
