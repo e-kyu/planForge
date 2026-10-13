@@ -7,7 +7,8 @@
       "name": "derive-doc-slug-guard",
       "status": "completed",
       "started_at": "2026-10-13T13:45:09+0900",
-      "summary": "derivatives api.py에 doc-loop doc_slug 필수 가드(누락 409·미상 404) 추가 + ADR 결정 22 하위 기록 — 테스트 6파일 갱신(test_jobs_worker 10곳+시드·test_review 5호출부+시드·test_enqueue_visibility·test_docloops 필터 재작성) 및 신규 가드 테스트 test_enqueue_derivative_requires_doc_slug_in_doc_loop·제안서 문서 세션 e2e 전환(test_interview_to_build_end_to_end), AC 5파일 79 passed·전체 340 passed·openapi diff 0"
+      "summary": "derivatives api.py에 doc-loop doc_slug 필수 가드(누락 409·미상 404) 추가 + ADR 결정 22 하위 기록 — 테스트 6파일 갱신(test_jobs_worker 10곳+시드·test_review 5호출부+시드·test_enqueue_visibility·test_docloops 필터 재작성) 및 신규 가드 테스트 test_enqueue_derivative_requires_doc_slug_in_doc_loop·제안서 문서 세션 e2e 전환(test_interview_to_build_end_to_end), AC 5파일 79 passed·전체 340 passed·openapi diff 0",
+      "completed_at": "2026-10-13T13:51:02+0900"
     },
     {
       "step": 1,
