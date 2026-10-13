@@ -16,7 +16,7 @@
       "status": "completed",
       "summary": "apiSSE 유휴 타임아웃(60s) — client.ts만 수정: parseSSE 선택적 opts(idleTimeoutMs·signal·onIdle, 바이트 청크 기준 리셋), apiSSE 5번째 파라미터+내부 AbortController, 유휴 abort만 ApiError(504) 변환, useInterview·호출부 무수정 (npm run build 통과)",
       "started_at": "2026-10-13T21:37:20+0900",
-      "completed_at": "2026-10-13T22:05:00+0900"
+      "completed_at": "2026-10-13T21:39:42+0900"
     },
     {
       "step": 2,
