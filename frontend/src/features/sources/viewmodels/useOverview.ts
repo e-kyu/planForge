@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchOverview, saveOverview } from "../models/overviewApi";
 import { errMsg } from "../../../shared/lib/errMsg";
-import { fmtBytes } from "../../../shared/components/ui";
+import { fmtBytes } from "../../../shared/lib/format";
+import { MAX_SOURCE_MB } from "../../../shared/lib/uploadLimits";
 
 /* 개요 문서 (sources/overview.md) — 파일이 곧 SSOT인 fs 네이티브 소스 문서.
    용도: 인터뷰 기본자료 전용 (plan 결과물 생성 체인 미사용). */
-
-export const MAX_MB = 2; // 서버 MAX_SOURCE_BYTES(2MB)와 동일 — 소스 viewmodel과 같은 클라 사전검사
 
 /** 새 개요 문서 시작 뼈대 — LLM 자동생성이 아닌 정적 템플릿으로만 시작한다. */
 export const OVERVIEW_TEMPLATE = `# 프로젝트 개요
@@ -53,8 +52,8 @@ export function useOverviewEditor(pid: number) {
 
   const saveM = useMutation({
     mutationFn: async (content: string) => {
-      if (new Blob([content]).size > MAX_MB * 1024 * 1024)
-        throw new Error(`개요 문서의 크기가 ${MAX_MB}MB를 초과합니다`);
+      if (new Blob([content]).size > MAX_SOURCE_MB * 1024 * 1024)
+        throw new Error(`개요 문서의 크기가 ${MAX_SOURCE_MB}MB를 초과합니다`);
       await saveOverview(pid, content);
     },
     onSuccess: async (_, content) => {

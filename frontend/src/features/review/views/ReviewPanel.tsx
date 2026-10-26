@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, ShieldCheck, XCircle, type LucideIcon } from "lucide-react";
 import type { Job, Review, ReviewFinding } from "../../../api/client";
-import { Banner, Button, Empty, PageHeader, fmtDateTime } from "../../../shared/components/ui";
+import { Banner, Button, Empty, Loading, PageHeader, fmtDateTime } from "../../../shared/components/ui";
 import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { navigate } from "../../../shared/lib/hashRoute";
-import { elapsedText, latestByType, progressText } from "../../../shared/lib/jobs";
+import { elapsedText, isActive, latestByType, progressText } from "../../../shared/lib/jobs";
+import { latestApproved } from "../../../shared/lib/plans";
+import { jobsLoadErrorText } from "../../../shared/lib/messages";
 import { useReviewApply, useReviews } from "../viewmodels/useReviews";
 
 const SEV_ICON: Record<string, LucideIcon> = { red: XCircle, yellow: AlertTriangle, white: Info };
@@ -18,18 +20,16 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
     useReviews(pid, doc);
   const [sel, setSel] = useState<Review | null>(null);
 
-  if (reports === null) return <Empty>불러오는 중…</Empty>;
+  if (reports === null) return <Loading />;
 
   // 검수 대상 plan — 문서 컨텍스트가 있으면 그 문서의 승인 plan만 (독립 검수).
-  const approvedPlan = [...plans].reverse().find(
-    (p) => p.status === "approved" && (doc === null || p.doc_slug === doc),
-  );
+  const approvedPlan = latestApproved(plans, doc);
   const verById = new Map(plans.map((p) => [p.id, p.version_no]));
   // 배너 기준 잡 — 타입별 최신(마지막 상태) 잡. 진행 문구·경과를 잡 폴링에서 파생한다.
   const reviseJob = latestByType(jobs, "plan_revise");
   const reviewJob = latestByType(jobs, "review");
-  const reviseActive = reviseJob?.status === "queued" || reviseJob?.status === "running";
-  const reviewActive = reviewJob?.status === "queued" || reviewJob?.status === "running";
+  const reviseActive = reviseJob !== undefined && isActive(reviseJob);
+  const reviewActive = reviewJob !== undefined && isActive(reviewJob);
 
   return (
     <section>
@@ -50,7 +50,7 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
         )}
       </PageHeader>
 
-      {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
+      {jobsError && <Banner kind="error">{jobsLoadErrorText(jobsError)}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {failedReviseJob && (
         <Banner kind="error">

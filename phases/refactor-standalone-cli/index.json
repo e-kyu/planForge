@@ -85,7 +85,10 @@
     {
       "step": 10,
       "name": "frontend-shared-foundation",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:36:30+0900",
+      "summary": "프론트 공용 기반 추출 — shared/lib/format(formatVersion·fmtDateTime·fmtDate·fmtBytes·formatEpochSeconds, ui.tsx는 기존 이름 재수출)·uploadLimits(MAX_SOURCE_MB=2·MAX_ZIP_MB=30)·labels(PLAN_STATUS_LABEL·PLAN_STATUS_SHORT_LABEL·JOB_STATUS_LABEL, 문구별 키 유지)·plans.latestApproved(doc 필터 차이 보존)·messages(JOBS_LOAD_ERROR_PREFIX·jobsLoadErrorText)·jobs predicate(isRunning·isQueued·isActive·isJobTypeActive — hasActive/latestActive 내부 재사용), shared/components/SegToggle 추출(클래스·동작 불변). PlanPanel·OverviewEditor·SourcesPanel·OutputsPanel·ReviewPanel·HeaderMetrics·ActivityPill·usePlans·useReviews 호출부 교체, 로딩 표시 Empty→Loading. query key·무효화·fetch 경로·사용자 문구·tokens.css 무변경, refetchInterval 소유자는 useActiveJobs 단일 유지. npm run build 통과, pytest exit 0.",
+      "completed_at": "2026-10-26T21:42:13+0900"
     },
     {
       "step": 11,

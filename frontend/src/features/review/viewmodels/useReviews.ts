@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Job } from "../../../api/client";
 import { enqueueReview, fetchPlans, fetchReviews, reviseFromReview } from "../models/reviewApi";
-import { latestByType } from "../../../shared/lib/jobs";
+import { isJobTypeActive, latestByType } from "../../../shared/lib/jobs";
 import { seedJob, useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { errMsg } from "../../../shared/lib/errMsg";
@@ -11,13 +10,8 @@ import { errMsg } from "../../../shared/lib/errMsg";
  * 잡 폴링 소유자는 공용 useActiveJobs (헤더 ActivityPill·OutputsPanel과 같은 캐시) —
  * 검수 탭이 아닐 때도 폴링이 계속된다(헤더가 소유자). */
 
-/** 검수 feature 관점의 활성 판정 — review/plan_revise 타입만 (추적성: 검수 배너 게이트). */
-const hasReviewActive = (jobs: Job[]) =>
-  jobs.some(
-    (j) =>
-      (j.type === "review" || j.type === "plan_revise") &&
-      (j.status === "queued" || j.status === "running"),
-  );
+/** 검수 feature 관점의 활성 판정 대상 타입 — 추적성: 검수 배너 게이트. */
+const REVIEW_JOB_TYPES = ["review", "plan_revise"];
 
 export function useReviews(pid: number, docSlug?: string | null) {
   const qc = useQueryClient();
@@ -34,8 +28,8 @@ export function useReviews(pid: number, docSlug?: string | null) {
   const bootstrappedRef = useRef(false);
 
   const jobs = jobsS.jobs;
-  const busy = pending || hasReviewActive(jobs);
-  const active = hasReviewActive(jobs);
+  const active = isJobTypeActive(jobs, REVIEW_JOB_TYPES);
+  const busy = pending || active;
   // 경과 갱신 틱 — 조건은 some(running) (activeJob 기준이면 여러 잡일 때 멈춘다)
   const now = useTickingNow(jobs.some((j) => j.status === "running"));
 

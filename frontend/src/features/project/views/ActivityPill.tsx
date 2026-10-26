@@ -1,6 +1,7 @@
 import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { jobStateText, queuedStateText } from "../../../shared/lib/jobs";
+import { JOBS_LOAD_ERROR_PREFIX, jobsLoadErrorText } from "../../../shared/lib/messages";
 
 /** 전역 작업 필 — 다른 탭(인터뷰/plan/소스)에서도 파생물·검수 잡 진행을 보게 한다.
  *  탭 패널은 하나씩만 마운트되므로, 폴링 소유자(useActiveJobs의 refetchInterval)를
@@ -24,7 +25,7 @@ export default function ActivityPill({ pid }: { pid: number }) {
         ? queuedStateText(activeJob)
         : (jobStateText(activeJob, now) ?? "처리 중");
     return (
-      <div className="activity-pill" title={jobsError ? `작업 상태 조회 실패: ${jobsError}` : text}>
+      <div className="activity-pill" title={jobsError ? jobsLoadErrorText(jobsError) : text}>
         <span className={`activity-dot ${running ? "activity-dot-pulse" : ""}`} aria-hidden="true" />
         <span className="activity-text">{text}</span>
       </div>
@@ -34,7 +35,7 @@ export default function ActivityPill({ pid }: { pid: number }) {
   return (
     <div className="activity-pill activity-pill-danger" title={jobsError ?? ""}>
       <span className="activity-dot" aria-hidden="true" />
-      <span className="activity-text">작업 상태 조회 실패</span>
+      <span className="activity-text">{JOBS_LOAD_ERROR_PREFIX}</span>
     </div>
   );
 }

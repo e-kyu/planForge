@@ -1,39 +1,14 @@
 import { useRef, useState } from "react";
 import { FileCode, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Banner, Button, Empty, Loading } from "../../../shared/components/ui";
+import SegToggle from "../../../shared/components/SegToggle";
 import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
+import { formatVersion } from "../../../shared/lib/format";
+import { PLAN_STATUS_LABEL } from "../../../shared/lib/labels";
 import { CmDiff, CmEditor } from "../../../shared/components/CmEditor";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { usePlans } from "../viewmodels/usePlans";
 import type { DocSlug } from "../../projects/models/docloops";
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "초안",
-  approved: "승인됨",
-  superseded: "이전 세대",
-};
-
-/** 표시 방식 세그먼트 토글 — 보기·대비 = 코드|뷰어, 편집 = 코드|분할|뷰어 (3모드 동일 UI). */
-function SegToggle<T extends string>(props: {
-  value: T;
-  options: readonly { key: T; label: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="plan-seg" role="group" aria-label="표시 방식">
-      {props.options.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          className={`plan-seg-btn ${props.value === o.key ? "plan-seg-active" : ""}`}
-          onClick={() => props.onChange(o.key)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 type Mode = "view" | "edit" | "diff";
 type ViewStyle = "code" | "viewer";
@@ -87,8 +62,6 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
     }
   }
 
-  const vlabel = (n: number) => `v${String(n).padStart(2, "0")}`;
-
   return (
     <section className={`plan-layout ${planCollapsed ? "plan-collapsed" : ""}`}>
       <aside className="plan-side" id="plan-side">
@@ -119,9 +92,9 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
                   setNotice(null);
                 }}
               >
-                <span>{vlabel(p.version_no)}</span>
+                <span>{formatVersion(p.version_no)}</span>
                 <span className={`badge badge-plan-${p.status}`}>
-                  {STATUS_LABEL[p.status] ?? p.status}
+                  {PLAN_STATUS_LABEL[p.status] ?? p.status}
                 </span>
                 {(p.docs ?? []).length > 0 && (
                   <span className="plan-row-docs">[문서: {(p.docs ?? []).map(String).join("+")}]</span>
@@ -186,7 +159,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
               disabled={busy || !before}
               onClick={() => setMode(before ? "diff" : "view")}
             >
-              {before ? `이전 세대 대비 (${vlabel(before.version_no)} → ${vlabel(sel.version_no)})` : "diff (이전 세대 없음)"}
+              {before ? `이전 세대 대비 (${formatVersion(before.version_no)} → ${formatVersion(sel.version_no)})` : "diff (이전 세대 없음)"}
             </Button>
             {mode === "edit" ? (
               <SegToggle
@@ -257,11 +230,11 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
           {mode === "diff" && before && viewStyle === "viewer" && (
             <div className="plan-viewer-split">
               <div className="plan-viewer-col">
-                <div className="plan-viewer-head">{vlabel(before.version_no)} (이전 세대)</div>
+                <div className="plan-viewer-head">{formatVersion(before.version_no)} (이전 세대)</div>
                 <MarkdownPreview markdown={before.markdown} />
               </div>
               <div className="plan-viewer-col">
-                <div className="plan-viewer-head">{vlabel(sel.version_no)} (현재)</div>
+                <div className="plan-viewer-head">{formatVersion(sel.version_no)} (현재)</div>
                 <MarkdownPreview markdown={sel.markdown} />
               </div>
             </div>

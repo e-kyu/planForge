@@ -7,14 +7,12 @@ import {
   uploadSource,
 } from "../models/sourcesApi";
 import { errMsg } from "../../../shared/lib/errMsg";
+import { MAX_SOURCE_MB, MAX_ZIP_MB } from "../../../shared/lib/uploadLimits";
 
 /* 소스 관리 (FR-2.1) — 프로젝트 sources/(업로드·삭제) + 글로벌 sources/(읽기 전용).
- * 삭제는 확인 모달을 거친다 (useProjects의 delTarget 패턴과 동일). */
-
-export const MAX_MB = 2;
-// 백엔드 MAX_ZIP_BYTES(30MB)와 동일 — zip 파일 자체(컨테이너) 선거부.
-// 단건 텍스트 파일(max 2MB)과 상한이 다르므로 .zip만 이 값을 적용한다.
-export const MAX_ZIP_MB = 30;
+ * 삭제는 확인 모달을 거친다 (useProjects의 delTarget 패턴과 동일).
+ * 업로드 상한은 shared/lib/uploadLimits — zip 컨테이너는 별도 상한(MAX_ZIP_MB),
+ * 단건 텍스트 파일은 MAX_SOURCE_MB를 적용한다. */
 
 /** 업로드 결과 보고 — UploadResult(saved·skipped)를 파일 갯수만큼 누적해 뷰에 노출한다. */
 export type UploadReport = {
@@ -42,7 +40,7 @@ export function useSources(pid: number) {
       let savedCount = 0;
       let skipped: UploadReport["skipped"] = [];
       for (const f of Array.from(fileList)) {
-        const mb = f.name.toLowerCase().endsWith(".zip") ? MAX_ZIP_MB : MAX_MB;
+        const mb = f.name.toLowerCase().endsWith(".zip") ? MAX_ZIP_MB : MAX_SOURCE_MB;
         if (f.size > mb * 1024 * 1024) {
           throw new Error(`${f.name}: ${mb}MB 초과`);
         }

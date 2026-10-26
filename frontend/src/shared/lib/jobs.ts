@@ -44,6 +44,25 @@ export function latestDoneDeriveWithReds(jobs: Job[]): Job | undefined {
   return findings?.some((f) => f.severity === "red") ? latest : undefined;
 }
 
+/** 상태 predicate — 화면별 `j.status === "..."` 복제를 한 어휘로 모은다. */
+export function isRunning(j: Job): boolean {
+  return j.status === "running";
+}
+
+export function isQueued(j: Job): boolean {
+  return j.status === "queued";
+}
+
+/** 활성(queued/running) — 폴링 주기·busy 배너·진행 표시의 공용 조건. */
+export function isActive(j: Job): boolean {
+  return isQueued(j) || isRunning(j);
+}
+
+/** 지정 타입 중 활성 잡 존재 — 검수 feature의 review/plan_revise 게이트 등. */
+export function isJobTypeActive(jobs: Job[], types: string[]): boolean {
+  return jobs.some((j) => types.includes(j.type) && isActive(j));
+}
+
 /** 타입 불문 현재 활성(queued/running) job — busy 배너·pill이 가리킬 대상.
  * running을 queued보다 우선한다: 직렬 워커 하에서 큐가 밀리면 최신 id 잡은 queued일
  * 수밖에 없어 "마지막 클릭 잡" 기준이면 실제 실행 중 잡의 진행(변환/빌드·경과)이
@@ -52,16 +71,15 @@ export function latestActive(jobs: Job[]): Job | undefined {
   let running: Job | undefined;
   let latest: Job | undefined;
   for (const j of jobs) {
-    if (j.status === "running" && (!running || j.id > running.id)) running = j;
-    if ((j.status === "queued" || j.status === "running") && (!latest || j.id > latest.id))
-      latest = j;
+    if (isRunning(j) && (!running || j.id > running.id)) running = j;
+    if (isActive(j) && (!latest || j.id > latest.id)) latest = j;
   }
   return running ?? latest;
 }
 
 /** 활성(queued/running) 잡 존재 확인 — 폴링 주기·busy 배너의 공용 조건. */
 export function hasActive(jobs: Job[] | undefined): boolean {
-  return Boolean(jobs?.some((j) => j.status === "queued" || j.status === "running"));
+  return Boolean(jobs?.some(isActive));
 }
 
 export const JOB_TYPE_LABEL: Record<string, string> = {

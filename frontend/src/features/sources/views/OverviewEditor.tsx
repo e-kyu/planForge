@@ -1,31 +1,10 @@
 import { useState } from "react";
 import { Download, FileCode, FileText } from "lucide-react";
 import { Banner, Button, Loading, PageHeader } from "../../../shared/components/ui";
+import SegToggle from "../../../shared/components/SegToggle";
 import { CmEditor } from "../../../shared/components/CmEditor";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOverviewEditor } from "../viewmodels/useOverview";
-
-/** 표시 방식 세그먼트 토글 — PlanPanel의 SegToggle을 파일별 복제 (코드|분할|뷰어 3모드 동일 UI). */
-function SegToggle<T extends string>(props: {
-  value: T;
-  options: readonly { key: T; label: string }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="plan-seg" role="group" aria-label="표시 방식">
-      {props.options.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          className={`plan-seg-btn ${props.value === o.key ? "plan-seg-active" : ""}`}
-          onClick={() => props.onChange(o.key)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 type EditStyle = "code" | "split" | "viewer";
 

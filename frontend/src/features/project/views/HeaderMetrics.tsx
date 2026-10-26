@@ -1,5 +1,6 @@
 import { CheckCircle2, FileCode, ShieldCheck } from "lucide-react";
 import { useHeaderMetrics } from "../viewmodels/useProjectShell";
+import { PLAN_STATUS_SHORT_LABEL } from "../../../shared/lib/labels";
 
 type PillTone = "neutral" | "ok" | "warn" | "danger";
 
@@ -8,14 +9,9 @@ type PillTone = "neutral" | "ok" | "warn" | "danger";
 export default function HeaderMetrics(props: { pid: number }) {
   const m = useHeaderMetrics(props.pid);
 
-  const planStatusLabel =
-    m.planStatus === "approved"
-      ? "승인"
-      : m.planStatus === "draft"
-        ? "초안"
-        : m.planStatus === "superseded"
-          ? "대체됨"
-          : null;
+  const planStatusLabel = m.planStatus
+    ? (PLAN_STATUS_SHORT_LABEL[m.planStatus] ?? null)
+    : null;
 
   const reviewTone: PillTone = m.red == null ? "neutral" : m.red === 0 ? "ok" : "danger";
   const reviewValue =

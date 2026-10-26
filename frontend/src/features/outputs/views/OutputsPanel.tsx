@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Download, Layout } from "lucide-react";
 import type { Job } from "../../../api/client";
-import { Banner, Button, Empty, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
+import { Banner, Button, Empty, Loading, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
 import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
 import { useOutputs } from "../viewmodels/useOutputs";
@@ -9,6 +9,10 @@ import type { DocSlug } from "../../projects/models/docloops";
 import { navigate } from "../../../shared/lib/hashRoute";
 import { elapsedText, jobStateText, progressText, JOB_TYPE_LABEL } from "../../../shared/lib/jobs";
 import type { DeriveFinding } from "../../../shared/lib/jobs";
+import { JOB_STATUS_LABEL } from "../../../shared/lib/labels";
+import { latestApproved } from "../../../shared/lib/plans";
+import { jobsLoadErrorText } from "../../../shared/lib/messages";
+import { formatVersion } from "../../../shared/lib/format";
 
 const EXT_LABEL: Record<string, string> = {
   pptx: "PPTX",
@@ -18,15 +22,6 @@ const EXT_LABEL: Record<string, string> = {
 };
 
 type JobCounts = { slides?: number; sections?: number; attempts?: number };
-
-/** 잡 타입·상태 레이블 — 타입 레이블은 공용 셀렉터(jobs.ts)에서 import한다. */
-const JOB_STATUS: Record<string, { icon: string; label: string }> = {
-  queued: { icon: "○", label: "대기" },
-  running: { icon: "⟳", label: "진행" },
-  done: { icon: "✓", label: "완료" },
-  failed: { icon: "✕", label: "실패" },
-  cancelled: { icon: "−", label: "취소" },
-};
 
 /** 산출물 갤러리 (FR-3.4/3.5, FR-5) — 확장자별 버전, 미리보기(md/html 인라인, pptx/docx 다운로드).
  *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 목록 조회 스코프(?doc_slug=)는 viewmodel 경유. */
@@ -56,9 +51,9 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
   const [failedDismissId, setFailedDismissId] = useState<number | null>(null);
   const [residualDismissId, setResidualDismissId] = useState<number | null>(null);
 
-  if (builds === null) return <Empty>불러오는 중…</Empty>;
+  if (builds === null) return <Loading />;
 
-  const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
+  const approvedPlan = latestApproved(plans);
   const docs = (approvedPlan?.docs ?? []) as string[];
   // 대상 문서 미선택 해석 — 다중 문서 plan에서만 셀렉트가 보이므로 거기서는 실제 문서 선택을
   // 요구하고 생성 버튼을 잠근다 (단일 문서는 백엔드가 plan.docs[0]로 해석 — derive_build.py).
@@ -114,7 +109,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
         )}
       </PageHeader>
 
-      {jobsError && <Banner kind="error">작업 상태 조회 실패: {jobsError}</Banner>}
+      {jobsError && <Banner kind="error">{jobsLoadErrorText(jobsError)}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
       {notice && <Banner kind="info">{notice}</Banner>}
       {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시.
@@ -160,7 +155,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
                 <button className="output-open" onClick={() => void preview(b)}>
                   <span className="output-title">
                     <span className={`ext-chip ext-${b.ext}`}>{EXT_LABEL[b.ext] ?? b.ext}</span>
-                    {b.doc_kind} {EXT_LABEL[b.ext] ?? b.ext} {fmtVersion(b.version_no)}
+                    {b.doc_kind} {EXT_LABEL[b.ext] ?? b.ext} {formatVersion(b.version_no)}
                   </span>
                   <span className="hint">
                     {fmtBytes(b.size_bytes)} · {fmtDateTime(b.created_at)} · plan v{b.plan_id}
@@ -195,7 +190,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
         <div className="card">
           <div className="panel-head">
             <h4>
-              미리보기 — {sel.doc_kind} {EXT_LABEL[sel.ext]} {fmtVersion(sel.version_no)}
+              미리보기 — {sel.doc_kind} {EXT_LABEL[sel.ext]} {formatVersion(sel.version_no)}
             </h4>
             <Button variant="ghost" onClick={closePreview}>
               닫기
@@ -220,7 +215,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
           </div>
           <ul className="job-list">
             {recentJobs.map((j) => {
-              const st = JOB_STATUS[j.status];
+              const st = JOB_STATUS_LABEL[j.status];
               return (
                 <li key={j.id} className={`job-item job-${j.status}`}>
                   <div className="job-head">
@@ -248,10 +243,6 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
       )}
     </section>
   );
-}
-
-function fmtVersion(n: number): string {
-  return `v${String(n).padStart(2, "0")}`;
 }
 
 /** 작업 상세줄 — 실패는 JobErrorDetail 공용 컴포넌트가 담당, 타입별 결과 요약
