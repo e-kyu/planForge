@@ -17,7 +17,8 @@ from .common.const import DERIVATIVE_KINDS, REPORT_FORMATS, UNCONFIRMED_PREFIX
 from .common.io import read_text_utf8, write_json
 from .llm.loops import run_tool_loop
 from .numcheck import Finding, check_report, check_slides
-from .plan import Plan, PlanError, filter_slides, parse_plan_file, validate_skeleton
+from .plan import Plan
+from .plan.loader import PreparedPlan, load_plan_for_doc
 from .plan.model import SLIDE_TYPES_EN_TO_KO
 
 PROMPTS_DIR = Path(__file__).parent / "llm" / "prompts"
@@ -79,6 +80,7 @@ class DeriveResult:
     unconfirmed: list[int] = field(default_factory=list)  # (미확정) 표기가 남은 슬라이드 번호
     findings: list[Finding] = field(default_factory=list)   # numcheck 측정값 — 게이트 아님, 판정은 검수 (결정 17)
     attempts: int = 1
+    doc: str | None = None  # 대상 문서 — 로더가 해석한 값 (doc=None → plan.docs[0])
 
 
 # ---------------------------------------------------------------- plan 직렬화 (LLM 입력)
@@ -141,14 +143,9 @@ class Deriver:
     # ---- 공용 절차
 
     def _prepare(self, plan_path: str | Path, doc: str | None):
-        plan = parse_plan_file(plan_path)
-        doc = doc or plan.docs[0]
-        if doc not in plan.docs:
-            raise PlanError(f"문서 '{doc}'가 plan 메타 '산출 문서'({', '.join(plan.docs)})에 없습니다")
-        slides = filter_slides(plan.slides, doc)
-        validate_skeleton(slides)  # 원칙 8 — 미달 시 중단
-        unconfirmed = [s.no for s in slides if UNCONFIRMED_MARK in (s.source or "") or UNCONFIRMED_MARK in (s.message or "")]
-        return plan, doc, slides, unconfirmed
+        # 파싱 → 문서 선택 → 필터 → 골격 검증 → (미확정) 탐지는 로더 단일 권위 (plan/loader.py).
+        # strict_doc=True — 문서 존재 검사 문구를 기존 그대로 유지한다.
+        return load_plan_for_doc(plan_path, doc, strict_doc=True)
 
     def _system_prompt(self, kind: str) -> str:
         fname = "derive_slides.md" if kind == "slides" else "derive_report.md"
@@ -289,12 +286,18 @@ class Deriver:
     # ---- 파생물 생성
 
     def derive(self, plan_path: str | Path, kind: str, doc: str | None = None, *,
-               on_attempt=None) -> DeriveResult:
+               on_attempt=None, prepared: PreparedPlan | None = None) -> DeriveResult:
         """on_attempt(attempt, max_attempts) — LLM 변환 시도 직전 콜백 (진행 상황 기록용).
-        planforge는 DB를 모른다 — 예외 방어는 caller 콜백 쪽 책임."""
+        planforge는 DB를 모른다 — 예외 방어는 caller 콜백 쪽 책임.
+
+        prepared — 이미 로딩·검증된 plan(호출자가 로더로 준비한 경우). 주어지면 재파싱하지
+        않는다 (CLI·잡이 같은 plan을 두 번 파싱하던 경로 제거)."""
         if kind not in DERIVATIVE_KINDS:
             raise DeriveError(f"kind는 slides|report 중 하나여야 합니다: {kind}")
-        plan, doc, slides, unconfirmed = self._prepare(plan_path, doc)
+        if prepared is None:
+            prepared = self._prepare(plan_path, doc)
+        plan, doc = prepared.plan, prepared.doc
+        slides, unconfirmed = prepared.slides, prepared.unconfirmed
         payload, attempt, findings = self._run_llm(kind, plan, slides, doc, on_attempt=on_attempt)
 
         # 결정론 보정 — meta.title은 대상 문서 표지 슬라이드 제목 (make-ppt/make-doc 규칙)
@@ -310,7 +313,7 @@ class Deriver:
         work_path = self.workspace / "work" / ("slides.json" if kind == "slides" else "report.json")
         write_json(work_path, payload)
         res = DeriveResult(work_path=work_path, attempts=attempt, unconfirmed=unconfirmed,
-                           findings=findings)
+                           findings=findings, doc=doc)
         if kind == "slides":
             res.slides_count = len(payload["slides"])
         else:

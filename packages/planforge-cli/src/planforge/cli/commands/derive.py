@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from ...common.configpath import resolve_config_path
-from ...plan import filter_slides, parse_plan_file, validate_skeleton
+from ...plan.loader import load_plan_for_doc
 
 
 def cmd_derive(args) -> int:
-    from ...derive import Deriver, UNCONFIRMED_MARK
+    from ...derive import Deriver
     from ...llm import get_provider, load_config
 
     config_path = resolve_config_path(args.config)
@@ -19,20 +19,16 @@ def cmd_derive(args) -> int:
     profiles = load_config(config_path)
     provider = get_provider(profiles["derive"])
 
-    # (미확정) 수치 전제 확인 (make-ppt/make-doc 전제 절차 이식)
-    plan = parse_plan_file(args.plan)
-    doc_name = args.doc or plan.docs[0]
-    slides = filter_slides(plan.slides, doc_name)
-    validate_skeleton(slides)
-    unconfirmed = [s.no for s in slides
-                   if UNCONFIRMED_MARK in (s.source or "") or UNCONFIRMED_MARK in (s.message or "")]
-    if unconfirmed and not args.allow_unconfirmed:
-        print(f"(미확정) 표기가 남은 슬라이드: {unconfirmed} — 확정 수치로 채울지 확인이 필요합니다.")
+    # (미확정) 수치 전제 확인 (make-ppt/make-doc 전제 절차 이식) — 로더가 파싱·필터·골격·
+    # (미확정) 탐지를 한 번에 하며, 그 결과를 Deriver에 그대로 넘겨 재파싱하지 않는다.
+    prepared = load_plan_for_doc(args.plan, args.doc)
+    if prepared.unconfirmed and not args.allow_unconfirmed:
+        print(f"(미확정) 표기가 남은 슬라이드: {prepared.unconfirmed} — 확정 수치로 채울지 확인이 필요합니다.")
         print("그대로 진행하려면 --allow-unconfirmed 옵션을 사용하세요.")
         return 2
 
     d = Deriver(provider.chat, args.workspace)
-    res = d.derive(args.plan, args.kind, args.doc)
+    res = d.derive(args.plan, args.kind, args.doc, prepared=prepared)
     print(f"OK: {res.work_path} (시도 {res.attempts}회, "
           + (f"슬라이드 {res.slides_count}개" if args.kind == "slides" else f"섹션 {res.sections_count}개") + ")")
     if res.findings:

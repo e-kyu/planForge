@@ -19,13 +19,8 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session as DBSession
 
-from planforge.plan import (
-    PlanError,
-    SkeletonError,
-    filter_slides,
-    parse_plan_text,
-    validate_skeleton,
-)
+from planforge.plan import PlanError, SkeletonError, parse_plan_text
+from planforge.plan.loader import validate_each_doc
 
 from app.agents.tools import ToolError, validate_tool_args
 from app.modules.docloops import facade as docloops
@@ -344,8 +339,6 @@ class InterviewAgent:
         md = args["markdown"]
         try:
             plan = parse_plan_text(md)
-            if len(plan.key_messages) != 3:
-                return f"ERROR: 핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)"
         except PlanError as e:
             # 치료안(허용 키·모범 표기)은 LLM 대면 소관 — 파서 원문은 그대로 보내고 뒤에 붙인다
             # (프롬프트만으로 임의 키 위반이 저지되지 않은 실세션 수업의 서버 쪽 대응).
@@ -364,17 +357,17 @@ class InterviewAgent:
                 return (f"ERROR: 이 세션의 산출 문서는 '{expected[0]}' 단독이다 — 메타에 "
                         f"`- 산출 문서: {expected[0]}`을 쓰고 슬라이드 [문서: ...] 태그는 쓰지 "
                         "않은 뒤 write_plan을 다시 호출하라")
-        # 골격 검증 (원칙 8) — SkeletonError는 PlanError가 아니므로 문서별로 잡아 ERROR
-        # 피드백으로 되돌린다 (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다).
-        # 문서별 루프라 어느 문서가 미달인지 함께 알려 재시도 1회에 수렴시킨다.
-        for doc in plan.docs:
-            try:
-                validate_skeleton(filter_slides(plan.slides, doc))
-            except SkeletonError as e:
-                return (f"ERROR: plan 골격 검증 실패 — 문서 '{doc}': {e}\n"
-                        "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
-                        "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
-                        "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
+        # 골격 검증 (원칙 8) — 문서별 루프는 로더 단일 권위(validate_each_doc)가 담당하고,
+        # SkeletonError는 PlanError가 아니므로 여기서 잡아 ERROR 피드백으로 되돌린다
+        # (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다). 실패 메시지에는 어느
+        # 문서가 미달인지 포함돼 재시도 1회에 수렴한다.
+        try:
+            validate_each_doc(plan)
+        except SkeletonError as e:
+            return (f"ERROR: plan 골격 검증 실패 — {e}\n"
+                    "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
+                    "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
+                    "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
 
         # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당. doc_slug는 세대가
         # 속한 문서 식별자 (None = 레거시) — 승인·채번 사슬이 이 값으로 좁혀진다.

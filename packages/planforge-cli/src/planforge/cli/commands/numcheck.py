@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from ...common.io import read_json
 from ...numcheck import check_report, check_slides
-from ...plan import parse_plan_file
-from .parse import _filtered
+from ...plan.loader import load_plan_for_doc
 
 
 def cmd_numcheck(args) -> int:
-    plan = parse_plan_file(args.plan)
-    doc, slides = _filtered(plan, args.doc)
+    prepared = load_plan_for_doc(args.plan, args.doc)
+    plan, doc, slides = prepared.plan, prepared.doc, prepared.slides
     if not args.slides and not args.report:
         print("오류: --slides 또는 --report 중 하나는 필수입니다")
         return 2

@@ -21,13 +21,8 @@ from pathlib import Path
 
 from planforge.llm.loops import run_tool_loop
 from planforge.plan import Plan as ParsedPlan
-from planforge.plan import (
-    PlanError,
-    SkeletonError,
-    filter_slides,
-    parse_plan_text,
-    validate_skeleton,
-)
+from planforge.plan import PlanError, SkeletonError, parse_plan_text
+from planforge.plan.loader import validate_each_doc
 
 from app.agents.tools import WRITE_PLAN_TOOL
 
@@ -52,13 +47,12 @@ def validate_plan_markdown(markdown: str) -> ParsedPlan:
         plan = parse_plan_text(markdown)
     except PlanError as e:
         raise PlanError(f"plan 포맷 검증 실패 — {e}") from e
-    if len(plan.key_messages) != 3:
-        raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
-    for doc in plan.docs:
-        try:
-            validate_skeleton(filter_slides(plan.slides, doc))
-        except SkeletonError as e:
-            raise PlanError(f"plan 골격 검증 실패 — 문서 '{doc}': {e}") from e
+    # 핵심 메시지 3개는 파서(_validate_plan)가 이미 강제한다 — 도달 불가 중복 검사 제거.
+    # 문서별 골격 검증은 로더 단일 권위(validate_each_doc) — 실패 문서명을 포함해 던진다.
+    try:
+        validate_each_doc(plan)
+    except SkeletonError as e:
+        raise PlanError(f"plan 골격 검증 실패 — {e}") from e
     return plan
 
 

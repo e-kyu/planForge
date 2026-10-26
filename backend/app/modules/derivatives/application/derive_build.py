@@ -12,7 +12,7 @@ from pathlib import Path
 
 from planforge.common.io import read_json
 from planforge.derive import Deriver
-from planforge.plan import PlanError, parse_plan_file
+from planforge.plan import PlanError
 
 from app.modules.docloops import facade as docloops
 from app.modules.plans.facade import PlanStatus, get_plan
@@ -99,8 +99,9 @@ def run_derive_build(ctx, session, job) -> dict:
           f"({time.monotonic() - t_build:.0f}s, 파일 {len(made)}건)", flush=True)
 
     # 도메인 행 생성 — 여기부터는 report_progress를 호출하지 않는다 (진행 기록 불변식).
-    # Deriver가 기본 문서를 해석했다 (doc=None → plan.docs[0])
-    resolved_doc = doc or parse_plan_file(plan_mirror).docs[0]
+    # 대상 문서는 Deriver가 로더로 해석한 값(doc=None → plan.docs[0])을 그대로 쓴다 —
+    # 같은 plan을 다시 파싱하지 않는다.
+    resolved_doc = res.doc
     derivative = Derivative(
         plan_id=plan.id,
         project_id=project.id,
