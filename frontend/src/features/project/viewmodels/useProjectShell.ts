@@ -3,6 +3,7 @@ import type { Plan, Review } from "../../../api/client";
 import { fetchHeaderMetrics, fetchProject, fetchTabBadges } from "../models/projectApi";
 import type { ProjectTab } from "../models/projectApi";
 import { errMsg } from "../../../shared/lib/errMsg";
+import { formatVersion } from "../../../shared/lib/format";
 
 /* 프로젝트 셸 데이터 — 단일 프로젝트, 탭 배지, 헤더 메트릭 (§2 ViewModel). */
 
@@ -33,7 +34,7 @@ export function useTabBadges(pid: number): Badges {
         badges.interview = `${facts.value.filter((f) => f.status === "active").length}`;
       if (plans.status === "fulfilled" && plans.value.length > 0) {
         const latest = plans.value.at(-1);
-        if (latest) badges.plan = `v${String(latest.version_no).padStart(2, "0")}`;
+        if (latest) badges.plan = formatVersion(latest.version_no);
       }
       if (builds.status === "fulfilled") badges.outputs = `${builds.value.length}`;
       if (reviews.status === "fulfilled") {
