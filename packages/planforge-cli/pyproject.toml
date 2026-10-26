@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-planforge = "planforge.__main__:main"
+planforge = "planforge.cli.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
