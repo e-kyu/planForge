@@ -192,94 +192,123 @@ def _prose_option_lines(text: str) -> list[str]:
             if _PROSE_OPTION_LINE.match(ln.strip())]
 
 
+def _require(cond: Any, message: str) -> None:
+    """조건 불충족이면 ToolError — 검증 함수의 공통 가드."""
+    if not cond:
+        raise ToolError(message)
+
+
+def _validate_suggestions(index: int, sugs) -> list[str]:
+    """문항 suggestions 검증 → strip 정규화된 목록. 순서: 타입/빈 값/개행 → 개수 → 길이."""
+    if not isinstance(sugs, list):
+        raise ToolError(f"문항 {index}: suggestions는 문자열 배열이어야 합니다 "
+                        f"(현재 {type(sugs).__name__}) — 추천 후보 문장들의 배열로")
+    for k, s in enumerate(sugs, 1):
+        if not isinstance(s, str):
+            raise ToolError(f"문항 {index} 추천 후보 {k}: 후보는 문자열이어야 합니다")
+        if not s.strip():
+            raise ToolError(f"문항 {index} 추천 후보 {k}: 후보가 비어 있습니다 — "
+                            f"빈 후보를 제거하거나 문장을 채워라")
+        if "\n" in s or "\\n" in s:
+            raise ToolError(f"문항 {index} 추천 후보 {k}: 추천 후보는 한 줄 문장이다 — "
+                            f'"{s[:60]}…" (개행 제거 후 칩 한 줄로 요약)')
+    if len(sugs) > MAX_SUGGESTIONS:
+        raise ToolError(f"문항 {index}: 추천 후보는 최대 {MAX_SUGGESTIONS}개다 "
+                        f"(현재 {len(sugs)}개) — 가장 설득력 있는 "
+                        f"{MAX_SUGGESTIONS}개만 남겨라")
+    if any(len(s.strip()) > SUGGESTION_MAX_LEN for s in sugs):
+        long_one = next(s for s in sugs if len(s.strip()) > SUGGESTION_MAX_LEN)
+        raise ToolError(f"문항 {index}: 추천 후보는 {SUGGESTION_MAX_LEN}자 이내 한 줄이다 "
+                        f'("{long_one.strip()[:30]}…") — 근거 요약으로 짧게')
+    return [s.strip() for s in sugs]
+
+
+def _validate_ask_questions(args: dict[str, Any]) -> dict[str, Any]:
+    qs = args.get("questions") or []
+    _require(qs, "questions가 비어 있습니다 — 최소 1문항 필요")
+    if len(qs) > MAX_QUESTIONS:
+        raise ToolError(f"라운드당 최대 {MAX_QUESTIONS}문항입니다 (현재 {len(qs)}개) — "
+                        f"{MAX_QUESTIONS}개만 남기고 나머지는 다음 라운드로")
+    # 문항별 선택지 계약: options 2개 이상 또는 allow_free=true (둘 다 없으면 거부)
+    prose_bad: list[tuple[int, list[str]]] = []
+    for i, q in enumerate(qs, 1):
+        if not isinstance(q, dict):
+            raise ToolError(f"문항 {i}: 문항은 object여야 합니다")
+        prose_bad.append((i, _prose_option_lines(q.get("text") or "")))
+        # 추천 후보 칩 계약(선택 필드 — 없는 문항 통과). options 분기의 continue가
+        # 이 검증을 우회하지 않도록 options 처리 앞에서 검증한다.
+        sugs = q.get("suggestions")
+        if sugs is not None:
+            q["suggestions"] = _validate_suggestions(i, sugs)
+        opts = q.get("options") or []
+        if not opts:
+            if q.get("allow_free") is not True:
+                raise ToolError(f"문항 {i}: 선택지가 없습니다 — 객관형이면 options를 "
+                                f"2개(라벨+설명) 이상 채우고, 서술형 주제면 options 없이 "
+                                f"allow_free=true를 명시하라")
+            continue
+        if len(opts) < 2:
+            raise ToolError(f"문항 {i}: 선택지는 2개 이상이어야 합니다 (현재 {len(opts)}개) — "
+                            f"서술형 주제면 options를 빼고 allow_free=true로")
+        for j, o in enumerate(opts, 1):
+            if not isinstance(o, dict):
+                raise ToolError(f"문항 {i} 옵션 {j}: 옵션은 object여야 합니다")
+            label = o.get("label")
+            if not isinstance(label, str) or not label.strip():
+                raise ToolError(f"문항 {i} 옵션 {j}: label이 비어 있습니다")
+            o["label"] = label.strip()
+            desc = o.get("description")
+            if desc is not None and not isinstance(desc, str):
+                raise ToolError(f"문항 {i} 옵션 {j}: description은 문자열이어야 합니다")
+    # 본문 서술형 선택지 나열 — options 유무와 무관한 계약 위반이다(선택지는 options
+    # 배열로만 전달). 위반 문항을 집계해 한 번에 알려 재시도 1회로 수렴시킨다.
+    bad = [(i, lines) for i, lines in prose_bad if len(lines) >= PROSE_OPTION_THRESHOLD]
+    if bad:
+        names = "; ".join(f'문항 {i}("{lines[0][:30]}…")' for i, lines in bad)
+        raise ToolError(
+            f"질문 본문에 선택지 나열이 있습니다 — {names}. 선택지는 본문 텍스트에서 빼고 "
+            f"options 배열({{label, description}})로 옮겨라. 서술형 주제면 나열을 모두 "
+            f"제거하고 allow_free=true만 남긴다. 문항당 1개 주제로 나눌 것")
+    return args
+
+
+def _validate_save_facts(args: dict[str, Any]) -> dict[str, Any]:
+    facts = args.get("facts") or []
+    _require(facts, "facts가 비어 있습니다 — 확정된 팩트가 없으면 save_facts를 호출하지 말 것")
+    return args
+
+
+def _validate_confirm_key_messages(args: dict[str, Any]) -> dict[str, Any]:
+    msgs = args.get("messages") or []
+    _require(len(msgs) == 3, f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(msgs)}개)")
+    return args
+
+
+def _validate_update_checklist(args: dict[str, Any]) -> dict[str, Any]:
+    return args
+
+
+def _validate_write_plan(args: dict[str, Any]) -> dict[str, Any]:
+    _require((args.get("markdown") or "").strip(), "markdown이 비어 있습니다")
+    return args
+
+
+_VALIDATORS = {
+    "ask_questions": _validate_ask_questions,
+    "save_facts": _validate_save_facts,
+    "confirm_key_messages": _validate_confirm_key_messages,
+    "update_checklist": _validate_update_checklist,
+    "write_plan": _validate_write_plan,
+}
+
+
 def validate_tool_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """도구 인자 검증 → 정규화된 args 반환. 실패 시 ToolError."""
     if not isinstance(args, dict):
         # 도구 인자는 항상 JSON object — list/str 등이면 AttributeError(세션 FAILED
         # 전파) 대신 재시도 피드백으로 되돌린다
         raise ToolError(f"도구 인자는 JSON object여야 합니다 (현재 {type(args).__name__})")
-    if name == "ask_questions":
-        qs = args.get("questions") or []
-        if not qs:
-            raise ToolError("questions가 비어 있습니다 — 최소 1문항 필요")
-        if len(qs) > MAX_QUESTIONS:
-            raise ToolError(f"라운드당 최대 {MAX_QUESTIONS}문항입니다 (현재 {len(qs)}개) — "
-                            f"{MAX_QUESTIONS}개만 남기고 나머지는 다음 라운드로")
-        # 문항별 선택지 계약: options 2개 이상 또는 allow_free=true (둘 다 없으면 거부)
-        prose_bad: list[tuple[int, list[str]]] = []
-        for i, q in enumerate(qs, 1):
-            if not isinstance(q, dict):
-                raise ToolError(f"문항 {i}: 문항은 object여야 합니다")
-            prose_bad.append((i, _prose_option_lines(q.get("text") or "")))
-            # 추천 후보 칩 계약(선택 필드 — 없는 문항 통과). options 분기의 continue가
-            # 이 검증을 우회하지 않도록 options 처리 앞에서 검증한다.
-            sugs = q.get("suggestions")
-            if sugs is not None:
-                if not isinstance(sugs, list):
-                    raise ToolError(f"문항 {i}: suggestions는 문자열 배열이어야 합니다 "
-                                    f"(현재 {type(sugs).__name__}) — 추천 후보 문장들의 배열로")
-                for k, s in enumerate(sugs, 1):
-                    if not isinstance(s, str):
-                        raise ToolError(f"문항 {i} 추천 후보 {k}: 후보는 문자열이어야 합니다")
-                    if not s.strip():
-                        raise ToolError(f"문항 {i} 추천 후보 {k}: 후보가 비어 있습니다 — "
-                                        f"빈 후보를 제거하거나 문장을 채워라")
-                    if "\n" in s or "\\n" in s:
-                        raise ToolError(f"문항 {i} 추천 후보 {k}: 추천 후보는 한 줄 문장이다 — "
-                                        f'"{s[:60]}…" (개행 제거 후 칩 한 줄로 요약)')
-                if len(sugs) > MAX_SUGGESTIONS:
-                    raise ToolError(f"문항 {i}: 추천 후보는 최대 {MAX_SUGGESTIONS}개다 "
-                                    f"(현재 {len(sugs)}개) — 가장 설득력 있는 "
-                                    f"{MAX_SUGGESTIONS}개만 남겨라")
-                if any(len(s.strip()) > SUGGESTION_MAX_LEN for s in sugs):
-                    long_one = next(s for s in sugs if len(s.strip()) > SUGGESTION_MAX_LEN)
-                    raise ToolError(f"문항 {i}: 추천 후보는 {SUGGESTION_MAX_LEN}자 이내 한 줄이다 "
-                                    f'("{long_one.strip()[:30]}…") — 근거 요약으로 짧게')
-                q["suggestions"] = [s.strip() for s in sugs]
-            opts = q.get("options") or []
-            if not opts:
-                if q.get("allow_free") is not True:
-                    raise ToolError(f"문항 {i}: 선택지가 없습니다 — 객관형이면 options를 "
-                                    f"2개(라벨+설명) 이상 채우고, 서술형 주제면 options 없이 "
-                                    f"allow_free=true를 명시하라")
-                continue
-            if len(opts) < 2:
-                raise ToolError(f"문항 {i}: 선택지는 2개 이상이어야 합니다 (현재 {len(opts)}개) — "
-                                f"서술형 주제면 options를 빼고 allow_free=true로")
-            for j, o in enumerate(opts, 1):
-                if not isinstance(o, dict):
-                    raise ToolError(f"문항 {i} 옵션 {j}: 옵션은 object여야 합니다")
-                label = o.get("label")
-                if not isinstance(label, str) or not label.strip():
-                    raise ToolError(f"문항 {i} 옵션 {j}: label이 비어 있습니다")
-                o["label"] = label.strip()
-                desc = o.get("description")
-                if desc is not None and not isinstance(desc, str):
-                    raise ToolError(f"문항 {i} 옵션 {j}: description은 문자열이어야 합니다")
-        # 본문 서술형 선택지 나열 — options 유무와 무관한 계약 위반이다(선택지는 options
-        # 배열로만 전달). 위반 문항을 집계해 한 번에 알려 재시도 1회로 수렴시킨다.
-        bad = [(i, lines) for i, lines in prose_bad if len(lines) >= PROSE_OPTION_THRESHOLD]
-        if bad:
-            names = "; ".join(f'문항 {i}("{lines[0][:30]}…")' for i, lines in bad)
-            raise ToolError(
-                f"질문 본문에 선택지 나열이 있습니다 — {names}. 선택지는 본문 텍스트에서 빼고 "
-                f"options 배열({{label, description}})로 옮겨라. 서술형 주제면 나열을 모두 "
-                f"제거하고 allow_free=true만 남긴다. 문항당 1개 주제로 나눌 것")
-        return args
-    if name == "save_facts":
-        facts = args.get("facts") or []
-        if not facts:
-            raise ToolError("facts가 비어 있습니다 — 확정된 팩트가 없으면 save_facts를 호출하지 말 것")
-        return args
-    if name == "confirm_key_messages":
-        msgs = args.get("messages") or []
-        if len(msgs) != 3:
-            raise ToolError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(msgs)}개)")
-        return args
-    if name == "update_checklist":
-        return args
-    if name == "write_plan":
-        if not (args.get("markdown") or "").strip():
-            raise ToolError("markdown이 비어 있습니다")
-        return args
-    raise ToolError(f"알 수 없는 도구: {name}")
+    validator = _VALIDATORS.get(name)
+    if validator is None:
+        raise ToolError(f"알 수 없는 도구: {name}")
+    return validator(args)

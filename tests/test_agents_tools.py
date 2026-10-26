@@ -66,6 +66,17 @@ def test_other_tools_unaffected():
         validate_tool_args("confirm_key_messages", {"messages": ["a", "b"]})
 
 
+def test_tool_validators_preserve_messages():
+    """도구별 검증 함수 분리 후에도 메시지·정규화 계약은 그대로다."""
+    assert validate_tool_args("write_plan", {"markdown": "plan"}) == {"markdown": "plan"}
+    with pytest.raises(ToolError, match="markdown이 비어"):
+        validate_tool_args("write_plan", {"markdown": "   "})
+    with pytest.raises(ToolError, match="facts가 비어"):
+        validate_tool_args("save_facts", {"facts": []})
+    with pytest.raises(ToolError, match="알 수 없는 도구"):
+        validate_tool_args("no_such_tool", {})
+
+
 # ---------------------------------------------------------------------------
 # 본문 서술형 선택지 나열 탐지 — 선택지는 options 배열로만 전달하는 계약
 

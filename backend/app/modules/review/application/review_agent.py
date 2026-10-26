@@ -14,9 +14,13 @@ from pathlib import Path
 
 from planforge.llm.loops import run_tool_loop
 
+from app.shared.factline import format_fact_line
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 MAX_FINDINGS = 40  # 폭주 방지 — 이 이상은 어차피 한 문장 요약으로 볼 수 없다
+
+MAX_DERIVATIVE_CONTEXT_CHARS = 40_000  # 파생물 JSON 1건의 컨텍스트 상한 (잘림 표기 동반)
 
 REVIEW_TOOLS: list[dict] = [
     {
@@ -65,11 +69,12 @@ def build_context(plan_markdown: str, derivative_docs: list[dict], facts: list[d
     parts = ["## plan 전문 (SSOT — 기준)\n", plan_markdown]
     for d in derivative_docs:
         doc_text = json.dumps(d["json"], ensure_ascii=False, indent=1)
-        if len(doc_text) > 40000:
-            doc_text = doc_text[:40000] + "\n…(잘림)"
+        if len(doc_text) > MAX_DERIVATIVE_CONTEXT_CHARS:
+            doc_text = doc_text[:MAX_DERIVATIVE_CONTEXT_CHARS] + "\n…(잘림)"
         parts.append(f"\n## 파생물: {d['doc']} ({d['kind']})\n```json\n{doc_text}\n```")
     if facts:
-        fact_lines = [f"- [{f.get('date')}] {f.get('content', '')} (출처: {f.get('source', '')})"
+        fact_lines = [format_fact_line(f.get("date"), f.get("content", ""),
+                                       f.get("source", ""), bullet=True)
                       for f in facts]
         parts.append("\n## 확립 팩트 (interview-log)\n" + "\n".join(fact_lines))
     else:

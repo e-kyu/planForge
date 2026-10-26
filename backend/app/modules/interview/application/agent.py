@@ -19,13 +19,14 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session as DBSession
 
-from planforge.plan import PlanError, SkeletonError, parse_plan_text
+from planforge.plan import Plan, PlanError, SkeletonError, parse_plan_text
 from planforge.plan.loader import validate_each_doc
 
 from app.agents.tools import ToolError, validate_tool_args
 from app.modules.docloops import facade as docloops
 from app.modules.facts.facade import append_facts, list_active_facts
 from app.modules.plans.facade import PlanOrigin, create_generation
+from app.shared.factline import format_fact_line
 from app.shared.workspace import (
     read_sources_context,
     write_interview_log_mirror,
@@ -143,7 +144,8 @@ class InterviewAgent:
             parts.append("### 소스 문서\n" + src)
         facts = list_active_facts(self.db, self.sess.project_id)
         if facts:
-            lines = [f"- [{f.date}] {f.content} (출처: {f.source})" for f in facts]
+            lines = [format_fact_line(f.date, f.content, f.source, bullet=True)
+                     for f in facts]
             parts.append("### 확립 팩트 (interview-log)\n" + "\n".join(lines))
         if not parts:
             parts.append("(소스·팩트가 텅 비어 있음 — 뼈대 질문부터 시작. 임의 추측 금지)")
@@ -292,8 +294,8 @@ class InterviewAgent:
 
     def _ask_questions(self, args: dict, events: _EventSink) -> str:
         if self.sess.round_no >= MAX_ROUNDS:
-            return ("ERROR: 세션 라운드 한도(8)에 도달했습니다. 부족한 항목은 (미확정)으로 명시하고 "
-                    "write_plan으로 마무리하라.")
+            return (f"ERROR: 세션 라운드 한도({MAX_ROUNDS})에 도달했습니다. 부족한 항목은 "
+                    "(미확정)으로 명시하고 write_plan으로 마무리하라.")
         self.sess.round_no += 1
         summary = (args.get("round_summary") or "").strip()
         self.sess.pending_questions = args["questions"]
@@ -333,16 +335,28 @@ class InterviewAgent:
         return "OK: 핵심 메시지 승인 카드를 제시했다."
 
     def _write_plan(self, args: dict, events: _EventSink) -> str:
-        if not self.sess.key_messages_approved:
-            return "ERROR: 핵심 메시지 승인(confirm_key_messages → 사용자 승인) 전에는 plan을 작성할 수 없다."
         md = args["markdown"]
+        plan, error = self._validate_plan_for_session(md)
+        if error is not None:
+            return error
+        return self._persist_plan(md, plan, events)
+
+    def _validate_plan_for_session(self, md: str) -> tuple[Plan | None, str | None]:
+        """write_plan 검증 — 핵심 메시지 가드 → 파싱 → 문서 정합 → 골격.
+
+        반환: (parsed, None) 통과 / (None, "ERROR: ...") 실패. 순서와 문구는 계약이라
+        (docs/INTERVIEW-TURN-CONTRACT.md) 바꾸지 않는다.
+        """
+        if not self.sess.key_messages_approved:
+            return None, ("ERROR: 핵심 메시지 승인(confirm_key_messages → 사용자 승인) 전에는 "
+                          "plan을 작성할 수 없다.")
         try:
             plan = parse_plan_text(md)
         except PlanError as e:
             # 치료안(허용 키·모범 표기)은 LLM 대면 소관 — 파서 원문은 그대로 보내고 뒤에 붙인다
             # (프롬프트만으로 임의 키 위반이 저지되지 않은 실세션 수업의 서버 쪽 대응).
-            return (f"ERROR: plan 포맷 검증 실패 — {e}\n{PLAN_BULLET_CHEATSHEET}\n"
-                    "이 표기를 그대로 모방해 write_plan을 다시 호출하라")
+            return None, (f"ERROR: plan 포맷 검증 실패 — {e}\n{PLAN_BULLET_CHEATSHEET}\n"
+                          "이 표기를 그대로 모방해 write_plan을 다시 호출하라")
         # 문서 정합 가드 (doc 세션) — 세션의 문서 정체성(doc_slug)과 plan 메타의 일치를
         # 골격 검증 앞에서 잠근다. doc 세션에서 다른 문서 메타(`- 산출 문서: 개발설계서`)
         # 가 수용되면 derive가 다른 문서 기준으로 슬라이드를 걸러낸다. 파서(planforge/)
@@ -353,9 +367,9 @@ class InterviewAgent:
         if self.sess.doc_slug:
             expected = [docloops.doc_label(self.sess.doc_slug)]
             if plan.docs != expected:
-                return (f"ERROR: 이 세션의 산출 문서는 '{expected[0]}' 단독이다 — 메타에 "
-                        f"`- 산출 문서: {expected[0]}`을 쓰고 슬라이드 [문서: ...] 태그는 쓰지 "
-                        "않은 뒤 write_plan을 다시 호출하라")
+                return None, (f"ERROR: 이 세션의 산출 문서는 '{expected[0]}' 단독이다 — 메타에 "
+                              f"`- 산출 문서: {expected[0]}`을 쓰고 슬라이드 [문서: ...] 태그는 쓰지 "
+                              "않은 뒤 write_plan을 다시 호출하라")
         # 골격 검증 (원칙 8) — 문서별 루프는 로더 단일 권위(validate_each_doc)가 담당하고,
         # SkeletonError는 PlanError가 아니므로 여기서 잡아 ERROR 피드백으로 되돌린다
         # (잡지 않으면 피드백 없이 세션이 즉시 FAILED로 튕긴다). 실패 메시지에는 어느
@@ -363,11 +377,14 @@ class InterviewAgent:
         try:
             validate_each_doc(plan)
         except SkeletonError as e:
-            return (f"ERROR: plan 골격 검증 실패 — {e}\n"
-                    "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
-                    "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
-                    "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
+            return None, (f"ERROR: plan 골격 검증 실패 — {e}\n"
+                          "누락 유형의 슬라이드를 이 문서용으로 추가하고 write_plan을 다시 "
+                          "호출하라 — 표지·마무리는 `- 핵심문장:` + `- 근거/출처:`, 목차는 "
+                          "`- 핵심문장: 01 항목 / 02 항목 / 03 항목` 한 줄 표기다")
+        return plan, None
 
+    def _persist_plan(self, md: str, plan: Plan, events: _EventSink) -> str:
+        """검증 통과한 plan을 새 세대로 영속 + 미러 + plan_draft·state 이벤트."""
         # DB plan 행 (SSOT) — 새 세대 채번은 plans.facade가 담당. doc_slug는 세대가
         # 속한 문서 식별자 (None = 레거시) — 승인·채번 사슬이 이 값으로 좁혀진다.
         p = create_generation(self.db, self.sess.project_id, markdown=md, docs=plan.docs,
@@ -405,7 +422,8 @@ class InterviewAgent:
         append_facts(self.db, self.sess.project_id, self.sess.id, pending)
         lines = []
         for f in pending:
-            lines.append(f"[{date.today().isoformat()}] {f['content']} (출처: {f.get('source', '')})")
+            lines.append(format_fact_line(date.today().isoformat(), f["content"],
+                                          f.get("source", "")))
         write_interview_log_mirror(self._mirror_root(), lines)
         self.sess.pending_facts = None
         self.db.commit()

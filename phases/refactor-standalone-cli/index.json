@@ -69,7 +69,10 @@
     {
       "step": 8,
       "name": "interview-agent-and-tools",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:28:11+0900",
+      "summary": "인터뷰 에이전트·도구 검증 분해 — agent._write_plan을 _validate_plan_for_session(핵심 메시지 가드→파싱+치트시트→문서 정합→골격, 순서·문구 불변)·_persist_plan(create_generation·미러·plan_draft/state)로 분리, tools.validate_tool_args를 도구별 private 검증 함수 5종+_require·_VALIDATORS 디스패치로 평탄화(ask_questions의 suggestions→options→prose 순서·모든 ToolError 문자열 1바이트 유지), agent._turn_context·commit_facts·review_agent.build_context에 format_fact_line 적용(바이트 동일 검증), '한도(8)'을 MAX_ROUNDS f-string·MAX_DERIVATIVE_CONTEXT_CHARS 상수 도입. test_agents_tools 1건 추가, AC 50 passed, 전체 395 passed·1 skipped.",
+      "completed_at": "2026-10-26T21:33:07+0900"
     },
     {
       "step": 9,
