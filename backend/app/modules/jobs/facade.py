@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from .infrastructure.models import Job, JobErrorClass, JobStatus, JobType
 
 __all__ = ["JobType", "JobStatus", "JobErrorClass", "enqueue", "has_busy_jobs",
-           "list_active", "delete_project_jobs", "report_progress"]
+           "list_active", "delete_project_jobs", "report_progress",
+           "report_progress_safe"]
 
 
 def enqueue(db: Session, project_id: int | None, job_type: JobType, payload: dict) -> Job:
@@ -72,3 +73,18 @@ def report_progress(db: Session, job: Job, step: str, *,
                     "max_attempts": max_attempts,
                     "at": datetime.now(timezone.utc).isoformat()}
     db.commit()
+
+
+def report_progress_safe(db: Session, job: Job, step: str, *,
+                         log_tag: str, **kw) -> None:
+    """report_progress의 방어 래퍼 — 진행 기록 실패가 작업 자체를 죽이지 않는다.
+
+    job 핸들러(derive_build·run_review·plan_revise_job)가 각자 try/except + 로그를
+    복제하던 패턴을 한 곳으로 모은다. log_tag는 호출부 로그 접두사(`derive`·`review`·
+    `plan_revise`)로, 기존 로그 문구 `[{log_tag}] job #{id} 진행 기록 실패`를 보존한다.
+    report_progress 자체의 커밋 계약(세션 전체 커밋)은 불변이다.
+    """
+    try:
+        report_progress(db, job, step, **kw)
+    except Exception:
+        print(f"[{log_tag}] job #{job.id} 진행 기록 실패", flush=True)

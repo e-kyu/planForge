@@ -45,7 +45,10 @@
     {
       "step": 5,
       "name": "app-shared-helpers",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:17:47+0900",
+      "summary": "공용 헬퍼 추가(호출부 무변경) — jobs.presentation.responses.enqueue_accepted(반환 전 커밋=202 계약), jobs.facade.report_progress_safe(derive/review/plan_revise 로그 태그·문구 보존), docloops.facade.resolve_workspace_root(레거시/문서 레이아웃/ensure, 리프 규칙 유지), DocLoopOut.from_row(_docloop_out 동일 값), shared/collections.latest_by_key(첫 행 채택), shared/factline.format_fact_line(기본/마커/불릿/문자열 날짜). test_jobs_helpers 8건·test_workspace_doc_root 3건 추가, 전체 394 passed·1 skipped.",
+      "completed_at": "2026-10-26T21:19:28+0900"
     },
     {
       "step": 6,

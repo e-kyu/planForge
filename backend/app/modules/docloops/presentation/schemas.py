@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from ..application.service import doc_label
+
 
 class DocLoopOut(BaseModel):
     doc_slug: str
@@ -16,3 +18,16 @@ class DocLoopOut(BaseModel):
     # plan 진행상황 — plans 행 역참조 파생값(SSOT는 plans 행, 루프 행에 캐시하지 않는다)
     plan_version: int | None = None
     plan_id: int | None = None
+
+    @classmethod
+    def from_row(cls, row, gen: object | None) -> "DocLoopOut":
+        """루프 행 + 최신 plan 세대(plans 행 역참조 파생) → DocLoopOut 조립.
+
+        projects/api.py의 기존 _docloop_out과 정확히 같은 값을 낸다 — 필드·순서·
+        직렬화는 불변.
+        """
+        return cls(
+            doc_slug=row.doc_slug, label=doc_label(row.doc_slug), status=str(row.status),
+            plan_version=gen.version_no if gen else None,
+            plan_id=gen.id if gen else None,
+        )
