@@ -16,7 +16,7 @@
       "status": "completed",
       "started_at": "2026-10-26T20:59:26+0900",
       "summary": "planforge/common 커널 신설 — io(read_text_utf8·read_json·write_json, 바이트 동일)·const(미확정 prefix/exact 비통합·문서·종류·한도 상수)·slug(SLUG_RE·MAX_SLUG_LENGTH·is_valid_slug)·buildfs(BUILD_VER_RE·parse/format, vNN zero-pad) + plan/model 역방향 맵·derive 중복 제거. workspace가 SLUG_RE·BUILD_VER_RE·parse_build_filename 재수출, derive_build/__main__/provider/parser가 공용 I/O 사용. test_common_utils 14건 추가, 전체 357 passed.",
-      "completed_at": "2026-10-26T21:05:17+0900"
+      "completed_at": "2026-10-26T21:05:28+0900"
     },
     {
       "step": 2,
