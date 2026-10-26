@@ -29,7 +29,10 @@
     {
       "step": 3,
       "name": "admin-cli",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:09:54+0900",
+      "summary": "앱 인지 관리 CLI scripts/admin.py 신설(openapi·job-timing 서브커맨드, _bootstrap.database_url 사용, planforge 무관) — export_openapi.py·job_timing_report.py는 admin.main([...])을 sys.exit로 넘기는 shim으로 축소. OpenAPI 출력 바이트 동일(diff 0), 잡 타이밍 컬럼·문구 동일. test_scripts_admin 7건 추가, 전체 373 passed·1 skipped.",
+      "completed_at": "2026-10-26T21:12:45+0900"
     },
     {
       "step": 4,

@@ -1,79 +1,22 @@
 # -*- coding: utf-8 -*-
-"""잡 타이밍 리포트 — 큐 대기·실행 소요·attempts를 잡별로 요약 (읽기 전용).
+"""잡 타이밍 리포트 — 큐 대기·실행 소요·attempts를 잡별로 요약 (호환 shim).
 
 실행: backend/에서 `python scripts/job_timing_report.py`
 DB는 환경변수 DATABASE_URL (미지정 시 루트 data/planforge.db)을 읽기 전용으로 연다.
 derive 지연 원인 판별(큐 대기 vs LLM 실행 vs 재시도)에 쓴다 — data/** 쓰기 없음.
+
+본체는 `scripts/admin.py`의 `job-timing` 서브커맨드다 — 기존 실행 경로만 유지한다.
 """
 from __future__ import annotations
 
-import json
-import statistics
+import sys
 
-from _bootstrap import database_url, ensure_paths
-
-ensure_paths()
+from admin import main as _admin_main
 
 
-def _dt(v) -> object | None:
-    """raw sqlite 조회 값(문자열 또는 datetime) → datetime. naive면 UTC로 간주."""
-    import datetime as dt_mod
-
-    if v is None:
-        return None
-    if isinstance(v, dt_mod.datetime):
-        return v
-    return dt_mod.datetime.fromisoformat(v)
-
-
-def main() -> None:
-    from sqlalchemy import create_engine, text
-
-    url = database_url()
-    engine = create_engine(url)
-
-    with engine.connect() as conn:
-        rows = conn.execute(text(
-            "SELECT id, type, status, attempts, created_at, started_at, finished_at, result "
-            "FROM jobs ORDER BY id")).mappings().all()
-    if not rows:
-        print("잡이 없다.")
-        return
-
-    waits: dict[str, list[float]] = {}
-    runs: dict[str, list[float]] = {}
-    print(f"{'id':>4} {'type':<12} {'status':<8} {'try':>3} "
-          f"{'대기s':>7} {'실행s':>7}  attempts(result)")
-    for r in rows:
-        wait = run = None
-        created, started, finished = _dt(r["created_at"]), _dt(r["started_at"]), _dt(r["finished_at"])
-        if started and created:
-            wait = (started - created).total_seconds()
-        if finished and started:
-            run = (finished - started).total_seconds()
-        att = r["attempts"] or 0
-        r_att = ""
-        if r["result"]:
-            try:
-                counts = json.loads(r["result"]).get("counts", {})
-                if counts.get("attempts") is not None:
-                    r_att = f"LLM attempts={counts['attempts']}"
-            except (ValueError, AttributeError):
-                pass
-        print(f"{r['id']:>4} {r['type']:<12} {r['status']:<8} {att:>3} "
-              f"{'-' if wait is None else f'{wait:.0f}':>7} "
-              f"{'-' if run is None else f'{run:.0f}':>7}  {r_att}")
-        if wait is not None:
-            waits.setdefault(r["type"], []).append(wait)
-        if run is not None:
-            runs.setdefault(r["type"], []).append(run)
-
-    print("\n=== 타입별 요약 (완료/실행된 잡) ===")
-    for label, groups in (("큐 대기", waits), ("실행 소요", runs)):
-        for t, vals in groups.items():
-            med = statistics.median(vals)
-            print(f"{label} [{t}] n={len(vals)} 중간값={med:.0f}s 최대={max(vals):.0f}s")
+def main() -> int:
+    return _admin_main(["job-timing"])
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

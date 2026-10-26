@@ -1,30 +1,22 @@
 # -*- coding: utf-8 -*-
-"""OpenAPI 스키마 덤프 — 프론트 API 계약 타입 생성 원료.
+"""OpenAPI 스키마 덤프 — 프론트 API 계약 타입 생성 원료 (호환 shim).
 
 실행: backend/에서 `python scripts/export_openapi.py`
 → frontend/openapi.json 갱신 후 frontend에서 `npm run gen:types`
 (FastAPI 자동 스키마 → openapi-typescript — §3.1 계약 잠금)
+
+본체는 `scripts/admin.py`의 `openapi` 서브커맨드다 — 기존 실행 경로만 유지한다.
 """
 from __future__ import annotations
 
-import json
+import sys
 
-from _bootstrap import BACKEND_DIR, ensure_paths
-
-OUT = BACKEND_DIR.parent / "frontend" / "openapi.json"
-
-# app·planforge를 import 가능하게 (conftest와 동일 규약 — 패키지 src 최우선)
-ensure_paths()
+from admin import main as _admin_main
 
 
-def main() -> None:
-    from app.main import create_app
-
-    app = create_app(start_worker=False)
-    schema = app.openapi()
-    OUT.write_text(json.dumps(schema, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"written: {OUT}")
+def main() -> int:
+    return _admin_main(["openapi"])
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
