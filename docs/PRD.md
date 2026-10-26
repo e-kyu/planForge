@@ -51,5 +51,6 @@
 ## 디자인
 
 - 문서(산출물)와 화면이 같은 팔레트를 공유한다 — 디자인 토큰 권위는
-  `backend/planforge/builders/theme.py`이고 화면은 `frontend/src/shared/styles/tokens.css` 미러.
+  `packages/planforge-cli/src/planforge/builders/theme.py`이고 화면은
+  `frontend/src/shared/styles/tokens.css` 미러.
 - 상세는 `docs/UI_GUIDE.md` 참조.

@@ -42,9 +42,14 @@ frontend/
     │   └── review/             ReviewPanel — 검수 리포트 + plan 반영
     └── shared/
         ├── components/         ui.tsx(Button/Banner/Loading/Empty/PageHeader) ·
-        │                       CmEditor.tsx(CmEditor · CmDiff) · MarkdownPreview.tsx
+        │                       CmEditor.tsx(CmEditor · CmDiff) · MarkdownPreview.tsx ·
+        │                       SegToggle.tsx · Modal.tsx · JobErrorDetail.tsx
         ├── lib/                hashRoute.ts(해시 라우터) · errMsg.ts(에러 문자열 변환)
-        │                       · useApiHealth.ts · viewPrefs.ts
+        │                       · format.ts(버전·날짜·바이트) · labels.ts(상태 라벨)
+        │                       · messages.ts(잡 오류 문구) · jobs.ts(활성 잡 predicate)
+        │                       · plans.ts(latestApproved) · uploadLimits.ts
+        │                       · useActiveJobs.ts(job 폴링 단일 소유자) · useApiHealth.ts
+        │                       · viewPrefs.ts
         └── styles/             tokens.css(theme.py 미러) + base/app/pages/chat/plan/outputs/review.css
 ```
 
@@ -93,7 +98,8 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 계약 잠금 파이프라인 — 백엔드 API 스키마가 바뀌면 반드시 2단계 재생성:
 
 ```
-① backend/ 에서  python scripts/export_openapi.py   →  frontend/openapi.json 덤프
+① backend/ 에서  python scripts/admin.py openapi   →  frontend/openapi.json 덤프
+   (= python scripts/export_openapi.py — 동작 동일 shim)
 ② frontend/ 에서 npm run gen:types                  →  src/api/types.gen.ts 재생성
 ```
 
@@ -149,7 +155,8 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
      폰트 `"Malgun Gothic"`, 크기 4단(`--fs-title:28px ← SIZE_SLIDE_TITLE`),
      `--margin:24px ← MARGIN 0.6in`.
   2. **화면 전용 토큰**(미러 아님) — surface/shadow/space/radius/`--header-h`/`--container`.
-- **토큰 4종 세트 계약(원칙 7)**: SSOT는 `backend/planforge/builders/theme.py`이며
+- **토큰 4종 세트 계약(원칙 7)**: SSOT는
+  `packages/planforge-cli/src/planforge/builders/theme.py`이며
   theme.py(권위) · 빌더 리터럴 · `tests/fixtures` · `frontend/tokens.css`를 **동시
   점검·수정**해야 한다. 절차는 `docs/UI_GUIDE.md` §토큰 변경 절차 — 하나만 고치는 PR은 반려된다.
 - 반응형은 미디어쿼리(768/1024/800/480px 등)로 처리한다.
@@ -180,8 +187,8 @@ react-router 없이 `lib/hashRoute.ts`의 `hashchange` 기반 3개 라우트만 
 
 ## 개발 시 주의사항
 
-- API 스키마를 바꿨다면 **2단계 타입 재생성**(`export_openapi.py` → `gen:types`)을
-  반드시 돌린다 — `types.gen.ts`를 손으로 고치지 않는다.
+- API 스키마를 바꿨다면 **2단계 타입 재생성**(`scripts/admin.py openapi` →
+  `npm run gen:types`)을 반드시 돌린다 — `types.gen.ts`를 손으로 고치지 않는다.
 - 인터뷰 턴 추가/변경 시 **POST=SSE 계약**을 유지한다(새 EventSource GET 금지).
 - plan 데이터의 유일 원본은 백엔드 DB(`plans.markdown`)다. 프론트는 plan을 고치면
   항상 revise API로 새 세대를 만들고, 직접 덮어쓰는 경로를 만들지 않는다(SSOT).

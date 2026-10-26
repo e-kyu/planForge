@@ -446,6 +446,68 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       (atomic_build · Deriver · 로그 미러)은 전부 lazy mkdir을 갖는다
       (WORKSPACE_SUBDIRS는 ("sources",)로 축소, 기존 프로젝트의 루트 데이터는 무이관).
 
+23. **독립 배포 패키지 추출 — `packages/planforge-cli` + 콘솔 `planforge`** (2026-10-26, `refactor-standalone-cli`)
+    - 배경: 결정론 엔진이 `backend/planforge/`에 웹 백엔드와 같은 트리로 섞여 있어
+      (1) 배포·설치 단위가 웹과 결합되고 (2) AI 에이전트가 기능 수정 시 웹 계층과
+      엔진 계층을 함께 읽어야 했다. 엔진을 **설치 가능한 독립 패키지**로 분리해
+      "웹은 엔진을 호출만 한다"는 단방향 의존을 물리적으로 강제한다.
+    - 형태: `packages/planforge-cli/` — `pyproject.toml`(배포명 `planforge-cli`,
+      `requires-python >=3.12`, 콘솔 스크립트 `planforge = planforge.cli.main:main`,
+      프롬프트 package-data), `src/planforge/`에 `common/`(UTF-8/JSON I/O·상수·slug·
+      빌드 파일명·설정 경로 해석)·`cli/`(argparse·서브커맨드 본문, `__main__.py`는
+      `python -m planforge` 호환 shim)·`plan/`(파서·필터·골격·로더)·`builders/`·
+      `llm/`·`derive.py`·`numcheck.py`·`review.py`. **웹 비의존** — FastAPI·SQLAlchemy·
+      `app.*` import 금지(앱 인지 코드는 `backend/scripts/admin.py` 소관).
+    - 설치·배포: 개발은 루트에서 `pip install --no-build-isolation -e packages/planforge-cli`
+      (editable — `src` 수정 즉시 반영). Docker는 build context를 저장소 루트로 두고
+      `backend/requirements.txt` 설치 → 패키지 복사·`pip install --no-build-isolation` →
+      `backend/` 복사(`.dockerignore`로 workspaces/data/sources/frontend 제외).
+      테스트는 루트 `conftest.py`가 `packages/planforge-cli/src`를 **최우선** import
+      경로로 둔다 — `backend/planforge`는 `__init__.py` 없는 설정 디렉토리라 namespace
+      package가 되므로 정규 패키지가 항상 이겨야 한다(`scripts/_bootstrap.py` 동일 규약).
+    - 런타임 설정 경로 보존: `backend/planforge/config.json`(gitignored)·`config.example.json`은
+      **이동하지 않는다.** `planforge derive`의 설정 해석은 `--config` > `PLANFORGE_CONFIG`
+      env > 실행 디렉토리 `planforge/config.json`(문서화된 실행 위치 `backend/`) >
+      패키지 인접 폴백 순서로 기존 동작을 유지한다(`common/configpath.py`). 웹은
+      `PLANFORGE_CONFIG` > `backend/planforge/config.json` 그대로다.
+    - 동작 불변 원칙: 이 재구성은 **구조·가독성만** 바꾼다. OpenAPI 계약
+      (`frontend/openapi.json` diff 0 — `types.gen.ts` 재생성 불필요), SSE 이벤트
+      순서·페이로드, 모든 사용자 노출 문자열(에러·피드백·로그 태그), 빌더 3종의
+      **바이트 동일**(로직 변경 금지), 마이그레이션 히스토리, CLI 플래그·exit code,
+      job 결과 dict 키·순서를 전부 유지한다. `chat_fn`/`stream_fn` dict 계약과
+      LLM 주입 지점(`create_app(llm_overrides=...)`·`JobContext(llm_overrides=...)`)도
+      불변이다.
+    - 구현 순서: 엔진 이동·설정 경로(0) → 공용 커널(1) → CLI 엔트리포인트 분리(2) →
+      앱 관리 CLI(3) → plan 로딩 단일 권위(4) → 앱 공용 헬퍼(5) → job 핸들러 분해(6) →
+      plans/review API 중복 제거(7) → 인터뷰 에이전트·도구 검증 분해(8) →
+      facts compact·sources zip 분해(9) → 프론트 공용 기반(10) → 프론트 MVVM 정리(11) →
+      문서·최종 검증(12).
+    - 유예 항목 — 설계 논의에서 유예로 표시된 D5·D10·D12·D14·D16·D17·D18·D20·D22·
+      D24·D25·D28. 이번 재구성은 동작 불변·구조 개선만 다루므로 아래 중복·통합 후보는
+      의도적으로 손대지 않았다:
+      (1) `(미확정` prefix와 `(미확정)` exact의 매칭 의미 통합 — compact(archive 제외)와
+      numcheck/derive/review의 판정이 달라진다. (2) 도구 스키마(`INTERVIEW_TOOLS` 등)의
+      생성 헬퍼화 — dict 순서·설명 드리프트가 모델 동작을 바꾼다(D12). (3) 검증·오류
+      문구의 일괄 통일 — 테스트와 모델 재시도 동작이 문자열을 고정한다. (4) 골격 검증을
+      `run_review`에 추가 — review는 필터만 하고 derive 골격 게이트(원칙 8)와 역할이
+      다르다. (5) zip 경로/보안 검증과 `_validated_source_path` 통합(D22) — 보안 동작
+      변경은 별도 검토가 필요하다. (6) facts compact 미러 경로를
+      `resolve_workspace_root`로 일괄 치환 — `doc_layout=True` 예외가 레거시 문서 세션을
+      보존한다. (7) review 발견사항 선택 정책 통합(D24) — API는 범위 밖 409, plan_revise
+      job은 조용한 필터로 의도적으로 다르다. (8) 그 외 상수/헬퍼 추가 통합(D5·D10·
+      D14·D16·D17·D18·D20·D25·D28) — 호출부 대량 수정 없이 안전한 것만 이번 범위에
+      포함했고, 나머지는 동작 불변 검증 비용 대비 이득이 낮아 후속으로 미룬다.
+    - 프론트 유예: query key 중앙화/팩토리, feature 간 캐시 중복 제거, 삭제 상태머신
+      통합, lint 도구 도입은 하지 않는다 — query key·무효화·refetchInterval 변경은
+      조용한 리페치/캐시 동작 변경이고(ADR 결정 15의 단일 폴링 소유자 유지), lint는
+      이번 범위 밖이다(`npm run build`의 `tsc --noEmit`가 유일한 게이트).
+    - 리스크 수용: (1) namespace package shadowing — conftest·`_bootstrap`의 경로
+      우선순위로 방어하고 테스트가 잠근다. (2) editable 미설치 환경에서 `planforge`
+      콘솔이 없을 수 있다 — `python -m planforge` 경로를 항상 유지하고 설치 절차를
+      문서화한다. (3) 패키지 이동으로 문서·경로 참조가 어긋날 수 있다 — step 12에서
+      README·CLAUDE·docs를 일괄 정합화하고 `pytest`·`openapi diff 0`·프론트 빌드로
+      최종 확인한다.
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

@@ -15,7 +15,7 @@
 - 도구 없이 텍스트만 출력하면 넛지 1회 재호출, 두 번째 텍스트 전용이면
   TurnError → 세션 FAILED. provider의 `tool_choice="required"`는 프로토콜 단에서
   텍스트 전용 출력 자체를 금지한다 — 도구 호출이 흔들리는 소형 모델의 interview
-  프로필에서 옵트인한다 (`planforge/llm/provider.py`).
+  프로필에서 옵트인한다 (`packages/planforge-cli/src/planforge/llm/provider.py`).
 
 ## ask_questions 스키마와 의미
 
@@ -91,7 +91,7 @@
   "plan 골격 검증 실패"(문서명 포함) ERROR 피드백으로 같은 재시도 루프에 참여한다.
 - 다중 문서 계약은 파서가 교차검증한다 — 슬라이드 `[문서: ...]` 태그는 메타 `산출 문서:
   (쉼표 나열)`에 정의된 문서만 가리킬 수 있고, 메타가 복수 문서면 각 문서가 태그 슬라이드를
-  1개 이상 갖는다 (`planforge/plan/parser.py _validate_plan`; 구분자 쉼표·플러스 흡수).
+  1개 이상 갖는다 (`packages/planforge-cli/src/planforge/plan/parser.py _validate_plan`; 구분자 쉼표·플러스 흡수).
   메타 라인 누락은 디폴트(["제안서"])와 태그의 불일치로 검출된다 — 위반 시 "plan 포맷
   검증 실패" ERROR 피드백으로 위 재시도 루프에 참여한다. 이 검증이 없으면 태그는 정확해도
   전 파이프라인이 문서 1개 전제로 무음 단일화된다 (제안서만 산출되는 실사고의 방지책).
@@ -194,10 +194,10 @@ Event 객체로 만들어 이력에 영속하면 리플레이 오염·seq 커서
 | 인자가 비-object(list/str/int) | "도구 인자는 JSON object여야" | `tools.py validate_tool_args` |
 | 인자 JSON 파싱 실패 | "도구 인자 JSON 파싱 실패" | `agent.py _dispatch` |
 | plan 마크다운 포맷·핵심 메시지 3개 위반 | "plan 포맷 검증 실패" 등 — 치료안 치트시트 첨부 | `agent.py _write_plan` |
-| 목차 슬라이드를 `- 내용: 01 … / 02 …` 임의 키로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: `- 핵심문장: 01 …`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
-| 표 데이터 행을 `- 행: …`(키 붙인 최상위 불릿)으로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: 들여쓰기 + 키 없는 `셀\|셀\|셀`) | `agent.py _write_plan` + `planforge/plan/parser.py` |
+| 목차 슬라이드를 `- 내용: 01 … / 02 …` 임의 키로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: `- 핵심문장: 01 …`) | `agent.py _write_plan` + `packages/planforge-cli/src/planforge/plan/parser.py` |
+| 표 데이터 행을 `- 행: …`(키 붙인 최상위 불릿)으로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: 들여쓰기 + 키 없는 `셀\|셀\|셀`) | `agent.py _write_plan` + `packages/planforge-cli/src/planforge/plan/parser.py` |
 | plan 포맷은 통과했으나 표지·목차·마무리·내용 슬라이드 누락 (SkeletonError) | "plan 골격 검증 실패 — 문서명 포함" ERROR 피드백 → 재시도 참여 | `agent.py _write_plan` |
-| 다중 문서 plan에서 `## 메타` `산출 문서:` 누락 (슬라이드 태그는 정상) | "plan 포맷 검증 실패 — 슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'(제안서)에 없습니다…" + 치트시트 | `agent.py _write_plan` + `planforge/plan/parser.py` |
+| 다중 문서 plan에서 `## 메타` `산출 문서:` 누락 (슬라이드 태그는 정상) | "plan 포맷 검증 실패 — 슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'(제안서)에 없습니다…" + 치트시트 | `agent.py _write_plan` + `packages/planforge-cli/src/planforge/plan/parser.py` |
 | plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도 초과" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
 
 참고: 같은 수업의 병행 결함은 plans 모듈 후속 커밋으로 잠갔다 — `planrevise.py`의

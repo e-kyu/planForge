@@ -18,11 +18,17 @@ backend/
     shared/                   모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
     agents/tools.py           인터뷰 도구 OpenAI function 스키마 + 서버측 검증
   planforge/                  런타임 LLM 설정(config.json·config.example.json)만 남는다
+  scripts/                    앱 관리 CLI — admin.py(openapi·job-timing) · _bootstrap.py
+                              (export_openapi.py·job_timing_report.py는 admin의 shim)
   alembic/                    DB 마이그레이션
 packages/
   planforge-cli/              독립 설치 패키지 (planforge-cli) — 웹 비의존
+    pyproject.toml            배포명 planforge-cli · 콘솔 스크립트 planforge
     src/planforge/            M1 결정론 파이프라인 (의존 방향: backend/app → packages/planforge-cli)
-      plan/                   plan.md 파서·문서 필터·골격 검증
+      common/                 UTF-8/JSON I/O · 상수 · slug · 빌드 파일명 · 설정 경로 해석
+      cli/                    콘솔 진입점(main.py build_parser·main) + commands/(parse·numcheck·
+                              derive·build) — __main__.py는 호환 shim(python -m planforge)
+      plan/                   plan.md 파서·문서 필터·골격 검증·로더(loader.py)
       builders/               build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
       llm/                    OpenAI 호환 provider(langchain-openai ChatOpenAI) +
                               공용 tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
@@ -45,6 +51,10 @@ phases/                       하네스 task/step 계획·상태 (index.json·st
   `facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 것을 템플릿으로 복제.
   docloops는 리프 모듈(의존 방향: projects/plans/interview → docloops, 역방향 없음) —
   plans 승인 훅 `on_plan_approved`·인터뷰 세션 게이트 `require_session_doc`이 경유점.
+- **엔진 패키지 경계**: `packages/planforge-cli/src/planforge`는 웹 비의존 독립 설치
+  패키지다 — 의존 방향은 `backend/app → packages/planforge-cli` 단방향이며, 엔진은
+  FastAPI·SQLAlchemy·`app.*`를 import하지 않는다. 앱·DB 인지 관리 명령은
+  `backend/scripts/admin.py`에 둔다(ADR 결정 23).
 - **LLM/코드 역할 분리**: LLM은 콘텐츠 변환만. 파일 조립·좌표 배치·채번은 Python 빌더
   (결정론)가 담당한다. 빌더는 legacy scripts의 바이트 동일 이식본으로 로직 변경 금지.
 - **작업 큐**: `jobs` 테이블 + 단일 워커(앱 lifespan asyncio 1개, run_job 단일 스레드 직렬).
@@ -62,7 +72,8 @@ Project → InterviewSession → Fact → Plan(세대) → Derivative → Build 
 
 - 모든 산출물은 자신의 plan 세대를 역참조한다 (추적성).
 - 파생 경로: `Plan.markdown`(SSOT) → 미러(`write_plan_mirror`) →
-  `planforge/derive.py` → 원자적 빌드(`atomic_build`) → 채번 등록(Build 행) —
+  `packages/planforge-cli/src/planforge/derive.py` → 원자적 빌드(`atomic_build`) →
+  채번 등록(Build 행) —
   산출물명 `<문서 제목>_vNN.<ext>`, 확장자별 독립 시퀀스, 절대 덮어쓰기 금지.
 - 수정은 plan revise → 새 세대 DRAFT → 재승인 → 재생성(버전 +1)만 유일한 경로.
 

@@ -2,7 +2,15 @@
 
 PlanForge의 결정론 문서 파이프라인 엔진(plan 파서·수치 무결성 대조·검수·빌더)과
 CLI를 담은 설치 가능한 독립 패키지다. 웹 백엔드(`backend/app`)와 분리되어 있으며,
-FastAPI·SQLAlchemy 등 웹 의존성을 import하지 않는다.
+FastAPI·SQLAlchemy 등 웹 의존성을 import하지 않는다(의존 방향: `backend/app` →
+이 패키지 단방향).
+
+- `src/planforge/common/` — UTF-8/JSON I/O · 상수 · slug · 빌드 파일명 · 설정 경로 해석
+- `src/planforge/cli/` — argparse(`main.py`)와 서브커맨드 본문(`commands/`).
+  `__main__.py`는 `python -m planforge` 호환 shim이다.
+- `src/planforge/plan/` · `builders/` · `llm/` · `derive.py` · `numcheck.py` · `review.py`
+- 앱·DB 인지 관리 명령(`openapi`·`job-timing`)은 이 패키지에 없다 —
+  `backend/scripts/admin.py` 소관이다.
 
 ## 설치
 

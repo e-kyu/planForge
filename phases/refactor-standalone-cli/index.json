@@ -101,7 +101,10 @@
     {
       "step": 12,
       "name": "docs-and-verification",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:46:36+0900",
+      "summary": "문서 정합화 + 최종 검증 — CLAUDE.md(엔진 패키지·common/cli·admin CLI·설치/CLI 명령), backend/CLAUDE.md(패키지 경로·CLI·admin·테스트 부트스트랩), ARCHITECTURE(트리·의존 방향 backend/app → packages/planforge-cli), ADR 결정 23(독립 배포 패키지·설치/Docker·동작 불변·유예 D목록·config 경로 보존), UI_GUIDE/PRD/INTERVIEW-TURN-CONTRACT 경로, README 3종(모듈 9종·docloops·packages 트리·CLI/admin·테스트) 갱신. 전체 pytest 395 passed·1 skipped, scripts/test_execute 53 passed, openapi diff 0, npm run build 통과, planforge·python -m planforge·admin CLI --help exit 0, git status에 ignored 경로 없음.",
+      "completed_at": "2026-10-26T21:51:41+0900"
     }
   ],
   "created_at": "2026-10-26T20:54:32+0900"

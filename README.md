@@ -45,20 +45,30 @@
 ## 2. 저장소 구조
 
 ```
-backend/                  FastAPI 백엔드 + 코어 엔진 (모듈러 모놀리식)
+backend/                  FastAPI 백엔드 (모듈러 모놀리식)
   app/                    웹 백엔드
     api.py                라우터 집계 — 각 모듈 presentation/api.py를 기존 계약 순서대로 포함
-    modules/              도메인 모듈 8종 (projects·sources·plans·derivatives·jobs·facts·interview·review)
+    modules/              도메인 모듈 9종 (projects·sources·plans·derivatives·jobs·facts·
+                          interview·review·docloops)
       └ <모듈>/           facade.py · presentation/(api·schemas) · application/ · infrastructure/models.py
+                          ※ docloops는 리프 모듈 — 문서별 루프 상태머신, 타 모듈 facade 미import
     shared/               모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
     agents/tools.py       인터뷰 도구 OpenAI function 스키마 + 서버측 검증
-  planforge/            M1 코어 엔진 (CLI 진입점 `python -m planforge`)
-    plan/                 plan.md 파서·문서 필터·골격 검증
-    builders/             build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
-    llm/                  OpenAI 호환 provider(langchain-openai ChatOpenAI) + 공용
-                          tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
-    derive.py, review.py, numcheck.py
+  planforge/              런타임 LLM 설정(config.json·config.example.json)만 남는다
+  scripts/                앱 관리 CLI — admin.py(openapi·job-timing) · _bootstrap.py
+                          (export_openapi.py·job_timing_report.py는 admin의 shim)
   alembic/                DB 마이그레이션
+packages/
+  planforge-cli/          독립 설치 패키지 — 결정론 파이프라인 엔진 + CLI (웹 비의존)
+    pyproject.toml        배포명 planforge-cli · 콘솔 스크립트 `planforge`
+    src/planforge/
+      common/             UTF-8/JSON I/O · 상수 · slug · 빌드 파일명 · 설정 경로 해석
+      cli/                콘솔 진입점(planforge ...) — __main__.py는 `python -m planforge` shim
+      plan/               plan.md 파서·문서 필터·골격 검증·로더
+      builders/           build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
+      llm/                OpenAI 호환 provider(langchain-openai ChatOpenAI) + 공용
+                          tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
+      derive.py, review.py, numcheck.py
 frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
   src/features/           화면별 feature 7종 (projects·project·sources·interview·plan·outputs·review)
     └ <feature>/          models/(API 호출) · viewmodels/(상태·로직 훅) · views/(표현 전용)
@@ -132,6 +142,12 @@ cd backend
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+
+# 독립 CLI 패키지(planforge 엔진) — 저장소 루트에서 editable 설치
+#   (콘솔 스크립트 `planforge` 생성. `python -m planforge`는 설치 없이도 동작)
+cd ..
+pip install --no-build-isolation -e packages\planforge-cli
+cd backend
 
 # LLM 설정 (gitignored — 배포 시점에 확정)
 copy planforge\config.example.json planforge\config.json
@@ -300,27 +316,40 @@ http://localhost:5173 을 열면 된다. 상단에 **"API 연결됨"** 배지가
 
 ---
 
-## 6. CLI (M1 코어 엔진 — `backend/`에서 실행)
+## 6. CLI (독립 패키지 `planforge-cli` — `backend/`에서 실행)
 
-LLM 변환·빌드 파이프라인을 명령줄에서 직접 돌릴 수 있다(웹 UI와 같은 코어를 쓴다).
+LLM 변환·빌드 파이프라인을 명령줄에서 직접 돌릴 수 있다(웹 UI와 같은 엔진을 쓴다).
+엔진은 `packages/planforge-cli/`의 설치 패키지이며, 콘솔 스크립트 `planforge`와
+`python -m planforge`는 **동일한 진입점**(`planforge.cli.main:main`)이다.
+설정 기본 경로가 `backend/planforge/config.json`이므로 실행 위치는 `backend/`다.
 
 ```powershell
 cd backend
 
 # plan 파싱·문서 필터·골격 검증 (표지·목차·마무리·내용 슬라이드 최소 1개씩)
-python -m planforge parse <plan.md> [--doc 문서명]
+planforge parse <plan.md> [--doc 문서명]
+python -m planforge parse <plan.md> [--doc 문서명]      # 동일
 
 # 수치 무결성 대조 — plan과 산출물의 수치·표·근거 문자열이 한 글자라도 다르면 🔴 (exit 1)
-python -m planforge numcheck <plan.md> --slides <slides.json> [--doc 문서명]
-python -m planforge numcheck <plan.md> --report <report.json> [--doc 문서명]
+planforge numcheck <plan.md> --slides <slides.json> [--doc 문서명]
+planforge numcheck <plan.md> --report <report.json> [--doc 문서명]
 
 # 빌더 원형 직접 실행
-python -m planforge build-ppt <slides.json> [output_dir]
-python -m planforge build-doc <report.json> <md|html|docx> [output_dir]
+planforge build-ppt <slides.json> [output_dir]
+planforge build-doc <report.json> <md|html|docx> [output_dir]
 
 # LLM 변환 + 검증 게이트 + 빌드
-python -m planforge derive <plan.md> --workspace <dir> --kind slides|report `
-    [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed]
+planforge derive <plan.md> --workspace <dir> --kind slides|report `
+    [--doc 문서명] [--fmts md html docx] [--no-build] [--allow-unconfirmed] [--config <json>]
+```
+
+관리 CLI(앱·DB 인지 명령)는 별도다 — 엔진 패키지에 넣지 않는다(웹 비의존 계약).
+
+```powershell
+cd backend
+python scripts/admin.py openapi        # OpenAPI → frontend/openapi.json
+python scripts/admin.py job-timing     # 잡 큐 대기·실행 소요 요약 (읽기 전용)
+# 기존 경로(scripts/export_openapi.py·scripts/job_timing_report.py)는 동작 동일 shim
 ```
 
 LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
@@ -351,8 +380,11 @@ LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 ## 8. 테스트
 
 ```powershell
-# 저장소 루트에서 (conftest.py가 backend를 import 경로에 추가)
+# 저장소 루트에서 (conftest.py가 packages/planforge-cli/src를 최우선, backend를 다음으로 추가)
 pytest
+
+# 하네스 안전망 테스트
+python -m pytest scripts/test_execute.py -q
 
 # 빌더 회귀(계약 테스트) — tests/fixtures/*.sample.json이 빌더 산출물의 동일성을 잠근다
 pytest tests/ -k contract

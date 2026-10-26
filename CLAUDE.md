@@ -40,13 +40,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
 `facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 모듈·feature를 템플릿으로 복제.
 
+- **엔진 패키지**: `packages/planforge-cli/` — 결정론 파이프라인 엔진과 CLI를 담은 독립
+  설치 패키지(콘솔 스크립트 `planforge`, 배포명 `planforge-cli`). `src/planforge/`에
+  `common/`(UTF-8/JSON I/O·상수·slug·빌드 파일명·설정 경로 해석)·`cli/`(argparse·서브커맨드
+  본문)·`plan/`·`builders/`·`llm/`·`derive.py`·`numcheck.py`·`review.py`. **웹 비의존**
+  (의존 방향 `backend/app` → `packages/planforge-cli` 단방향, FastAPI·SQLAlchemy import 금지).
+  `backend/planforge/`에는 런타임 설정(`config.json`·`config.example.json`)만 남는다.
+- **앱 관리 CLI**: `backend/scripts/admin.py` — 앱·DB 인지 관리 명령(`openapi`·`job-timing`).
+  `planforge/`에 넣지 않는다(웹 비의존 계약). 기존 `scripts/export_openapi.py`·
+  `job_timing_report.py`는 이 CLI의 얇은 shim이다.
+
 - **파이프라인**: 프로젝트 생성 → 소스 등록 → 인터뷰 세션(상태머신
   `backend/app/modules/interview/application/agent.py` + SSE 턴) → 팩트 적립 → plan 세대 생성 →
   승인(approve) → derive/review job → 단일 워커 실행 → 결정론 빌드·채번 → 검수(`ReviewReport`).
 - **SSOT의 실제 구현**: plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의
   `write_plan_mirror`가 워크스페이스에 기록하는 `plan.md`는 Deriver·빌더가 파일로 읽는
-  미러일 뿐. 파생 경로: Plan 레코드 → 미러 → Deriver(`planforge/derive.py`) → 원자적
-  빌드(`atomic_build`) → 채번 등록(Build 행).
+  미러일 뿐. 파생 경로: Plan 레코드 → 미러 → Deriver
+  (`packages/planforge-cli/src/planforge/derive.py`) → 원자적 빌드(`atomic_build`) →
+  채번 등록(Build 행).
 - **데이터 체인 (추적성)**: `Project → InterviewSession → Fact → Plan(세대) →
   Derivative → Build → ReviewReport`. 모든 산출물은 자신의 plan 세대를 역참조한다.
   수정은 plan revise → 새 세대 DRAFT → 재승인 → 재생성(버전 +1)만 유일한 경로다.
@@ -60,7 +71,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   기반 OpenAI 호환 단일 프로토콜(아키텍처 결정 편차 10 — chat_fn/stream_fn dict 계약은 불변).
   인터뷰 턴 루프는 langgraph StateGraph(`interview/application/turn_graph.py`), 도구 루프
   (derive 재변환·plan_revise·review·compact)는 공용 StateGraph
-  (`planforge/llm/loops.py run_tool_loop` — 편차 11). 테스트는
+  (`packages/planforge-cli/src/planforge/llm/loops.py run_tool_loop` — 편차 11). 테스트는
   `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로 fake LLM을 주입한다.
 - **프롬프트 위치**: 모듈별 `backend/app/modules/<모듈>/application/prompts/*.md`
   (interview·facts/compact·plans/plan_revise·review), 파생물 변환은
@@ -94,7 +105,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 테스트
 
-- 실행: 저장소 루트에서 `pytest` (conftest.py가 backend를 import 경로에 추가).
+- 실행: 저장소 루트에서 `pytest` (conftest.py가 `packages/planforge-cli/src`를 최우선,
+  `backend`를 그 다음 import 경로에 추가 — `backend/planforge`는 설정 디렉토리만 남은
+  namespace package).
   단일 테스트는 `pytest tests/test_numcheck.py::이름` 처럼 파일/노드ID로 지정.
 - 프론트 타입 체크·빌드: frontend/에서 `npm run build` (`tsc --noEmit` 포함 — lint 설정은 없음).
 - 브라우저 e2e 스모크: 양쪽 dev 서버(backend 8000 + frontend 5173) 기동 후 frontend/에서
@@ -109,12 +122,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 명령어
 
 - 가상환경: `backend/.venv` (`.vscode/settings.json`이 인터프리터로 지정).
+- 엔진 패키지 설치(루트에서): `backend/.venv/Scripts/python.exe -m pip install --no-build-isolation -e packages/planforge-cli`
+  — editable 설치라 `src/planforge` 수정이 즉시 반영된다(콘솔 `planforge` 생성).
 - 슬래시: `/harness`(하네스 워크플로우) · `/review`(변경사항 리뷰 체크리스트)
-- CLI (backend/에서): `python -m planforge parse|numcheck|build-ppt|build-doc|derive ...`
+- CLI (backend/에서): `planforge parse|numcheck|build-ppt|build-doc|derive ...` —
+  `python -m planforge ...`와 동일하다(같은 `planforge.cli.main`).
+- 관리 CLI (backend/에서): `python scripts/admin.py openapi|job-timing` — 앱·DB 인지 명령.
+  기존 `python scripts/export_openapi.py`·`scripts/job_timing_report.py`는 같은 동작의 shim.
 - DB: backend/에서 `alembic upgrade head` — 기본 DB는 루트 `data/planforge.db`.
   스키마 변경은 `alembic revision`으로 마이그레이션 추가(개발용 `init_db`는 alembic 대체로만).
 - 서버: `uvicorn app.main:app --reload` (backend/) · `npm run dev` (frontend/, /api 프록시)
-- 타입 갱신: backend/ `python scripts/export_openapi.py` → frontend/ `npm run gen:types`
+- 타입 갱신: backend/ `python scripts/admin.py openapi`(= `scripts/export_openapi.py`) →
+  frontend/ `npm run gen:types`
 - API 전체 목록은 `backend/app/main.py`·OpenAPI 참조.
 - 배포: `docker compose build && docker compose up -d`
 - 토큰 변경 절차: `docs/UI_GUIDE.md` §토큰 변경 절차 (원칙 7)
