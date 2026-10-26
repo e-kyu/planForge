@@ -17,13 +17,16 @@ backend/
                               이 모듈의 facade를 호출(ADR 결정 22)
     shared/                   모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
     agents/tools.py           인터뷰 도구 OpenAI function 스키마 + 서버측 검증
-  planforge/                  M1 결정론 파이프라인 패키지 (웹 비의존, app→planforge 단방향)
-    plan/                     plan.md 파서·문서 필터·골격 검증
-    builders/                 build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
-    llm/                      OpenAI 호환 provider(langchain-openai ChatOpenAI) +
-                              공용 tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
-    derive.py · review.py · numcheck.py
+  planforge/                  런타임 LLM 설정(config.json·config.example.json)만 남는다
   alembic/                    DB 마이그레이션
+packages/
+  planforge-cli/              독립 설치 패키지 (planforge-cli) — 웹 비의존
+    src/planforge/            M1 결정론 파이프라인 (의존 방향: backend/app → packages/planforge-cli)
+      plan/                   plan.md 파서·문서 필터·골격 검증
+      builders/               build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
+      llm/                    OpenAI 호환 provider(langchain-openai ChatOpenAI) +
+                              공용 tool-loop 그래프(loops.py — derive·plan_revise·review·compact)
+      derive.py · review.py · numcheck.py
 frontend/                     React 19 + TypeScript (Vite) — feature-MVVM
   src/features/               화면별 feature 7종 (projects·project·sources·interview·
                               plan·outputs·review) — 각 models/·viewmodels/·views/

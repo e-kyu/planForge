@@ -3,7 +3,9 @@
 # 다른 프로바이더(openai 등)는 backend/planforge/config.json의 base_url이 LLM_BASE_URL보다 우선.
 services:
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       # SQLite 파일은 호스트 볼륨(./data)에 남는다 — 컨테이너 재생성에도 유지
       DATABASE_URL: sqlite:////srv/data/planforge.db

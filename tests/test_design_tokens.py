@@ -17,8 +17,8 @@ import planforge.builders.theme as theme
 
 REPO = Path(__file__).resolve().parent.parent
 TOKENS_CSS = REPO / "frontend" / "src" / "shared" / "styles" / "tokens.css"
-BUILDERS = [REPO / "backend" / "planforge" / "builders" / "build_ppt.py",
-            REPO / "backend" / "planforge" / "builders" / "build_doc.py"]
+BUILDERS = [REPO / "packages" / "planforge-cli" / "src" / "planforge" / "builders" / "build_ppt.py",
+            REPO / "packages" / "planforge-cli" / "src" / "planforge" / "builders" / "build_doc.py"]
 
 # 권위 theme.py ↔ CSS 변수 렌더 — 9색 대응표 (색상 추적 단절 방지)
 COLOR_MAP = [

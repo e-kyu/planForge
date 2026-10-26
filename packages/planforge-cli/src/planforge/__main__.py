@@ -13,10 +13,9 @@ LLM derive 단계는 M1 후반(provider 추상화 계층)에서 추가한다.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from pathlib import Path
 
+from .common.configpath import resolve_config_path
 from .numcheck import check_report, check_slides
 from .plan import filter_slides, parse_plan_file, validate_skeleton
 
@@ -80,9 +79,8 @@ def cmd_derive(args) -> int:
     from .derive import Deriver, UNCONFIRMED_MARK
     from .llm import get_provider, load_config
 
-    config_path = (args.config or os.environ.get("PLANFORGE_CONFIG")
-                   or Path(__file__).resolve().parent / "config.json")
-    if not Path(config_path).is_file():
+    config_path = resolve_config_path(args.config)
+    if not config_path.is_file():
         print(f"오류: LLM 설정 파일이 없습니다: {config_path}")
         print("backend/planforge/config.example.json을 config.json으로 복사해 모델을 지정하거나,")
         print("환경변수 PLANFORGE_CONFIG로 경로를 지정하세요.")

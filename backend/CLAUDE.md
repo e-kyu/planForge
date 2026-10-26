@@ -14,9 +14,11 @@
   템플릿으로 복제.
 - `app/agents/` — 인터뷰 에이전트 등 에이전트 계층.
 - `app/shared/` — 모듈 간 공용 코드 (`workspace.py`, `llm.py` 등).
-- `planforge/` — 결정론 파이프라인 패키지: `derive.py`(plan → 파생물) ·
+- `packages/planforge-cli/src/planforge/` — 결정론 파이프라인 패키지(독립 설치 패키지
+  `planforge-cli`, backend는 이 패키지에 의존): `derive.py`(plan → 파생물) ·
   `builders/{build_ppt,build_doc,theme}.py` · `numcheck.py` · `review.py` ·
-  `plan/` · `llm/prompts/`(derive_{slides,report}.md).
+  `plan/` · `llm/prompts/`(derive_{slides,report}.md). `backend/planforge/`에는
+  런타임 설정(`config.json`·`config.example.json`)만 남는다.
 - `app/modules/<모듈>/application/prompts/*.md` — 앱이 로드하는 런타임 LLM 프롬프트
   (interview · facts/compact · plans/plan_revise · review).
 
@@ -73,6 +75,6 @@
 
 ## 변경 금지
 
-- `planforge/builders/{build_ppt,build_doc,theme}.py` — legacy scripts의 바이트 동일
+- `packages/planforge-cli/src/planforge/builders/{build_ppt,build_doc,theme}.py` — legacy scripts의 바이트 동일
   이식본. **로직 변경 금지**, 경로/워크스페이스 주입만 어댑터로 처리.
 - `planforge/config.json`은 gitignored(키·설정) — 커밋 대상 아님.

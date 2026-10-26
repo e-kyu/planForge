@@ -64,7 +64,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `create_app(llm_overrides=...)` / `JobContext(llm_overrides=...)`로 fake LLM을 주입한다.
 - **프롬프트 위치**: 모듈별 `backend/app/modules/<모듈>/application/prompts/*.md`
   (interview·facts/compact·plans/plan_revise·review), 파생물 변환은
-  `backend/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는
+  `packages/planforge-cli/src/planforge/llm/prompts/derive_{slides,report}.md` — 앱이 로드하는
   런타임 LLM 프롬프트다.
 - **프론트엔드**: React 19 + TypeScript(Vite), 자체 CSS + TanStack Query. `src/features/`
   에 화면별 feature 7종 — 각 `models/`(API 호출)·`viewmodels/`(상태·로직 훅)·`views/`
@@ -76,7 +76,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 개발 규칙
 
 - 상태: **M1~M4 코드 완료 (2026-09-19)**. 남은 것: 브라우저 e2e 완주.
-- 빌더 `backend/planforge/builders/{build_ppt,build_doc,theme}.py`는 legacy scripts의
+- 빌더 `packages/planforge-cli/src/planforge/builders/{build_ppt,build_doc,theme}.py`는 legacy scripts의
   바이트 동일 이식본 — **로직 변경 금지**, 경로/워크스페이스 주입만 어댑터로 처리.
 - LLM 호출은 `langchain-openai` ChatOpenAI 기반 provider 어댑터 계층으로만 한다
   (`chat_fn`/`stream_fn` dict 계약 유지). anthropic SDK 사용 금지.

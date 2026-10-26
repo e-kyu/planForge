@@ -1,11 +1,16 @@
 # PlanForge 백엔드 — API + 단일 워커(프로세스 내 asyncio) 하나의 컨테이너.
+# build context는 저장소 루트다 (docker-compose.yml 참조) — 독립 CLI 패키지를 함께 복사한다.
 FROM python:3.12-slim
 WORKDIR /srv/backend
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# 독립 CLI 패키지(planforge 엔진) — backend는 이 패키지에 의존한다.
+COPY packages/planforge-cli ./packages/planforge-cli
+RUN pip install --no-cache-dir --no-build-isolation ./packages/planforge-cli
+
+COPY backend/ .
 
 ENV PYTHONUTF8=1
 EXPOSE 8000

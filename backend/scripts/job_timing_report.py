@@ -8,13 +8,11 @@ derive 지연 원인 판별(큐 대기 vs LLM 실행 vs 재시도)에 쓴다 —
 from __future__ import annotations
 
 import json
-import os
 import statistics
-import sys
-from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BACKEND_DIR))
+from _bootstrap import database_url, ensure_paths
+
+ensure_paths()
 
 
 def _dt(v) -> object | None:
@@ -31,10 +29,7 @@ def _dt(v) -> object | None:
 def main() -> None:
     from sqlalchemy import create_engine, text
 
-    url = os.environ.get(
-        "DATABASE_URL",
-        f"sqlite:///{(BACKEND_DIR.parent / 'data' / 'planforge.db').as_posix()}",
-    )
+    url = database_url()
     engine = create_engine(url)
 
     with engine.connect() as conn:

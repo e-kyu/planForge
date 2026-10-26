@@ -12,6 +12,11 @@ __pycache__/
 .venv/
 .pytest_cache/
 
+# Python 패키지 빌드 산출물 (packages/planforge-cli — pip install -e)
+*.egg-info/
+packages/planforge-cli/build/
+packages/planforge-cli/dist/
+
 # Node
 node_modules/
 dist/

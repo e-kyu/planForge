@@ -8,14 +8,13 @@
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent
+from _bootstrap import BACKEND_DIR, ensure_paths
+
 OUT = BACKEND_DIR.parent / "frontend" / "openapi.json"
 
-# app을 import 가능하게 (conftest와 동일 규약)
-sys.path.insert(0, str(BACKEND_DIR))
+# app·planforge를 import 가능하게 (conftest와 동일 규약 — 패키지 src 최우선)
+ensure_paths()
 
 
 def main() -> None:

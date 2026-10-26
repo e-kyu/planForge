@@ -24,6 +24,10 @@
       "dir": "sse-keepalive",
       "status": "completed",
       "completed_at": "2026-10-13T21:44:14+0900"
+    },
+    {
+      "dir": "refactor-standalone-cli",
+      "status": "pending"
     }
   ]
 }

@@ -1,0 +1,11 @@
+# Docker build context 제외 (context는 저장소 루트 — docker-compose.yml 참조)
+backend/.venv
+**/__pycache__
+.git
+workspaces
+data
+sources
+node_modules
+frontend
+.e2e-shots
+phases
