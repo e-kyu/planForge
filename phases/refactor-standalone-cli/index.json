@@ -77,7 +77,10 @@
     {
       "step": 9,
       "name": "facts-compact-and-sources",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:33:19+0900",
+      "summary": "facts compact·sources zip 단일 책임 분해 — compact.fact_line을 shared.factline.format_fact_line 위임(공개 이름·출력 불변)·UNCONFIRMED=UNCONFIRMED_EXACT 유지, compact_preview/apply를 _active_facts·_compact_proposal·_preview_result / _archive_selection·_rewrite_log_mirrors(루트+문서별 doc_layout=True)·_apply_result로 분해, extract_zip을 _scan_member·_admit_member·_write_member로 분해(2페이즈·skip 사유·순서·상한·트래버설 방어 보존). AC 62 passed, 전체 395 passed·1 skipped.",
+      "completed_at": "2026-10-26T21:36:17+0900"
     },
     {
       "step": 10,

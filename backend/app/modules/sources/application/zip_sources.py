@@ -38,6 +38,50 @@ def _restore_member_name(info: zipfile.ZipInfo) -> str:
         return name
 
 
+def _admit_member(info: zipfile.ZipInfo, shown: str, dest: Path,
+                  seen: set[str]) -> tuple[str | None, str | None]:
+    """채택 판정 — 크기/경로/중복 검사. (상대경로, None) 또는 (None, 기각 사유)."""
+    rel = sanitize_source_relpath(shown)
+    if rel is None:
+        return None, "지원하지 않는 경로"
+    if os.path.splitext(rel)[1].lower() not in SOURCE_EXTS:
+        return None, "지원하지 않는 확장자"
+    if info.file_size > MAX_SOURCE_BYTES:
+        return None, "파일이 너무 큽니다"
+    if rel in seen or (dest / rel).exists():
+        return None, "같은 이름의 소스가 이미 있습니다"
+    return rel, None
+
+
+def _scan_member(info: zipfile.ZipInfo, dest: Path, seen: set[str]
+                 ) -> tuple[tuple[zipfile.ZipInfo, str, str] | None,
+                            tuple[str, str] | None]:
+    """1페이즈 멤버 판정 — (채택 (info, 표기명, 상대경로), None) 또는 (None, 스킵)."""
+    shown = _restore_member_name(info)
+    if info.is_dir():
+        return None, (shown, "디렉터리 항목")
+    rel, reason = _admit_member(info, shown, dest, seen)
+    if rel is None:
+        return None, (shown, reason)
+    return (info, shown, rel), None
+
+
+def _write_member(zf: zipfile.ZipFile, info: zipfile.ZipInfo, shown: str, rel: str,
+                  dest: Path) -> tuple[str | None, tuple[str, str] | None]:
+    """2페이즈 쓰기 — 실측 재검사 후 기록. (저장 경로, None) 또는 (None, 스킵)."""
+    payload = zf.open(info).read(MAX_SOURCE_BYTES + 1)
+    if len(payload) > MAX_SOURCE_BYTES:
+        return None, (shown, "파일이 너무 큽니다")
+    try:
+        payload.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None, (shown, "UTF-8 텍스트 파일만 저장할 수 있습니다")
+    target = dest / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)  # 검증 통과한 원본 바이트 그대로 — BOM 포함 원형 유지
+    return rel, None
+
+
 def extract_zip(data: bytes, dest: Path) -> tuple[list[str], list[tuple[str, str]]]:
     """zip 바이트 → dest(워크스페이스 sources/) 기록. (저장된 상대경로, 스킵 [(멤버 원명, 사유)]).
 
@@ -66,41 +110,20 @@ def extract_zip(data: bytes, dest: Path) -> tuple[list[str], list[tuple[str, str
         skipped: list[tuple[str, str]] = []
         seen: set[str] = set()
         for info in infos:
-            shown = _restore_member_name(info)
-            if info.is_dir():
-                skipped.append((shown, "디렉터리 항목"))
+            admitted, skip = _scan_member(info, dest, seen)
+            if admitted is None:
+                skipped.append(skip)
                 continue
-            rel = sanitize_source_relpath(shown)
-            if rel is None:
-                skipped.append((shown, "지원하지 않는 경로"))
-                continue
-            if os.path.splitext(rel)[1].lower() not in SOURCE_EXTS:
-                skipped.append((shown, "지원하지 않는 확장자"))
-                continue
-            if info.file_size > MAX_SOURCE_BYTES:
-                skipped.append((shown, "파일이 너무 큽니다"))
-                continue
-            if rel in seen or (dest / rel).exists():
-                skipped.append((shown, "같은 이름의 소스가 이미 있습니다"))
-                continue
-            seen.add(rel)
-            collected.append((info, shown, rel))
+            seen.add(admitted[2])
+            collected.append(admitted)
 
         # 2페이즈 — 수집 확정 멤버만 순서대로 읽고 기록. 실측 재검사로 메타데이터
         # 위조(선언 file_size < 실제)를 이중 방어한다.
         saved: list[str] = []
         for info, shown, rel in collected:
-            payload = zf.open(info).read(MAX_SOURCE_BYTES + 1)
-            if len(payload) > MAX_SOURCE_BYTES:
-                skipped.append((shown, "파일이 너무 큽니다"))
+            saved_rel, skip = _write_member(zf, info, shown, rel, dest)
+            if saved_rel is None:
+                skipped.append(skip)
                 continue
-            try:
-                payload.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                skipped.append((shown, "UTF-8 텍스트 파일만 저장할 수 있습니다"))
-                continue
-            target = dest / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(payload)  # 검증 통과한 원본 바이트 그대로 — BOM 포함 원형 유지
-            saved.append(rel)
+            saved.append(saved_rel)
         return saved, skipped

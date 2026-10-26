@@ -16,11 +16,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.shared.factline import format_fact_line
+from planforge.common.const import UNCONFIRMED_EXACT
 from planforge.llm.loops import run_tool_loop
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-UNCONFIRMED = "(미확정)"
+# compact는 정확 일치(`(미확정)`)만 쓴다 — prefix(`(미확정`)로 넓히면 archive 제외
+# 동작이 바뀐다 (planforge/common/const.py의 두 매칭 의미 분리).
+UNCONFIRMED = UNCONFIRMED_EXACT
 
 COMPACT_TOOLS: list[dict] = [
     {
@@ -122,9 +126,8 @@ def clean_groups(groups: list[dict], facts) -> list[dict]:
 
 
 def fact_line(f, marker: str = "") -> str:
-    """interview-log 항목 형식 — 날짜·출처 표기 형식은 legacy 규약 유지."""
-    line = f"[{f.date.isoformat()}] {f.content} (출처: {f.source})"
-    return f"{line} {marker}".strip() if marker else line
+    """interview-log 항목 형식 — 공용 헬퍼에 위임 (출력·공개 이름 불변)."""
+    return format_fact_line(f.date, f.content, f.source, marker=marker)
 
 
 def select_archives(facts, groups) -> tuple[dict[int, object], list[str]]:
