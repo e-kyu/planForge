@@ -40,7 +40,7 @@
       "status": "completed",
       "started_at": "2026-10-26T21:12:47+0900",
       "summary": "plan/loader.py 신설(PreparedPlan·prepare_plan·load_plan_for_doc·validate_each_doc — 파싱·문서 선택·필터·골격·(미확정) 단일 권위, strict_doc로 Deriver 문구 보존) — Deriver._prepare 위임·derive(prepared=)·DeriveResult.doc 끝 필드, derive_build 이중 파싱 제거(res.doc), CLI parse/numcheck/derive 로더 교체, agent·planrevise의 도달 불가 3-key 검사 제거 + validate_each_doc 래핑(오류 문구 불변, run_review 무변경). test_plan_loader 10건 추가, 전체 383 passed·1 skipped.",
-      "completed_at": "2026-10-26T21:17:30+0900"
+      "completed_at": "2026-10-26T21:17:47+0900"
     },
     {
       "step": 5,
