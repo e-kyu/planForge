@@ -1,16 +1,28 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiSSE } from "../../../api/client";
-import { createSession, fetchMessages, fetchSession } from "../models/interviewApi";
+import { createSession, fetchMessages, fetchSession, turnRequest } from "../models/interviewApi";
 import type { DocSlug } from "../../projects/models/docloops";
 import { errMsg } from "../../../shared/lib/errMsg";
 
 /* 인터뷰 서버 상태 + SSE 턴 머신 (§2 ViewModel).
  * POST(답변/게이트 제출)의 응답이 곧 SSE 스트림이므로(D6) 모든 진행을 run() 한 경로로 소비한다.
  * SSE 스트림은 query 캐시와 무관한 스트림 — token 버퍼는 로컬 상태로, 종료(done) 후
- * 세션·이력·팩트 쿼리를 무효화해 다시 당겨온다(이력이 권위). */
+ * 세션·이력·팩트 쿼리를 무효화해 다시 당겨온다(이력이 권위).
+ * 요청 경로·본문 조립(turnRequest)과 답변 조립(answerItems)도 여기가 소유한다 —
+ * View는 typed action에 데이터만 넘긴다 (MVVM §4.3). */
 
-export type InterviewTurn = { path: string; body: unknown };
+/** 답변 카드의 화면 초안 — View가 소유하는 로컬 UI 상태의 형태. */
+export type AnswerDraft = Record<number, { option?: number; free?: string }>;
+
+/** 서버로 보내는 답변 1건 — AnswerItem 계약(1문항 1값). */
+export type AnswerItem = { index: number; option?: number; free_text?: string };
+
+/** pending_questions 중 답변 조립에 필요한 부분만 (도구 스키마 대응). */
+type PendingQuestion = { allow_free?: boolean; suggestions?: string[] };
+
+/** 제출할 답이 없을 때의 안내 — 빈 제출은 서버 409("전부 모름")라 클라이언트에서 막는다. */
+const EMPTY_ANSWER_ERROR = "답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)";
 
 /** 세션 저장 키 — 문서 루프 라우트는 문서별 분리(`pf-session-{pid}-{doc}`), 레거시는
  *  기존 키(`pf-session-{pid}`) 그대로 — 기존 사용자 세션 보존(마이그레이션 없음). */
@@ -122,6 +134,74 @@ export function useInterview(pid: number, doc: DocSlug | null = null) {
     }
   }
 
+  /** 턴/게이트 제출 — kind별 경로·본문은 model(turnRequest)이 조립한다. */
+  async function submit(kind: Parameters<typeof turnRequest>[1], payload?: unknown): Promise<boolean> {
+    if (!sid) return false;
+    const req = turnRequest(sid, kind, payload);
+    return run(req.path, req.body);
+  }
+
+  async function submitTurn(message: string): Promise<boolean> {
+    return submit("turn", message);
+  }
+
+  async function submitKick(): Promise<boolean> {
+    return submit("kick");
+  }
+
+  /** 답변 초안 → 제출 items 조립 (옵션 선택 우선, 없으면 비어 있지 않은 자유 입력). */
+  function answerItems(draft: AnswerDraft): AnswerItem[] {
+    const qs = (session?.pending_questions ?? []) as PendingQuestion[];
+    const items: AnswerItem[] = [];
+    for (let i = 0; i < qs.length; i++) {
+      const a = draft[i];
+      if (!a) continue;
+      if (a.option !== undefined) items.push({ index: i, option: a.option });
+      else if (a.free?.trim()) items.push({ index: i, free_text: a.free.trim() });
+    }
+    return items;
+  }
+
+  /** 추천 전체제출 초안 — 미답변 문항을 문항별 suggestions[0]으로 채운다 (결정론).
+   *  suggestions 없는 문항은 미답변 유지 — 서버가 → (모름) 마킹으로 전달한다 (계약 문서).
+   *  제출할 답이 하나도 없으면 오류를 설정하고 null을 반환한다. */
+  function suggestedAnswer(draft: AnswerDraft): { next: AnswerDraft; items: AnswerItem[] } | null {
+    if (!session) return null;
+    const qs = (session.pending_questions ?? []) as PendingQuestion[];
+    let filled = 0;
+    const next: AnswerDraft = { ...draft };
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      const sug = q?.suggestions?.[0]; // 첫 후보 고정 — 사용자가 칩·입력으로 수정하는 여지는 유지
+      // 칩 표시 조건과 동일한 채움 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 미기입 → (모름))
+      if (!next[i] && sug && (q.allow_free ?? true)) {
+        next[i] = { option: undefined, free: sug };
+        filled++;
+      }
+    }
+    if (filled === 0 && Object.keys(draft).length === 0) {
+      setError(EMPTY_ANSWER_ERROR);
+      return null;
+    }
+    return { next, items: answerItems(next) };
+  }
+
+  async function submitAnswers(items: AnswerItem[]): Promise<boolean> {
+    if (items.length === 0) {
+      setError(EMPTY_ANSWER_ERROR);
+      return false;
+    }
+    return submit("answers", items);
+  }
+
+  async function submitFactsConfirm(approve: boolean, edits: unknown[]): Promise<boolean> {
+    return submit("facts-confirm", { approve, edits });
+  }
+
+  async function submitKeyMessages(approve: boolean, feedback?: string): Promise<boolean> {
+    return submit("key-messages", { approve, feedback });
+  }
+
   return {
     sid,
     session,
@@ -132,8 +212,13 @@ export function useInterview(pid: number, doc: DocSlug | null = null) {
     active,
     busy,
     error,
-    setError,
     start,
-    run,
+    submitTurn,
+    submitKick,
+    submitAnswers,
+    submitFactsConfirm,
+    submitKeyMessages,
+    answerItems,
+    suggestedAnswer,
   };
 }

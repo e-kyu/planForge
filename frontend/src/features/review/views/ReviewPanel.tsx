@@ -50,20 +50,15 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
         )}
       </PageHeader>
 
-      {jobsError && <Banner kind="error">{jobsLoadErrorText(jobsError)}</Banner>}
-      {error && <Banner kind="error">{error}</Banner>}
-      {failedReviseJob && (
-        <Banner kind="error">
-          {/* 저장된 오류 전문에 실린 진단을 잃지 않게 토글로 펼친다 (결정 16) */}
-          <JobErrorDetail job={failedReviseJob} title="plan 반영 실패" />
-        </Banner>
-      )}
-      {notice && <Banner kind="info">{notice}</Banner>}
+      <ReviewBanners
+        jobsError={jobsError}
+        error={error}
+        failedReviseJob={failedReviseJob}
+        notice={notice}
+      />
       {busy && (
         <Banner kind="info">
-          {reviseActive && !reviewActive
-            ? bannerText(reviseJob, now, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)")
-            : bannerText(reviewJob, now, "검수 처리 중… (결정론 대조 + LLM 내용 검수)")}
+          {busyBannerText(reviseActive, reviewActive, reviseJob, reviewJob, now)}
         </Banner>
       )}
 
@@ -77,26 +72,7 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
                 <button className="review-open" onClick={() => setSel(r)}>
                   <span className="review-title">
                     검수 #{r.id} · plan v{verById.get(r.plan_id) ?? r.plan_id}{" "}
-                    {r.red_count > 0 ? (
-                      <span className="sev sev-red">
-                        <XCircle /> {r.red_count}
-                      </span>
-                    ) : (
-                      <span className="sev sev-clean">
-                        <CheckCircle2 /> 통과
-                      </span>
-                    )}
-                    {r.yellow_count > 0 && (
-                      <span className="sev sev-yellow">
-                        <AlertTriangle /> {r.yellow_count}
-                      </span>
-                    )}
-                    {r.white_count > 0 && (
-                      <span className="sev sev-white">
-                        <Info /> {r.white_count}
-                      </span>
-                    )}
-                    {!r.llm_ok && <span className="sev sev-llm">LLM 검수 실패</span>}
+                    <ReviewSeverity r={r} />
                   </span>
                   <span className="hint">{fmtDateTime(r.created_at)}</span>
                 </button>
@@ -109,6 +85,70 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
       {sel && <ReviewDetail key={sel.id} r={sel} pid={pid} />}
     </section>
   );
+}
+
+/** 심각도 칩 — 🔴(없으면 "통과")·🟡·⚪·LLM 실패 (렌더 순서·문구 유지). */
+function ReviewSeverity({ r }: { r: Review }) {
+  return (
+    <>
+      {r.red_count > 0 ? (
+        <span className="sev sev-red">
+          <XCircle /> {r.red_count}
+        </span>
+      ) : (
+        <span className="sev sev-clean">
+          <CheckCircle2 /> 통과
+        </span>
+      )}
+      {r.yellow_count > 0 && (
+        <span className="sev sev-yellow">
+          <AlertTriangle /> {r.yellow_count}
+        </span>
+      )}
+      {r.white_count > 0 && (
+        <span className="sev sev-white">
+          <Info /> {r.white_count}
+        </span>
+      )}
+      {!r.llm_ok && <span className="sev sev-llm">LLM 검수 실패</span>}
+    </>
+  );
+}
+
+/** 상단 배너 묶음 — jobs 조회 실패·액션 오류·plan 반영 실패·안내 (렌더 순서 유지). */
+function ReviewBanners(props: {
+  jobsError: string | null;
+  error: string | null;
+  failedReviseJob: Job | null | undefined;
+  notice: string | null;
+}) {
+  return (
+    <>
+      {props.jobsError && <Banner kind="error">{jobsLoadErrorText(props.jobsError)}</Banner>}
+      {props.error && <Banner kind="error">{props.error}</Banner>}
+      {props.failedReviseJob && (
+        <Banner kind="error">
+          {/* 저장된 오류 전문에 실린 진단을 잃지 않게 토글로 펼친다 (결정 16) */}
+          <JobErrorDetail job={props.failedReviseJob} title="plan 반영 실패" />
+        </Banner>
+      )}
+      {props.notice && <Banner kind="info">{props.notice}</Banner>}
+    </>
+  );
+}
+
+/** 진행 배너 문구 — plan 반영만 활성이면 반영 안내, 그 외에는 검수 안내. */
+function busyBannerText(
+  reviseActive: boolean,
+  reviewActive: boolean,
+  reviseJob: Job | undefined,
+  reviewJob: Job | undefined,
+  now: number,
+): string {
+  if (reviseActive && !reviewActive) {
+    return bannerText(reviseJob, now, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)");
+  }
+  return bannerText(reviewJob, now, "검수 처리 중… (결정론 대조 + LLM 내용 검수)");
 }
 
 /** 활성 잡의 진행 문구 + 경과 — 경과는 useTickingNow의 now로 갱신한다 (폴링만으론 정지).

@@ -3,6 +3,13 @@ import type { LucideIcon } from "lucide-react";
 
 /** 공통 UI 조각 — 자체 CSS(§3.1). 라이브러리는 최소만 유지 (아이콘 lucide-react 허용). */
 
+const BUTTON_VARIANT_CLASS = {
+  primary: "btn btn-primary",
+  ghost: "btn btn-ghost",
+  danger: "btn btn-danger",
+  ok: "btn btn-ok",
+} as const;
+
 export function Button(props: {
   children: ReactNode;
   onClick?: () => void;
@@ -12,14 +19,7 @@ export function Button(props: {
   className?: string;
   title?: string;
 }) {
-  const cls =
-    props.variant === "ghost"
-      ? "btn btn-ghost"
-      : props.variant === "danger"
-        ? "btn btn-danger"
-        : props.variant === "ok"
-          ? "btn btn-ok"
-          : "btn btn-primary";
+  const cls = BUTTON_VARIANT_CLASS[props.variant ?? "primary"];
   return (
     <button className={`${cls} ${props.className ?? ""}`} onClick={props.onClick} disabled={props.disabled}
             type={props.type ?? "button"} title={props.title}>

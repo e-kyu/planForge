@@ -93,7 +93,10 @@
     {
       "step": 11,
       "name": "frontend-mvvm-cleanup",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:42:20+0900",
+      "summary": "프론트 MVVM 정리 — interviewApi.turnRequest(경로/본문 조립)·useInterview typed action 5종+답변 조립(answerItems/suggestedAnswer) 이동으로 View의 fetch/경로 조립 제거, shared Modal(Esc·overlay·닫기, closeDisabled)·apiText 도입(outputsApi 위임), ProjectsPage(생성/삭제 모달·ProjectRow)·InterviewPanel(피드·입력·게이트)·SourcesPanel(표·삭제 모달) 분할, HeaderMetrics/ActivityPill/ReviewPanel/OutputsPanel/PlanPanel/FactSidePanel/ui.tsx 중첩 삼항→helper·lookup. query key·무효화·refetchInterval·SSE 계약·DOM/클래스·문구·삭제 안전장치 불변. npm --prefix frontend run build 통과.",
+      "completed_at": "2026-10-26T21:48:00+0900"
     },
     {
       "step": 12,

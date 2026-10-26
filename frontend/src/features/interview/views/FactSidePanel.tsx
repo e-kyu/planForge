@@ -19,6 +19,28 @@ const ORIGIN_LABEL: Record<string, string> = {
   manual: "수동",
 };
 
+/** 미확정 판별 — 백엔드 UNCONFIRMED 컨벤션("(미확정" 접두 마커)과 동일한 클라이언트 판별(설계 D5). */
+const isUnconfirmed = (f: Fact) => f.content.includes("(미확정");
+
+/** 필터 조건 — 중첩 삼항 대신 명시 분기 (렌더 결과 동일). */
+function matchesFilter(f: Fact, filter: FactFilter): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "active":
+      return f.status === "active" && !isUnconfirmed(f);
+    case "unconfirmed":
+      return f.status === "active" && isUnconfirmed(f);
+    case "archived":
+      return f.status === "archived";
+  }
+}
+
+function statusOf(f: Fact): "ok" | "warn" | "arch" {
+  if (f.status === "archived") return "arch";
+  return isUnconfirmed(f) ? "warn" : "ok";
+}
+
 /** 팩트 저장소 사이드 패널 — 팩트 확정(승인·적립)은 게이트 전용(설계 D4·원칙 4),
  *  확정은 인터뷰 게이트(FactGate → POST /facts/confirm)에서만 수행된다.
  *  중복 팩트 정리(팩트 압축 FR-6.1) 카드는 이 패널에서 제안·적용한다.
@@ -43,18 +65,7 @@ export function FactSidePanel({
     requestAnimationFrame(() => (collapsed ? headBtn.current : railBtn.current)?.focus());
   }
 
-  const isUnconfirmed = (f: Fact) => f.content.includes("(미확정");
-  const shown = (facts ?? []).filter((f) =>
-    filter === "all"
-      ? true
-      : filter === "active"
-        ? f.status === "active" && !isUnconfirmed(f)
-        : filter === "unconfirmed"
-          ? f.status === "active" && isUnconfirmed(f)
-          : f.status === "archived",
-  );
-  const statusOf = (f: Fact): "ok" | "warn" | "arch" =>
-    f.status === "archived" ? "arch" : isUnconfirmed(f) ? "warn" : "ok";
+  const shown = (facts ?? []).filter((f) => matchesFilter(f, filter));
   const STATUS_TEXT = { ok: "확립", warn: "미확정", arch: "아카이브" } as const;
 
   return (

@@ -1,7 +1,14 @@
+import type { Job } from "../../../api/client";
 import { useActiveJobs } from "../../../shared/lib/useActiveJobs";
 import { useTickingNow } from "../../../shared/lib/useTickingNow";
 import { jobStateText, queuedStateText } from "../../../shared/lib/jobs";
 import { JOBS_LOAD_ERROR_PREFIX, jobsLoadErrorText } from "../../../shared/lib/messages";
+
+/** 활성 잡의 진행 문구 — queued는 대기, running은 진행+경과(기록 전이면 "처리 중"). */
+function activeText(job: Job, now: number): string {
+  if (job.status === "queued") return queuedStateText(job);
+  return jobStateText(job, now) ?? "처리 중";
+}
 
 /** 전역 작업 필 — 다른 탭(인터뷰/plan/소스)에서도 파생물·검수 잡 진행을 보게 한다.
  *  탭 패널은 하나씩만 마운트되므로, 폴링 소유자(useActiveJobs의 refetchInterval)를
@@ -20,10 +27,7 @@ export default function ActivityPill({ pid }: { pid: number }) {
   // 실패 중에도 마지막 알고 있던 진행을 보여주는 편이 상태 추적에 유리하다.
   if (activeJob) {
     const running = activeJob.status === "running";
-    const text =
-      activeJob.status === "queued"
-        ? queuedStateText(activeJob)
-        : (jobStateText(activeJob, now) ?? "처리 중");
+    const text = activeText(activeJob, now);
     return (
       <div className="activity-pill" title={jobsError ? jobsLoadErrorText(jobsError) : text}>
         <span className={`activity-dot ${running ? "activity-dot-pulse" : ""}`} aria-hidden="true" />

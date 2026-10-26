@@ -65,6 +65,14 @@ export const apiPut = <T>(path: string, body?: unknown) =>
 
 export const apiDelete = (path: string) => api<void>(path, { method: "DELETE" });
 
+/** 텍스트 응답 래퍼 — md/html 산출물 미리보기처럼 JSON이 아닌 본문을 읽는다.
+ *  실패는 api와 동일하게 ApiError(status, detail)로 통일한다. */
+export async function apiText(path: string): Promise<string> {
+  const res = await fetch(path);
+  if (!res.ok) throw new ApiError(res.status, await errorText(res));
+  return await res.text();
+}
+
 export async function apiUpload<T>(path: string, file: File): Promise<T> {
   const fd = new FormData();
   fd.append("file", file);

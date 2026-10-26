@@ -1,15 +1,12 @@
-import { useEffect, useState } from "react";
-import { Download, FileCode, FileText, Trash2, Upload, X } from "lucide-react";
-import type { SourceFile } from "../../../api/client";
-import { Banner, Button, Empty, fmtBytes } from "../../../shared/components/ui";
-import { formatEpochSeconds } from "../../../shared/lib/format";
+import { useState } from "react";
+import { FileCode, FileText, Upload } from "lucide-react";
+import { Banner, Button, Empty } from "../../../shared/components/ui";
 import { MAX_SOURCE_MB, MAX_ZIP_MB } from "../../../shared/lib/uploadLimits";
 import { useOverviewMeta } from "../viewmodels/useOverview";
 import { useSources } from "../viewmodels/useSources";
 import OverviewEditor from "./OverviewEditor";
-
-/** 포맷 배지 — API에 type 필드가 없어 확장자에서 도출 (설계 D6). */
-const extOf = (name: string) => name.split(".").pop()?.toUpperCase() ?? "";
+import { SourceDeleteModal } from "./SourceDeleteModal";
+import { SourceTable } from "./SourceTable";
 
 /** 소스 관리 (FR-2.1) — 목록 ↔ 개요 문서 편집기 스위칭 (표현 전용 View). */
 export default function SourcesPanel({ pid }: { pid: number }) {
@@ -37,79 +34,6 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
     fileInput,
   } = useSources(pid);
   const { meta: overview } = useOverviewMeta(pid);
-
-  // Esc로 삭제 확인 모달 닫기 — 작업 중에는 닫지 않음
-  useEffect(() => {
-    if (!delTarget) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (!delBusy) closeDelete();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [delTarget, delBusy, closeDelete]);
-
-  const downloadHref = (dir: "project" | "global", name: string) =>
-    dir === "project"
-      ? `/api/projects/${pid}/sources/${encodeURIComponent(name)}/download`
-      : `/api/sources/${encodeURIComponent(name)}/download`;
-
-  const table = (fs: SourceFile[], dir: "project" | "global") => (
-    <div className="table-wrap">
-      <table className="source-table">
-        <thead>
-          <tr>
-            <th>문서명</th>
-            <th>포맷</th>
-            <th>파일 크기</th>
-            <th>등록일시</th>
-            <th className="th-actions">작업</th>
-          </tr>
-        </thead>
-        <tbody>
-          {fs.map((s) => (
-            <tr key={`${dir}:${s.name}`}>
-              <td>
-                <span className="source-name-cell">
-                  <FileCode aria-hidden="true" />
-                  <span className="source-name">{s.name}</span>
-                </span>
-              </td>
-              <td>
-                <span className="ext-badge">{extOf(s.name)}</span>
-              </td>
-              <td className="source-meta">{fmtBytes(s.size)}</td>
-              <td className="source-meta">{formatEpochSeconds(s.mtime)}</td>
-              <td>
-                <span className="row-actions">
-                  <a
-                    className="row-dl"
-                    href={downloadHref(dir, s.name)}
-                    download
-                    aria-label={`${s.name} 다운로드`}
-                    title="다운로드"
-                  >
-                    <Download aria-hidden="true" />
-                  </a>
-                  {dir === "project" && (
-                    <button
-                      type="button"
-                      className="row-del"
-                      onClick={() => openDelete(s.name)}
-                      aria-label={`${s.name} 삭제`}
-                      title="삭제"
-                    >
-                      <Trash2 />
-                    </button>
-                  )}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 
   return (
     <>
@@ -146,7 +70,7 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
           {files === null ? null : files.length === 0 ? (
             <Empty>업로드된 소스가 없습니다.</Empty>
           ) : (
-            table(files, "project")
+            <SourceTable files={files} dir="project" pid={pid} onDelete={openDelete} />
           )}
           <div className="panel-foot">
             <span className="hint sources-foot-desc">
@@ -180,49 +104,20 @@ function SourcesList({ pid, onStartOverview }: { pid: number; onStartOverview: (
           {globalFiles === null ? null : globalFiles.length === 0 ? (
             <Empty>글로벌 소스가 없습니다.</Empty>
           ) : (
-            table(globalFiles, "global")
+            <SourceTable files={globalFiles} dir="global" pid={pid} onDelete={openDelete} />
           )}
         </div>
       </section>
 
       {/* 삭제 확인 모달 — ProjectsPage 삭제 모달과 동일 스타일 (파일명 입력 절차는 생략) */}
       {delTarget && (
-        <div className="modal-overlay" onClick={delBusy ? undefined : closeDelete}>
-          <div
-            className="modal modal-del"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="source-delete-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h3 id="source-delete-title">소스 삭제</h3>
-              <button
-                className="modal-close"
-                onClick={closeDelete}
-                disabled={delBusy}
-                aria-label="닫기"
-              >
-                <X />
-              </button>
-            </div>
-            <p className="hint del-warn">
-              소스는 휴지통 없이 영구 삭제되며 되돌릴 수 없습니다.
-            </p>
-            <p className="del-target">
-              삭제할 소스: <strong>{delTarget}</strong>
-            </p>
-            {delError && <Banner kind="error">{delError}</Banner>}
-            <div className="modal-actions">
-              <Button variant="ghost" onClick={closeDelete} disabled={delBusy}>
-                취소
-              </Button>
-              <Button variant="danger" onClick={() => void confirmDelete()} disabled={delBusy}>
-                삭제
-              </Button>
-            </div>
-          </div>
-        </div>
+        <SourceDeleteModal
+          name={delTarget}
+          delBusy={delBusy}
+          delError={delError}
+          onConfirm={() => void confirmDelete()}
+          onClose={closeDelete}
+        />
       )}
     </>
   );

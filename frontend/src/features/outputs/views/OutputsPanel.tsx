@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, Layout } from "lucide-react";
-import type { Job } from "../../../api/client";
+import type { Build, Job } from "../../../api/client";
 import { Banner, Button, Empty, Loading, PageHeader, fmtBytes, fmtDateTime } from "../../../shared/components/ui";
 import { JobErrorDetail } from "../../../shared/components/JobErrorDetail";
 import { MarkdownPreview } from "../../../shared/components/MarkdownPreview";
@@ -109,18 +109,10 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
         )}
       </PageHeader>
 
-      {jobsError && <Banner kind="error">{jobsLoadErrorText(jobsError)}</Banner>}
-      {error && <Banner kind="error">{error}</Banner>}
-      {notice && <Banner kind="info">{notice}</Banner>}
+      <OutputBanners jobsError={jobsError} error={error} notice={notice} />
       {/* 상태창 — 워커가 기록한 진행 단계(reported by facade.report_progress)를 잡 폴링으로 표시.
           진행 문구·경과는 useTickingNow 틱으로 매초 갱신 — 폴링만으론 동일 페이로드에서 리렌더가 없다 */}
-      {busy && (
-        <Banner kind="info">
-          {activeJob?.status === "running"
-            ? (jobStateText(activeJob, now) ?? "파생물 생성 — 처리 중")
-            : "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)"}
-        </Banner>
-      )}
+      {busy && <Banner kind="info">{busyBannerText(activeJob, now)}</Banner>}
 
       {residual && (
         <Banner kind="info" onDismiss={() => setResidualDismissId(residual.id)}>
@@ -196,15 +188,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
               닫기
             </Button>
           </div>
-          {sel.ext === "md" ? (
-            selPreview ? (
-              <MarkdownPreview markdown={selPreview} />
-            ) : (
-              <Empty>미리보기 로딩 중…</Empty>
-            )
-          ) : (
-            <iframe className="html-preview" src={`/api/projects/${pid}/outputs/${sel.id}/download`} />
-          )}
+          <PreviewBody pid={pid} sel={sel} selPreview={selPreview} />
         </div>
       )}
 
@@ -225,16 +209,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
                     </span>
                     <span className="job-title">{JOB_TYPE_LABEL[j.type] ?? j.type} #{j.id}</span>
                   </div>
-                  {j.status === "running" ? (
-                    <div className="job-detail job-progress">
-                      {progressText(j) ?? "처리 중"}
-                      {elapsedText(j, now) ? ` · ${elapsedText(j, now)}` : ""}
-                    </div>
-                  ) : j.status === "failed" ? (
-                    <JobErrorDetail job={j} />
-                  ) : (
-                    <div className="job-detail">{jobDetail(j)}</div>
-                  )}
+                  <JobStatusDetail j={j} now={now} />
                 </li>
               );
             })}
@@ -247,6 +222,45 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
 
 /** 작업 상세줄 — 실패는 JobErrorDetail 공용 컴포넌트가 담당, 타입별 결과 요약
  * (result 스키마는 worker.py 참조). */
+function JobStatusDetail({ j, now }: { j: Job; now: number }) {
+  if (j.status === "running") {
+    return (
+      <div className="job-detail job-progress">
+        {progressText(j) ?? "처리 중"}
+        {elapsedText(j, now) ? ` · ${elapsedText(j, now)}` : ""}
+      </div>
+    );
+  }
+  if (j.status === "failed") return <JobErrorDetail job={j} />;
+  return <div className="job-detail">{jobDetail(j)}</div>;
+}
+
+/** 상단 배너 묶음 — jobs 조회 실패·액션 오류·안내 (렌더 순서 유지). */
+function OutputBanners(props: { jobsError: string | null; error: string | null; notice: string | null }) {
+  return (
+    <>
+      {props.jobsError && <Banner kind="error">{jobsLoadErrorText(props.jobsError)}</Banner>}
+      {props.error && <Banner kind="error">{props.error}</Banner>}
+      {props.notice && <Banner kind="info">{props.notice}</Banner>}
+    </>
+  );
+}
+
+/** 진행 상태창 문구 — running은 job 진행+경과, 그 외(queued)는 큐 직렬 대기 안내. */
+function busyBannerText(job: Job | undefined, now: number): string {
+  if (job?.status === "running") return jobStateText(job, now) ?? "파생물 생성 — 처리 중";
+  return "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)";
+}
+
+/** 미리보기 본문 — md는 마크다운, html은 iframe. */
+function PreviewBody({ pid, sel, selPreview }: { pid: number; sel: Build; selPreview: string | null }) {
+  if (sel.ext !== "md") {
+    return <iframe className="html-preview" src={`/api/projects/${pid}/outputs/${sel.id}/download`} />;
+  }
+  if (!selPreview) return <Empty>미리보기 로딩 중…</Empty>;
+  return <MarkdownPreview markdown={selPreview} />;
+}
+
 function jobDetail(j: Job): string {
   if (j.type === "review") {
     const c = j.result?.counts as { red?: number; yellow?: number; white?: number } | undefined;

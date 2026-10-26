@@ -1,20 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot } from "lucide-react";
-import type { Message } from "../../../api/client";
 import type { DocSlug } from "../../projects/models/docloops";
 import { Banner, Button, Empty } from "../../../shared/components/ui";
-import { useInterview } from "../viewmodels/useInterview";
+import { useInterview, type AnswerDraft } from "../viewmodels/useInterview";
 import { FactSidePanel } from "./FactSidePanel";
+import { InterviewComposer } from "./InterviewComposer";
+import { InterviewFeed } from "./InterviewFeed";
+import { AnswersCard, FactGate, KeyGate } from "./InterviewGates";
+import type { FactCard, QuestionCard } from "./interviewTypes";
 import { useStoredBoolean } from "../../../shared/lib/viewPrefs";
-
-/* 도구 스키마(agents/tools.py)와 대응하는 카드 데이터 형태 */
-type QuestionCard = {
-  text: string;
-  options?: { label: string; description?: string }[];
-  allow_free?: boolean;
-  suggestions?: string[]; // 추천 후보 칩 (소스·팩트 기반 — 클릭 시 자유 입력에 채움)
-};
-type FactCard = { content: string; source?: string };
 
 const PHASE_LABEL: Record<string, string> = {
   hypothesis: "가설/질문 대기",
@@ -26,31 +20,12 @@ const PHASE_LABEL: Record<string, string> = {
   failed: "실패",
 };
 
-/** progress 이벤트 step → 대기 문구 (백엔드 progress_event의 emit-only 진행 알림).
- *  llm 단계는 턴 시작 시점 세션 페이즈별로 문구를 구체화한다. */
-const PROGRESS_LABEL: Record<string, string> = {
-  context: "소스 문서와 팩트를 정리하는 중…",
-  tool: "도구 실행 결과를 반영하는 중…",
-};
-
-const LLM_LABEL: Record<string, string> = {
-  hypothesis: "가설과 질문을 준비하는 중…",
-  awaiting_answers: "답변을 정리하는 중…",
-  fact_gate: "팩트 적립을 준비하는 중…",
-  key_message_gate: "핵심 메시지를 확정하는 중…",
-};
-
-function progressLabel(status: string, phase: string): string {
-  if (status === "llm") return LLM_LABEL[phase] ?? "응답을 생성하는 중…";
-  return PROGRESS_LABEL[status] ?? status;
-}
-
 /** 인터뷰 채팅 (FR-2) — SSE 턴 + 게이트 카드 (표현 전용 View).
- *  서버 상태·SSE 턴 머신은 useInterview, 팩트 목록은 useFactsPanel이 보유한다 (압축 카드는 FactSidePanel 소속).
+ *  서버 상태·SSE 턴 머신·요청/답변 조립은 useInterview, 팩트 목록은 useFactsPanel이 보유한다
+ *  (압축 카드는 FactSidePanel 소속). View는 경로·본문을 만들지 않고 typed action만 호출한다.
  *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 세션 식별(localStorage 키·생성 doc_slug)만 분리된다. */
 export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?: DocSlug | null }) {
   const {
-    sid,
     session,
     messages,
     restoring,
@@ -59,12 +34,17 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
     active,
     busy,
     error,
-    setError,
     start,
-    run,
+    submitTurn,
+    submitKick,
+    submitAnswers,
+    submitFactsConfirm,
+    submitKeyMessages,
+    answerItems,
+    suggestedAnswer,
   } = useInterview(pid, doc);
   const [draft, setDraft] = useState("");
-  const [answers, setAnswers] = useState<Record<number, { option?: number; free?: string }>>({});
+  const [answers, setAnswers] = useState<AnswerDraft>({});
   const [factCollapsed, setFactCollapsed] = useStoredBoolean("pf-fact-side-collapsed", false);
   const feed = useRef<HTMLDivElement>(null);
 
@@ -73,54 +53,21 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
   }, [messages, streaming, status, active]);
 
   /** 턴 제출 래퍼 — 오류 없이 끝났을 때만 입력(답변·초안)을 비운다 (오류 시 유지 — 재제출 대비). */
-  async function turn(path: string, body: unknown) {
-    const ok = await run(path, body);
+  async function turn(action: () => Promise<boolean>) {
+    const ok = await action();
     if (ok) {
       setAnswers({});
       setDraft("");
     }
   }
 
-  async function submitAnswers(override?: Record<number, { option?: number; free?: string }>) {
-    if (!session) return;
-    const src = override ?? answers; // 전체제출 시 setAnswers로 채운 상태를 그대로 넘긴다 (stale closure 회피)
-    const qs = session.pending_questions ?? [];
-    const items: { index: number; option?: number; free_text?: string }[] = [];
-    for (let i = 0; i < qs.length; i++) {
-      const a = src[i];
-      if (!a) continue;
-      if (a.option !== undefined) items.push({ index: i, option: a.option });
-      else if (a.free?.trim()) items.push({ index: i, free_text: a.free.trim() });
-    }
-    if (items.length === 0) {
-      setError("답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)");
-      return;
-    }
-    await turn(`/api/interview/sessions/${sid}/answers`, { answers: items });
-  }
-
   /** 추천 전체제출 — 미답변 문항을 문항별 suggestions[0]으로 채워 한 번에 제출한다 (결정론).
    *  suggestions 없는 문항은 미답변 유지 — 서버가 → (모름) 마킹으로 전달한다 (계약 문서). */
   function submitAllWithSuggestions() {
-    if (!session) return;
-    const qs = (session.pending_questions as QuestionCard[]) ?? [];
-    let filled = 0;
-    const next: Record<number, { option?: number; free?: string }> = { ...answers };
-    for (let i = 0; i < qs.length; i++) {
-      const q = qs[i];
-      const sug = q?.suggestions?.[0]; // 첫 후보 고정 — 사용자가 칩·입력으로 수정하는 여지는 유지
-      // 칩 표시 조건과 동일한 채움 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 미기입 → (모름))
-      if (!next[i] && sug && (q.allow_free ?? true)) {
-        next[i] = { option: undefined, free: sug };
-        filled++;
-      }
-    }
-    if (filled === 0 && Object.keys(answers).length === 0) {
-      setError("답변을 1개 이상 입력하세요 (모르면 '모름' 등으로 적어 주세요)");
-      return;
-    }
-    setAnswers(next); // 실패 시에도 채워진 상태가 화면에 남는다 (사용자 수정 여지)
-    void submitAnswers(next);
+    const r = suggestedAnswer(answers);
+    if (!r) return;
+    setAnswers(r.next); // 실패 시에도 채워진 상태가 화면에 남는다 (사용자 수정 여지)
+    void turn(() => submitAnswers(r.items));
   }
 
   if (restoring) {
@@ -147,6 +94,7 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
 
   const phase = session.phase;
   const isKick = phase === "hypothesis" && messages.length === 0;
+  const canInteract = session.status === "active";
 
   return (
     <section className={`chat-layout ${factCollapsed ? "fact-collapsed" : ""}`}>
@@ -164,26 +112,16 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
       </div>
       {error && <Banner kind="error">{error}</Banner>}
 
-      <div className="chat-feed" ref={feed}>
-        {messages.map(renderMessage)}
-        {streaming && active && (
-          <div className="chat-row">
-            <div className="bubble bubble-assistant streaming">{streaming}</div>
-          </div>
-        )}
-        {busy && status && !active && (
-          <div className="chat-row">
-            <div className="bubble bubble-assistant bubble-typing">
-              {progressLabel(status, phase)}
-              <span className="typing-dots" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
+      <InterviewFeed
+        messages={messages}
+        streaming={streaming}
+        active={active}
+        busy={busy}
+        status={status}
+        phase={phase}
+        pid={pid}
+        feedRef={feed}
+      />
 
       <div className="chat-actions">
         {phase === "plan_review" && (
@@ -206,7 +144,7 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
             round={session.round_no}
             summary={session.pending_round_summary}
             onPick={(i, patch) => setAnswers((prev) => ({ ...prev, [i]: { ...prev[i], ...patch } }))}
-            onSubmit={() => void submitAnswers()}
+            onSubmit={() => void turn(() => submitAnswers(answerItems(answers)))}
             onSubmitAll={submitAllWithSuggestions}
             busy={busy}
           />
@@ -217,7 +155,7 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
             facts={session.pending_facts as FactCard[]}
             busy={busy}
             onConfirm={(approve, edits) =>
-              void turn(`/api/interview/sessions/${sid}/facts/confirm`, { approve, edits })
+              void turn(() => submitFactsConfirm(approve, edits))
             }
           />
         )}
@@ -227,42 +165,20 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
             items={session.pending_key_messages as string[]}
             busy={busy}
             onConfirm={(approve, feedback) =>
-              void turn(`/api/interview/sessions/${sid}/key-messages`, { approve, feedback })
+              void turn(() => submitKeyMessages(approve, feedback))
             }
           />
         )}
 
-        <div className={isKick ? "chat-input chat-input-kick" : "chat-input"}>
-          <textarea
-            value={draft}
-            placeholder={
-              phase === "hypothesis" && messages.length === 0
-                ? "인터뷰를 시작하려면 아래 버튼을 누르세요"
-                : "자유 텍스트로 보충·정정·잡담 (Enter 전송, Shift+Enter 줄바꿈)"
-            }
-            rows={2}
-            disabled={busy || session.status !== "active"}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (draft.trim() && !busy) void turn(`/api/interview/sessions/${sid}/turn`, { message: draft });
-              }
-            }}
-          />
-          {phase === "hypothesis" && messages.length === 0 ? (
-            <Button onClick={() => void turn(`/api/interview/sessions/${sid}/kick`, {})} disabled={busy}>
-              인터뷰 시작 (가설 제시)
-            </Button>
-          ) : (
-            <Button
-              disabled={busy || session.status !== "active" || !draft.trim()}
-              onClick={() => void turn(`/api/interview/sessions/${sid}/turn`, { message: draft })}
-            >
-              보내기
-            </Button>
-          )}
-        </div>
+        <InterviewComposer
+          draft={draft}
+          onDraft={setDraft}
+          busy={busy}
+          canInteract={canInteract}
+          isKick={isKick}
+          onSend={() => void turn(() => submitTurn(draft))}
+          onKick={() => void turn(() => submitKick())}
+        />
       </div>
       </div>
 
@@ -272,291 +188,5 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
         onToggle={() => setFactCollapsed(!factCollapsed)}
       />
     </section>
-  );
-
-  // --------------------------------------------------------------- 메시지 렌더
-
-  function renderMessage(m: Message) {
-    const p = (m.payload ?? {}) as Record<string, unknown>;
-    switch (`${m.role}:${m.kind}`) {
-      case "user:text":
-        return <Bubble key={m.seq} side="right" text={m.content} />;
-      case "assistant:text":
-        return m.content.trim() ? <Bubble key={m.seq} side="left" text={m.content} /> : null;
-      case "event:questions": {
-        const round = typeof p.round === "number" ? p.round : null;
-        const summary = typeof p.summary === "string" && p.summary ? p.summary : null;
-        return (
-          <StaticCard key={m.seq}
-            title={summary ? `라운드 ${round ?? "?"} — 목표: ${summary}` : `라운드 ${round ?? "?"} 질문`}>
-            <StaticQuestions questions={(p.questions ?? []) as QuestionCard[]} />
-          </StaticCard>
-        );
-      }
-      case "event:facts": {
-        const facts = (p.facts ?? []) as FactCard[];
-        const conflicts = (p.conflicts ?? []) as { note?: string }[];
-        return (
-          <StaticCard key={m.seq} title="팩트 제시 (확인 대상)">
-            <ul className="compact-list">
-              {facts.map((f, i) => (
-                <li key={i}>
-                  {f.content}
-                  {f.source ? <span className="hint"> — 출처: {f.source}</span> : null}
-                </li>
-              ))}
-            </ul>
-            {conflicts.length > 0 && (
-              <p className="hint">⚠ 모순 감지: {conflicts.map((c) => c.note).join(" / ")}</p>
-            )}
-          </StaticCard>
-        );
-      }
-      case "event:key_messages":
-        return (
-          <StaticCard key={m.seq} title="핵심 메시지 후보 (3개)">
-            <ol className="compact-list">
-              {((p.messages ?? []) as string[]).map((s, i) => (
-                <li key={i}>{s}</li>
-              ))}
-            </ol>
-          </StaticCard>
-        );
-      case "event:plan_draft":
-        return (
-          <StaticCard key={m.seq} title={`plan v${p.version_no ?? "?"} 초안 작성됨`}>
-            <a href={`#/projects/${pid}/plan`}>plan 탭에서 검토·승인 →</a>
-          </StaticCard>
-        );
-      case "event:notice":
-        return (
-          <div key={m.seq} className="chat-row">
-            <div className="bubble bubble-notice">{m.content}</div>
-          </div>
-        );
-      case "event:error":
-        return (
-          <div key={m.seq} className="chat-row">
-            <div className="bubble bubble-error">{m.content}</div>
-          </div>
-        );
-      default:
-        return null; // state/tool_call/tool — LLM 내부 기록은 채팅에 노출하지 않는다
-    }
-  }
-}
-
-function Bubble(props: { side: "left" | "right"; text: string }) {
-  return (
-    <div className={`chat-row chat-row-${props.side}`}>
-      <div className={`bubble bubble-${props.side}`}>{props.text}</div>
-    </div>
-  );
-}
-
-function StaticCard(props: { title: string; children: ReactNode }) {
-  return (
-    <div className="chat-row">
-      <div className="card chat-card">
-        <div className="chat-card-title">{props.title}</div>
-        {props.children}
-      </div>
-    </div>
-  );
-}
-
-function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
-  return (
-    <ol className="compact-list">
-      {questions.map((q, i) => (
-        <li key={i}>
-          {q.text}
-          {q.options && q.options.length > 0 && (
-            <ul className="option-list">
-              {q.options.map((o, j) => (
-                <li key={j}>
-                  {o.label}
-                  {o.description ? <span className="hint"> — {o.description}</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다.
- *  선택↔입력은 상호배타다 — 입력하면 선택이 해제, 선택하면 입력이 지워진다
- *  (과거에는 옵션 선택 중 입력값이 제출에서 조용히 폐기됐다). */
-function AnswersCard(props: {
-  questions: QuestionCard[];
-  answers: Record<number, { option?: number; free?: string }>;
-  round?: number;
-  summary?: string | null;
-  onPick: (i: number, patch: { option?: number; free?: string }) => void;
-  onSubmit: () => void;
-  onSubmitAll: () => void;
-  busy: boolean;
-}) {
-  // 추천 칩·전체제출의 공통 표시 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 제외)
-  const canFill = (q: QuestionCard) =>
-    (q.suggestions ?? []).length > 0 && (q.allow_free ?? true);
-  const hasSuggestions = props.questions.some(canFill);
-  return (
-    <div className="card chat-card chat-card-active">
-      <div className="chat-card-title">
-        {props.summary
-          ? `라운드 ${props.round ?? "?"} — 목표: ${props.summary}`
-          : "라운드 답변 — 선택지를 고르거나 직접 적어 주세요"}
-      </div>
-      <ol className="question-list">
-        {props.questions.map((q, i) => (
-          <li key={i}>
-            <div className="q-text">{q.text}</div>
-            {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
-              <div className="suggest-row">
-                <span className="suggest-label">추천</span>
-                {q.suggestions!.map((sug, k) => (
-                  <button
-                    key={k}
-                    className="suggest-chip"
-                    onClick={() => props.onPick(i, { option: undefined, free: sug })}
-                  >
-                    {sug}
-                  </button>
-                ))}
-              </div>
-            )}
-            {q.options && q.options.length > 0 && (
-              <div className="options">
-                {q.options.map((o, j) => (
-                  <button
-                    key={j}
-                    className={`option ${props.answers[i]?.option === j ? "option-picked" : ""}`}
-                    onClick={() => props.onPick(i, { option: j, free: undefined })}
-                  >
-                    <span className="option-label">{o.label}</span>
-                    {o.description ? <span className="option-desc">{o.description}</span> : null}
-                  </button>
-                ))}
-              </div>
-            )}
-            {(q.allow_free ?? true) && (
-              <input
-                className="free-input"
-                placeholder="직접 입력 (선택지 대신)"
-                value={props.answers[i]?.free ?? ""}
-                onChange={(e) => props.onPick(i, { option: undefined, free: e.target.value })}
-              />
-            )}
-          </li>
-        ))}
-      </ol>
-      <div className="center-actions">
-        {hasSuggestions && (
-          <Button
-            variant="ghost"
-            disabled={props.busy}
-            title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
-            onClick={props.onSubmitAll}
-          >
-            추천으로 전체 제출
-          </Button>
-        )}
-        <Button onClick={props.onSubmit} disabled={props.busy}>
-          답변 제출
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** 팩트 확인 게이트 (FR-2.4) — 수정 가능, 승인 시에만 적립. */
-function FactGate(props: {
-  facts: FactCard[];
-  busy: boolean;
-  onConfirm: (approve: boolean, edits: { index: number; content?: string; source?: string }[]) => void;
-}) {
-  const [rows, setRows] = useState(props.facts.map((f) => ({ ...f })));
-  const edits = rows
-    .map((r, i) =>
-      r.content !== props.facts[i]?.content || (r.source ?? "") !== (props.facts[i]?.source ?? "")
-        ? { index: i, content: r.content, source: r.source ?? "" }
-        : null,
-    )
-    .filter((x): x is { index: number; content: string; source: string } => x !== null);
-
-  return (
-    <div className="card chat-card chat-card-active">
-      <div className="chat-card-title">팩트 확인 — 이대로 팩트 저장소에 기록할까요?</div>
-      <ul className="compact-list">
-        {rows.map((f, i) => (
-          <li key={i}>
-            <input
-              className="fact-edit"
-              value={f.content}
-              onChange={(e) =>
-                setRows((prev) => prev.map((r, j) => (j === i ? { ...r, content: e.target.value } : r)))
-              }
-            />
-            <input
-              className="fact-edit hint-input"
-              placeholder="출처"
-              value={f.source ?? ""}
-              onChange={(e) =>
-                setRows((prev) => prev.map((r, j) => (j === i ? { ...r, source: e.target.value } : r)))
-              }
-            />
-          </li>
-        ))}
-      </ul>
-      <div className="center-actions">
-        <Button onClick={() => props.onConfirm(true, edits)} disabled={props.busy}>
-          승인 · 적립
-        </Button>
-        <Button variant="ghost" onClick={() => props.onConfirm(false, [])} disabled={props.busy}>
-          반려 (다시 제시)
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** 핵심 메시지 승인 게이트 (FR-2.6). */
-function KeyGate(props: {
-  items: string[];
-  busy: boolean;
-  onConfirm: (approve: boolean, feedback?: string) => void;
-}) {
-  const [feedback, setFeedback] = useState("");
-  return (
-    <div className="card chat-card chat-card-active">
-      <div className="chat-card-title">핵심 메시지 3개 — 승인하시겠습니까?</div>
-      <ol className="compact-list">
-        {props.items.map((s, i) => (
-          <li key={i}>{s}</li>
-        ))}
-      </ol>
-      <div className="center-actions">
-        <Button onClick={() => props.onConfirm(true)} disabled={props.busy}>
-          승인
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={props.busy}
-          onClick={() => props.onConfirm(false, feedback.trim() || undefined)}
-        >
-          반려
-        </Button>
-        <input
-          className="free-input"
-          placeholder="반려 사유 / 수정 방향 (선택)"
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-        />
-      </div>
-    </div>
   );
 }

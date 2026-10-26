@@ -14,6 +14,41 @@ type Mode = "view" | "edit" | "diff";
 type ViewStyle = "code" | "viewer";
 type EditStyle = "code" | "split" | "viewer";
 
+const EDIT_STYLES = [
+  { key: "code", label: "코드" },
+  { key: "split", label: "분할" },
+  { key: "viewer", label: "뷰어" },
+] as const;
+
+const VIEW_STYLES = [
+  { key: "code", label: "코드" },
+  { key: "viewer", label: "뷰어" },
+] as const;
+
+/** 표시 방식 토글 — 편집(3모드)과 보기·대비(2모드)를 mode로 고른다 (중첩 삼항 대체). */
+function StyleToggle(props: {
+  mode: Mode;
+  editStyle: EditStyle;
+  viewStyle: ViewStyle;
+  onEditStyle: (v: EditStyle) => void;
+  onViewStyle: (v: ViewStyle) => void;
+}) {
+  if (props.mode === "edit") {
+    return <SegToggle value={props.editStyle} onChange={props.onEditStyle} options={EDIT_STYLES} />;
+  }
+  return <SegToggle value={props.viewStyle} onChange={props.onViewStyle} options={VIEW_STYLES} />;
+}
+
+/** 메인 배너 묶음 — 오류·안내 (렌더 순서 유지). */
+function PlanBanners(props: { error: string | null; notice: string | null }) {
+  return (
+    <>
+      {props.error && <Banner kind="error">{props.error}</Banner>}
+      {props.notice && <Banner kind="ok">{props.notice}</Banner>}
+    </>
+  );
+}
+
 /** plan.md 뷰어/에디터/승인 (FR-5, FR-2.9, FR-4.3).
  *  SSOT: 콘텐츠 원본은 DB plans.markdown — UI 수정은 항상 revise(새 세대 DRAFT)로만 간다.
  *  doc: 문서 루프 슬러그(레거시 라우트는 null) — 조회 스코프(?doc_slug=)는 viewmodel 경유. */
@@ -124,8 +159,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
       </aside>
 
       <div className="plan-main">
-        {error && <Banner kind="error">{error}</Banner>}
-        {notice && <Banner kind="ok">{notice}</Banner>}
+        <PlanBanners error={error} notice={notice} />
 
         <div className="plan-toolbar">
           <div className="plan-toolbar-left">
@@ -161,26 +195,13 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
             >
               {before ? `이전 세대 대비 (${formatVersion(before.version_no)} → ${formatVersion(sel.version_no)})` : "diff (이전 세대 없음)"}
             </Button>
-            {mode === "edit" ? (
-              <SegToggle
-                value={editStyle}
-                onChange={setEditStyle}
-                options={[
-                  { key: "code", label: "코드" },
-                  { key: "split", label: "분할" },
-                  { key: "viewer", label: "뷰어" },
-                ]}
-              />
-            ) : (
-              <SegToggle
-                value={viewStyle}
-                onChange={setViewStyle}
-                options={[
-                  { key: "code", label: "코드" },
-                  { key: "viewer", label: "뷰어" },
-                ]}
-              />
-            )}
+            <StyleToggle
+              mode={mode}
+              editStyle={editStyle}
+              viewStyle={viewStyle}
+              onEditStyle={setEditStyle}
+              onViewStyle={setViewStyle}
+            />
           </div>
           <div className="plan-toolbar-right">
             {mode === "edit" && (
