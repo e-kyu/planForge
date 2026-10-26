@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,7 +15,7 @@ from app.modules.docloops import facade as docloops
 from app.modules.interview.facade import complete_plan_review_sessions
 from app.modules.projects.facade import require_project
 from app.shared.errors import http_409
-from app.shared.workspace import doc_ws_root, ensure_doc_ws, write_plan_mirror
+from app.shared.workspace import write_plan_mirror
 
 from ..facade import PlanOrigin, PlanStatus, create_generation, require_plan
 from ..infrastructure.models import Plan
@@ -29,11 +28,10 @@ def _mirror_root(db: Session, project_id: int, workspace_path, doc_slug: str | N
     레이아웃 권위는 doc_loops 행(has_doc_layout) — 행 없는(레거시) 프로젝트의 doc
     plan도 루트 경로를 유지한다 (step 4 agent._mirror_root와 동일 규칙). 지연 생성이
     없는 경로(직접 시드 plan의 승인)에서도 미러 쓰기가 성립하도록 하위 구조를
-    멱등 생성한다 (ensure_doc_ws — 기존 디렉터리는 그대로).
+    멱등 생성한다 — docloops.resolve_workspace_root(ensure=True)에 위임한다.
     """
-    root = doc_ws_root(Path(workspace_path), doc_slug,
-                       doc_layout=docloops.has_doc_layout(db, project_id))
-    return ensure_doc_ws(root)
+    return docloops.resolve_workspace_root(db, project_id, workspace_path,
+                                           doc_slug, ensure=True)
 
 
 def _scoped_supersede(db: Session, plan: Plan) -> None:

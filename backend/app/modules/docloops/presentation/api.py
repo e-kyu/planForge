@@ -17,7 +17,7 @@ from app.modules.plans.facade import latest_generations_by_doc
 from app.modules.projects.facade import require_project
 from app.shared.db import get_db
 
-from ..application.service import doc_label, list_loops
+from ..application.service import list_loops
 from .schemas import DocLoopOut
 
 router = APIRouter(tags=["docloops"])
@@ -35,10 +35,5 @@ def list_docloops(project_id: int, db: Session = Depends(get_db)):
     latest = latest_generations_by_doc(db, project_id)
     out = []
     for r in list_loops(db, project_id):
-        gen = latest.get(r.doc_slug)
-        out.append(DocLoopOut(
-            doc_slug=r.doc_slug, label=doc_label(r.doc_slug), status=str(r.status),
-            plan_version=gen.version_no if gen else None,
-            plan_id=gen.id if gen else None,
-        ))
+        out.append(DocLoopOut.from_row(r, latest.get(r.doc_slug)))
     return out

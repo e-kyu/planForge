@@ -61,7 +61,10 @@
     {
       "step": 7,
       "name": "plans-review-apis",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-26T21:24:44+0900",
+      "summary": "API 계층 중복 제거 — derive/review/plan-revise POST 3종을 enqueue_accepted로 통일(JobOut·202·응답 전 커밋·409/404 문구 불변), plans.service._mirror_root·agent._mirror_root·review.run_review의 doc ws 해석을 docloops.resolve_workspace_root(ensure)로 위임, projects/docloops API의 DocLoopOut 조립을 from_row로 통일(_docloops_batch DOC_KINDS 정렬 유지). openapi diff 0, 전체 394 passed·1 skipped.",
+      "completed_at": "2026-10-26T21:27:55+0900"
     },
     {
       "step": 8,

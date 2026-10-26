@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.docloops.facade import DOC_KINDS, DocLoop, doc_label, list_loops
+from app.modules.docloops.facade import DOC_KINDS, DocLoop, list_loops
 from app.modules.docloops.presentation.schemas import DocLoopOut
 from app.modules.plans.facade import (
     latest_generations_by_doc,
@@ -25,19 +25,10 @@ from .schemas import ProjectCreate, ProjectOut, ProjectUpdate
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
-def _docloop_out(doc_slug: str, status, gen) -> DocLoopOut:
-    """루프 행 + 최신 plan 세대(plans 행 역참조 파생) → DocLoopOut 조립."""
-    return DocLoopOut(
-        doc_slug=doc_slug, label=doc_label(doc_slug), status=str(status),
-        plan_version=gen.version_no if gen else None,
-        plan_id=gen.id if gen else None,
-    )
-
-
 def _docloops_single(db: Session, project_id: int) -> list[DocLoopOut]:
     """단건 응답용 — docloops facade의 정렬된 list_loops 경유 (쿼리 2회)."""
     latest = latest_generations_by_doc(db, project_id)
-    return [_docloop_out(r.doc_slug, r.status, latest.get(r.doc_slug))
+    return [DocLoopOut.from_row(r, latest.get(r.doc_slug))
             for r in list_loops(db, project_id)]
 
 
@@ -55,8 +46,8 @@ def _docloops_batch(db: Session, project_ids: list[int]) -> dict[int, list[DocLo
     for r in sorted(rows, key=lambda r: (r.project_id,
                                          order.get(r.doc_slug, len(order)),
                                          r.doc_slug)):
-        out[r.project_id].append(_docloop_out(
-            r.doc_slug, r.status, latest.get((r.project_id, r.doc_slug))))
+        out[r.project_id].append(DocLoopOut.from_row(
+            r, latest.get((r.project_id, r.doc_slug))))
     return out
 
 

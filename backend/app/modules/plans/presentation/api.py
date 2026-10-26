@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.jobs.facade import JobType, enqueue
+from app.modules.jobs.facade import JobType
+from app.modules.jobs.presentation.responses import enqueue_accepted
 from app.modules.jobs.presentation.schemas import JobOut
 from app.modules.projects.facade import require_project
 from app.modules.review.facade import get_report
@@ -82,10 +83,8 @@ def revise_plan_from_review(plan_id: int, body: PlanReviseFromReview,
     if not indices:
         raise http_409("반영할 발견사항이 선택되지 않았습니다")
 
-    job = enqueue(db, plan.project_id, JobType.PLAN_REVISE,
-                  {"plan_id": plan_id, "review_id": body.review_id,
-                   "finding_indices": indices})
-    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다 (get_db teardown 커밋은
+    # 202 계약 — enqueue_accepted가 반환 전에 커밋한다 (get_db teardown 커밋은
     # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).
-    db.commit()
-    return JobOut.model_validate(job)
+    return enqueue_accepted(db, plan.project_id, JobType.PLAN_REVISE,
+                            {"plan_id": plan_id, "review_id": body.review_id,
+                             "finding_indices": indices})

@@ -12,7 +12,6 @@ ReviewReport는 마지막에 add) — facade 커밋 계약 충족.
 from __future__ import annotations
 
 from dataclasses import asdict
-from pathlib import Path
 
 from planforge.numcheck import check_report, check_slides
 from planforge.plan import PlanError, filter_slides, parse_plan_file
@@ -25,7 +24,7 @@ from app.modules.jobs.facade import report_progress_safe
 from app.modules.plans.facade import PlanStatus, get_plan
 from app.modules.projects.facade import get_project
 from app.shared.collections import latest_by_key
-from app.shared.workspace import doc_ws_root, ensure_doc_ws, write_plan_mirror
+from app.shared.workspace import write_plan_mirror
 
 from ..infrastructure.models import ReviewReport
 from .review_agent import run_llm_review
@@ -64,11 +63,10 @@ def _load_context(session, job) -> tuple:
         raise PlanError("승인된 plan만 검수 대상입니다")
 
     # SSOT 미러 (Deriver와 동일 — 엔진이 읽는 파일 형태일 뿐). 문서 plan은 그 문서의
-    # ws 하위에 기록된 미러를 대조한다 (plans 승인·derive와 동일 경로 규칙).
-    ws = Path(project.workspace_path)
-    mirror_root = doc_ws_root(ws, plan.doc_slug,
-                              doc_layout=docloops.has_doc_layout(session, project.id))
-    ensure_doc_ws(mirror_root)
+    # ws 하위에 기록된 미러를 대조한다 (plans 승인·derive와 동일 경로 규칙 —
+    # docloops.resolve_workspace_root에 위임, ensure=True로 하위 구조를 멱등 생성).
+    mirror_root = docloops.resolve_workspace_root(
+        session, project.id, project.workspace_path, plan.doc_slug, ensure=True)
     plan_mirror = write_plan_mirror(mirror_root, plan.markdown)
     return project, plan, parse_plan_file(plan_mirror)
 

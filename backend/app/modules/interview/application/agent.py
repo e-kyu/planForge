@@ -27,7 +27,6 @@ from app.modules.docloops import facade as docloops
 from app.modules.facts.facade import append_facts, list_active_facts
 from app.modules.plans.facade import PlanOrigin, create_generation
 from app.shared.workspace import (
-    doc_ws_root,
     read_sources_context,
     write_interview_log_mirror,
     write_plan_mirror,
@@ -153,14 +152,14 @@ class InterviewAgent:
     def _mirror_root(self) -> Path:
         """미러(plan.md·interview-log.md)를 쓸 ws 루트 — 문서 세션은 문서별 하위로.
 
-        doc 없는 세션(None)은 doc_ws_root가 ws를 반환 — 기존 루트 경로 동일.
-        레이아웃 권위는 doc_loops 행(has_doc_layout)이라 행 없는 기존 프로젝트의
-        doc 세션도 루트 경로를 유지한다 (step 4 무이관 계약).
+        doc 없는 세션(None)은 ws 루트를 반환 — 기존 루트 경로 동일. 레이아웃 권위는
+        doc_loops 행(has_doc_layout)이라 행 없는 기존 프로젝트의 doc 세션도 루트
+        경로를 유지한다 (step 4 무이관 계약). 해석은 docloops facade에 위임하고,
+        세션 객체(self.sess)에서 project_id·path를 꺼내는 계약은 유지한다.
         """
-        ws = Path(self.sess.project.workspace_path)
-        return doc_ws_root(ws, self.sess.doc_slug,
-                           doc_layout=docloops.has_doc_layout(
-                               self.db, self.sess.project_id))
+        return docloops.resolve_workspace_root(
+            self.db, self.sess.project_id, self.sess.project.workspace_path,
+            self.sess.doc_slug)
 
     def _history(self) -> list[dict]:
         """이력 행 → LLM 메시지. user/assistant/tool만 (event 카드는 도구 결과로 이미 반영).

@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.docloops import facade as docloops
-from app.modules.jobs.facade import JobType, enqueue
+from app.modules.jobs.facade import JobType
+from app.modules.jobs.presentation.responses import enqueue_accepted
 from app.modules.jobs.presentation.schemas import JobOut
 from app.modules.plans.facade import latest_approved
 from app.modules.projects.facade import require_project
@@ -51,13 +52,11 @@ def enqueue_derivative(project_id: int, body: DerivativeCreate,
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")
 
     ensure_workspace_dirs(Path(project.workspace_path))
-    job = enqueue(db, project_id, JobType.DERIVE_BUILD,
-                  {"plan_id": plan.id, "kind": body.kind, "doc": body.doc,
-                   "fmts": body.fmts})
-    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다. get_db teardown 커밋은
-    # FastAPI 특성상 응답 전송 후에 실행되어 202 직후 /jobs refetch가 잡을 놓친다.
-    db.commit()
-    return JobOut.model_validate(job)
+    # 202 계약 — enqueue_accepted가 반환 전에 커밋한다 (get_db teardown 커밋은
+    # FastAPI 특성상 응답 전송 후에 실행되어 202 직후 /jobs refetch가 잡을 놓친다).
+    return enqueue_accepted(db, project_id, JobType.DERIVE_BUILD,
+                            {"plan_id": plan.id, "kind": body.kind, "doc": body.doc,
+                             "fmts": body.fmts})
 
 
 @router.get("/derivatives", response_model=list[DerivativeOut])

@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.modules.derivatives.facade import has_any
 from app.modules.docloops.facade import has_doc_layout
-from app.modules.jobs.facade import JobType, enqueue
+from app.modules.jobs.facade import JobType
+from app.modules.jobs.presentation.responses import enqueue_accepted
 from app.modules.jobs.presentation.schemas import JobOut
 from app.modules.plans.facade import latest_approved
 from app.modules.projects.facade import require_project
@@ -47,11 +48,9 @@ def enqueue_review(project_id: int, body: ReviewEnqueueRequest | None = None,
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")
     if not has_any(db, project_id):
         raise http_409("검수할 파생물이 없습니다 — 먼저 산출물을 생성하세요")
-    job = enqueue(db, project_id, JobType.REVIEW, {"plan_id": plan.id})
-    # 202 계약 — 응답 시점에 잡 행이 커밋돼 있어야 한다 (get_db teardown 커밋은
+    # 202 계약 — enqueue_accepted가 반환 전에 커밋한다 (get_db teardown 커밋은
     # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).
-    db.commit()
-    return JobOut.model_validate(job)
+    return enqueue_accepted(db, project_id, JobType.REVIEW, {"plan_id": plan.id})
 
 
 @router.get("", response_model=list[ReviewOut])

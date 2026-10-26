@@ -23,8 +23,8 @@ class DocLoopOut(BaseModel):
     def from_row(cls, row, gen: object | None) -> "DocLoopOut":
         """루프 행 + 최신 plan 세대(plans 행 역참조 파생) → DocLoopOut 조립.
 
-        projects/api.py의 기존 _docloop_out과 정확히 같은 값을 낸다 — 필드·순서·
-        직렬화는 불변.
+        projects/docloops API의 단건·배치 응답이 공유하는 단일 조립 지점 — 필드·
+        순서·직렬화는 불변.
         """
         return cls(
             doc_slug=row.doc_slug, label=doc_label(row.doc_slug), status=str(row.status),
