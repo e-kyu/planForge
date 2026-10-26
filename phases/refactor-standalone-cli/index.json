@@ -24,7 +24,7 @@
       "status": "completed",
       "started_at": "2026-10-26T21:05:28+0900",
       "summary": "CLI 엔트리포인트 분리 — cli/commands/{parse,numcheck,derive,build}.py로 명령 본문 이동(문자열·플래그·exit code 불변), cli/main.py build_parser·main 신설, __main__.py는 argparse·cmd_*·main 재수출 호환 shim. 콘솔 스크립트를 planforge.cli.main:main으로 변경·editable 재설치. parse/numcheck 무거운 의존성 미적재 확인(HEAVY_IMPORTS=[]), test_cli 9건 추가, 전체 366 passed·1 skipped.",
-      "completed_at": "2026-10-26T21:09:38+0900"
+      "completed_at": "2026-10-26T21:09:54+0900"
     },
     {
       "step": 3,
