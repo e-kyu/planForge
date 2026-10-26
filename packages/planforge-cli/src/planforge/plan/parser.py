@@ -10,6 +10,13 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ..common.const import (
+    DEFAULT_DOC_NAME,
+    KEY_MESSAGE_COUNT,
+    MAX_ARCH_GROUPS,
+    MAX_ARCH_ITEMS,
+)
+from ..common.io import read_text_utf8
 from .model import (
     SLIDE_TYPES_KO_TO_EN,
     ArchGroup,
@@ -114,7 +121,7 @@ def parse_plan_text(text: str) -> Plan:
 
 
 def parse_plan_file(path: str | Path) -> Plan:
-    return parse_plan_text(Path(path).read_text(encoding="utf-8-sig"))
+    return parse_plan_text(read_text_utf8(path))
 
 
 # ---------------------------------------------------------------- 슬라이드 파싱
@@ -248,7 +255,7 @@ def _validate_plan(plan: Plan) -> None:
     if not plan.slides:
         raise PlanError("plan.md에 슬라이드 목록이 없습니다")
     if not plan.docs:
-        plan.docs = ["제안서"]  # 메타 항목 없음 = 제안서 1개 (현행 동작)
+        plan.docs = [DEFAULT_DOC_NAME]  # 메타 항목 없음 = 제안서 1개 (현행 동작)
     # 다중 문서 계약 교차검증 — 슬라이드 [문서: ...] 태그와 메타 '산출 문서'는 일치해야 한다.
     # 디폴트 치환으로 불일치가 무음 통과되면 derive가 나머지 문서 슬라이드를 그대로 버린다
     # (태그는 정확한데 메타 누락으로 제안서 1종만 산출되는 사고의 방지책 — fail-loud).
@@ -266,7 +273,7 @@ def _validate_plan(plan: Plan) -> None:
                 f"메타 '산출 문서'의 '{', '.join(missing)}' 문서가 [문서: ...] 태그 슬라이드가 없습니다 — "
                 "여러 문서일 때 표지·목차·마무리는 문서별 태그([문서: 문서명])로 별도 슬라이드를 써야 한다"
             )
-    if len(plan.key_messages) != 3:
+    if len(plan.key_messages) != KEY_MESSAGE_COUNT:
         raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
     nos = [s.no for s in plan.slides]
     if nos != sorted(nos):
@@ -285,8 +292,8 @@ def _validate_plan(plan: Plan) -> None:
         if s.type == "arch":
             if not s.arch:
                 raise PlanError(f"슬라이드 {s.no} (구성): '구성:' 아래 계층 데이터가 필요합니다")
-            if len(s.arch) > 6:
+            if len(s.arch) > MAX_ARCH_GROUPS:
                 raise PlanError(f"슬라이드 {s.no} (구성): 계층은 최대 6개입니다 (build_ppt.py 제한)")
             for g in s.arch:
-                if len(g.items) > 6:
+                if len(g.items) > MAX_ARCH_ITEMS:
                     raise PlanError(f"슬라이드 {s.no} (구성): 계층당 구성요소는 최대 6개입니다 (build_ppt.py 제한)")

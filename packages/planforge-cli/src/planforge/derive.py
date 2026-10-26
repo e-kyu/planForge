@@ -10,17 +10,19 @@ LLM/코드 역할 분리:
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .common.const import DERIVATIVE_KINDS, REPORT_FORMATS, UNCONFIRMED_PREFIX
+from .common.io import read_text_utf8, write_json
 from .llm.loops import run_tool_loop
 from .numcheck import Finding, check_report, check_slides
 from .plan import Plan, PlanError, filter_slides, parse_plan_file, validate_skeleton
+from .plan.model import SLIDE_TYPES_EN_TO_KO
 
 PROMPTS_DIR = Path(__file__).parent / "llm" / "prompts"
 MAX_ATTEMPTS = 3
-UNCONFIRMED_MARK = "(미확정"
+UNCONFIRMED_MARK = UNCONFIRMED_PREFIX
 
 SLIDES_TOOL = {
     "type": "function",
@@ -112,7 +114,7 @@ def render_slides_text(plan: Plan, slides, doc: str) -> str:
             out.append("- 차트:")
             out.append("  - 범주: " + ", ".join(s.chart.categories))
             for sr in s.chart.series:
-                out.append("  - " + sr.name + " | " + ", ".join(_fmt_plan_value(v) for v in sr.values))
+                out.append("  - " + sr.name + " | " + ", ".join(str(v) for v in sr.values))
         if s.arch:
             out.append("- 구성:")
         for g in s.arch:
@@ -122,14 +124,8 @@ def render_slides_text(plan: Plan, slides, doc: str) -> str:
     return "\n".join(out)
 
 
-def _fmt_plan_value(v) -> str:
-    """plan 표기 그대로 (파서가 원문 표기를 보존 — 수치 무결성 기준)."""
-    return str(v)
-
-
 def _type_ko(t: str) -> str:
-    return {"cover": "표지", "toc": "목차", "two-col": "2단", "table": "표",
-            "chart": "차트", "arch": "구성", "closing": "마무리"}[t]
+    return SLIDE_TYPES_EN_TO_KO[t]
 
 
 # ---------------------------------------------------------------- Deriver
@@ -156,7 +152,7 @@ class Deriver:
 
     def _system_prompt(self, kind: str) -> str:
         fname = "derive_slides.md" if kind == "slides" else "derive_report.md"
-        return (PROMPTS_DIR / fname).read_text(encoding="utf-8-sig")
+        return read_text_utf8(PROMPTS_DIR / fname)
 
     def _run_llm(self, kind: str, plan: Plan, slides, doc: str,
                  on_attempt=None) -> tuple[dict, int, list[Finding]]:
@@ -296,7 +292,7 @@ class Deriver:
                on_attempt=None) -> DeriveResult:
         """on_attempt(attempt, max_attempts) — LLM 변환 시도 직전 콜백 (진행 상황 기록용).
         planforge는 DB를 모른다 — 예외 방어는 caller 콜백 쪽 책임."""
-        if kind not in ("slides", "report"):
+        if kind not in DERIVATIVE_KINDS:
             raise DeriveError(f"kind는 slides|report 중 하나여야 합니다: {kind}")
         plan, doc, slides, unconfirmed = self._prepare(plan_path, doc)
         payload, attempt, findings = self._run_llm(kind, plan, slides, doc, on_attempt=on_attempt)
@@ -312,7 +308,7 @@ class Deriver:
 
         self.workspace.joinpath("work").mkdir(parents=True, exist_ok=True)
         work_path = self.workspace / "work" / ("slides.json" if kind == "slides" else "report.json")
-        work_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json(work_path, payload)
         res = DeriveResult(work_path=work_path, attempts=attempt, unconfirmed=unconfirmed,
                            findings=findings)
         if kind == "slides":
@@ -334,7 +330,7 @@ class Deriver:
             made += list(out_dir.glob("*.pptx"))
         else:
             from .builders import build_doc
-            for fmt in (fmts or ("md", "html", "docx")):
+            for fmt in (fmts or REPORT_FORMATS):
                 build_doc.build(str(work), fmt, str(out_dir))
                 made += list(out_dir.glob(f"*.{fmt}"))
         return made

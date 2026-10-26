@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from ..common.io import read_json
+
 PROFILES = ("interview", "derive", "review", "plan_revise")
 DEFAULT_BASE_URLS = {
     "ollama": "http://localhost:11434/v1",
@@ -52,7 +54,7 @@ def load_config(path: str | Path) -> dict:
     누락 프로필은 기본값(ollama)+모델 미지정. api_key_env 기본값은 프로바이더별로 다르다
     (azure → AZURE_OPENAI_API_KEY, 그 외 → OPENAI_API_KEY). api_key(직접 키값)를 넣으면
     환경변수 없이 동작하며 api_key_env 경로보다 우선한다."""
-    raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    raw = read_json(path)
     profiles = {}
     for name in PROFILES:
         p = raw.get("profiles", {}).get(name, {})

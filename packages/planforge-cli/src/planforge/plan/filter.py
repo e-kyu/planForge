@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from ..common.const import DEFAULT_DOC_NAME
 from .model import Plan, Slide
 
 
@@ -15,7 +16,7 @@ class SkeletonError(ValueError):
 
 def doc_names(plan: Plan) -> list[str]:
     """plan의 산출 문서 목록 (메타 항목 없으면 ["제안서"])."""
-    return plan.docs or ["제안서"]
+    return plan.docs or [DEFAULT_DOC_NAME]
 
 
 def filter_slides(slides: list[Slide], doc_name: str) -> list[Slide]:

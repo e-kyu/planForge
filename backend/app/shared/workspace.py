@@ -14,7 +14,8 @@ import re
 import shutil
 from pathlib import Path
 
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+from planforge.common.buildfs import BUILD_VER_RE, parse_build_filename
+from planforge.common.slug import MAX_SLUG_LENGTH, SLUG_RE
 
 # 프로젝트 생성 시 사전 생성할 루트 하위 — sources만. work/output/docs/assets는
 # 사용 시점 지연 생성 (문서 서브루트가 실제 작업 공간이므로 루트 골격은 불필요).
@@ -30,7 +31,7 @@ def validate_slug(slug: str) -> str:
         raise WorkspaceError(
             f"slug는 ASCII 소문자/숫자/하이픈(첫 글자는 영숫자)만 허용합니다: {slug!r}"
         )
-    if len(slug) > 64:
+    if len(slug) > MAX_SLUG_LENGTH:
         raise WorkspaceError("slug는 64자 이하여야 합니다")
     return slug
 
@@ -296,8 +297,7 @@ def read_sources_context(sources_dirs: list[Path],
 
 
 # ---------------------------------------------------------------- 원자적 빌드 (§5 원자성 + 원칙 5)
-
-BUILD_VER_RE = re.compile(r"_v(\d+)\.[A-Za-z]+$")
+# 파일명 규약(`<title>_vNN.<ext>`)의 정의는 planforge.common.buildfs — 위에서 재수출한다.
 
 
 def atomic_build(ws: Path, run_builder) -> list[Path]:
@@ -335,13 +335,3 @@ def atomic_build(ws: Path, run_builder) -> list[Path]:
     finally:
         if tmp.exists():
             shutil.rmtree(tmp, ignore_errors=True)
-
-
-def parse_build_filename(name: str) -> tuple[str, int, str] | None:
-    """`<title>_vNN.<ext>` → (title, version_no, ext). 버전 파일이 아니면 None."""
-    m = BUILD_VER_RE.search(name)
-    if not m:
-        return None
-    title = name[: m.start()]
-    ext = name.rsplit(".", 1)[1].lower()
-    return title, int(m.group(1)), ext

@@ -18,6 +18,8 @@ SLIDE_TYPES_KO_TO_EN = {
     "구성": "arch",
     "마무리": "closing",
 }
+# 역방향 맵 — derive가 LLM 입력에 한글 유형 표기를 되돌릴 때 쓴다 (한 번만 만든다).
+SLIDE_TYPES_EN_TO_KO = {en: ko for ko, en in SLIDE_TYPES_KO_TO_EN.items()}
 # 본문형 유형 (슬라이드 번호 표기 대상 — SKILL.md 공통 규칙)
 CONTENT_TYPES = ("two-col", "table", "chart", "arch")
 

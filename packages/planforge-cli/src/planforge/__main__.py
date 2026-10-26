@@ -16,6 +16,7 @@ import argparse
 import sys
 
 from .common.configpath import resolve_config_path
+from .common.io import read_json
 from .numcheck import check_report, check_slides
 from .plan import filter_slides, parse_plan_file, validate_skeleton
 
@@ -49,14 +50,10 @@ def cmd_numcheck(args) -> int:
         return 2
     findings = []
     if args.slides:
-        import json
-
-        findings += check_slides(slides, plan.key_messages, json.loads(_read(args.slides)))
+        findings += check_slides(slides, plan.key_messages, read_json(args.slides))
         target = args.slides
     if args.report:
-        import json
-
-        findings += check_report(slides, plan.key_messages, json.loads(_read(args.report)))
+        findings += check_report(slides, plan.key_messages, read_json(args.report))
         target = args.report
     if not findings:
         print(f"OK: 수치 무결성 대조 통과 (plan [{doc}] ↔ {target})")
@@ -67,12 +64,6 @@ def cmd_numcheck(args) -> int:
     print(f"\n발견 {len(findings)}건 (🔴 {reds}건)"
           + (" — 파생물 재생성 필요" if reds else " — 경고만 있음, 진행 가능"))
     return 1 if reds else 0
-
-
-def _read(path: str) -> str:
-    from pathlib import Path
-
-    return Path(path).read_text(encoding="utf-8-sig")
 
 
 def cmd_derive(args) -> int:

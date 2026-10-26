@@ -10,6 +10,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+from planforge.common.io import read_json
 from planforge.derive import Deriver
 from planforge.plan import PlanError, parse_plan_file
 
@@ -105,7 +106,7 @@ def run_derive_build(ctx, session, job) -> dict:
         project_id=project.id,
         kind=DerivativeKind(kind),
         doc=resolved_doc,
-        json=_read_json(res.work_path),
+        json=read_json(res.work_path),
         slides_count=res.slides_count,
         sections_count=res.sections_count,
         unconfirmed=res.unconfirmed or None,
@@ -162,8 +163,3 @@ def run_derive_build(ctx, session, job) -> dict:
         # numcheck 측정값 — Finding dict는 run_review 발견사항과 동형 (코드/severity/위치/메시지)
         result["findings"] = [asdict(f) for f in res.findings]
     return result
-
-
-def _read_json(path: Path) -> dict:
-    import json
-    return json.loads(path.read_text(encoding="utf-8"))

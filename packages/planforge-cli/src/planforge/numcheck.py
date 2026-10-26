@@ -21,13 +21,16 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
 
+from .common.const import UNCONFIRMED_PREFIX
 from .plan.model import Slide
 from .plan.parser import parse_toc_items
 
 _NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
 _DATE_RE = re.compile(r"\d{4}\s?[.\-/]\s?\d{1,2}\s?[.\-/]\s?\d{1,2}")  # 2026-09-09 / 2026. 9. 2.
 
-UNCONFIRMED = "(미확정"  # "(미확정)"·"(미확정 - 사유)" 변형을 모두 잡는다
+# "(미확정)"·"(미확정 - 사유)" 변형을 모두 잡는 prefix 매칭 — compact의 exact "(미확정)"와
+# 통합하지 않는다 (판정 동작이 바뀐다).
+UNCONFIRMED = UNCONFIRMED_PREFIX
 _SKIP_KEYS = {"source"}                  # 근거/출처 문자열 — 수치 풀 제외 (별도 규칙으로 대조)
 _RENUMBER_KEYS = {"no", "label"}         # 재채번 구조 번호 (섹션 no·목차 라벨 01..NN)
 
