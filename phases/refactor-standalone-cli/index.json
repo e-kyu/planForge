@@ -56,7 +56,7 @@
       "status": "completed",
       "started_at": "2026-10-26T21:19:39+0900",
       "summary": "job 핸들러 3종 단일 책임 분해 — derive_build(_load_job_context·_resolve_workspace(resolve_workspace_root)·_run_llm_phase·_run_build_phase·_persist_rows·_maybe_enqueue_review·_job_result), run_review(_load_context·_check_derivative_docs(latest_by_key 최신-per-key)·_check_generation·_check_tags_and_facts·_run_llm_review·_build_report, asdict 키 순서 보존), plan_revise_job(_load_context·_select_findings(조용한 범위 필터 유지)·_run_llm·_persist_new_generation). report_progress_safe 적용(로그 태그 보존), job.result·progress step/detail·예외 분류·자동 검수 시점(모든 report_progress 뒤)·모든 session.add는 atomic_build 이후 불변. 전체 394 passed·1 skipped.",
-      "completed_at": "2026-10-26T21:24:17+0900"
+      "completed_at": "2026-10-26T21:24:44+0900"
     },
     {
       "step": 7,
