@@ -19,7 +19,7 @@ from .infrastructure.models import (
 __all__ = [
     "SessionPhase", "SessionStatus", "MessageRole", "MessageKind",
     "get_session", "require_session", "complete_plan_review_sessions",
-    "delete_project_data",
+    "session_doc_slugs", "delete_project_data",
 ]
 
 
@@ -50,6 +50,16 @@ def complete_plan_review_sessions(db: Session, project_id: int,
     for sess in db.scalars(q).all():
         sess.phase = SessionPhase.APPROVED
         sess.status = SessionStatus.DONE
+
+
+def session_doc_slugs(db: Session, project_id: int) -> dict[int, str | None]:
+    """세션 id → 문서 slug 매핑 (facts 모듈이 호출 — compact 미러 소속 판정용).
+
+    doc_slug None = 레거시 세션(워크스페이스 루트 미러 소속).
+    """
+    return {sid: doc_slug for sid, doc_slug in db.execute(
+        select(InterviewSession.id, InterviewSession.doc_slug).where(
+            InterviewSession.project_id == project_id)).all()}
 
 
 def delete_project_data(db: Session, project_id: int) -> None:

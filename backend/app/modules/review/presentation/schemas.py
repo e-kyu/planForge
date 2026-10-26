@@ -13,6 +13,10 @@ class FindingOut(BaseModel):
     suggestion: str | None = None  # LLM 발견사항의 plan 수정 방향 (결정론 발견사항엔 없음)
 
 
+class ReviewEnqueueRequest(BaseModel):
+    doc_slug: str | None = None  # 문서 레이아웃 프로젝트 필수 — 레거시는 무시
+
+
 class ReviewOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

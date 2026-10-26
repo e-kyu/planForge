@@ -49,7 +49,7 @@ def test_created_project_docloops_order_labels_and_null_versions(client):
     loops = r.json()
     assert len(loops) == 3
     assert [d["doc_slug"] for d in loops] == DOC_SLUGS  # DOC_KINDS 정렬
-    assert [d["status"] for d in loops] == ["active", "locked", "locked"]
+    assert [d["status"] for d in loops] == ["active", "active", "active"]
     assert [d["label"] for d in loops] == ["제안서", "UI·UX설계서", "개발설계서"]
     assert all(d["plan_version"] is None and d["plan_id"] is None for d in loops)
 
@@ -119,31 +119,41 @@ def test_delete_project_removes_docloop_rows(client):
 
 
 def test_create_doc_session_gates_and_layout(client):
-    """문서 세션 생성 게이트(step 4) — locked 409·미상 slug 404·active 201 + 문서별 ws."""
+    """문서 세션 생성 게이트(step 4) — 3종 전부 active로 세션 생성 가능 + 문서별 ws.
+    locked는 도달 불가 잔여 상태 — DB 직접 세팅한 행의 안전망 409만 핀한다."""
     pid = make_project(client, "docsession")
-
-    # locked 문서 (uiux-design) → 409 + 이전 문서 승인 안내
-    r = client.post(f"/api/projects/{pid}/interview/sessions",
-                    json={"doc_slug": "uiux-design"})
-    assert r.status_code == 409, r.text
-    assert "잠겨" in r.json()["detail"]
 
     # 미상 slug → 404 (캐노니컬 slug만 허용)
     r = client.post(f"/api/projects/{pid}/interview/sessions",
                     json={"doc_slug": "nonsense"})
     assert r.status_code == 404, r.text
 
-    # active 문서 (proposal) → 201 + 문서별 워크스페이스 지연 생성
-    r = client.post(f"/api/projects/{pid}/interview/sessions",
-                    json={"doc_slug": "proposal"})
-    assert r.status_code == 201, r.text
-    body = r.json()
-    assert body["doc_slug"] == "proposal"
+    # 문서 3종 모두 독립 생성 가능 (개발설계서부터 진행해도 된다)
+    for slug in DOC_SLUGS:
+        r = client.post(f"/api/projects/{pid}/interview/sessions",
+                        json={"doc_slug": slug})
+        assert r.status_code == 201, r.text
+        assert r.json()["doc_slug"] == slug
+
+    # active 문서 — 문서별 워크스페이스 지연 생성
     root = _ws_dir(client) / "docsession" / "proposal"
     for sub in ("work", "output", "docs", "assets"):
         assert (root / sub).is_dir()
     # sources는 문서간 공유라 프로젝트 루트에 유지된다 (DOC_WS_SUBDIRS 계약)
     assert (root / "sources").exists() is False
+
+    # locked 잔여(직접 세팅) → 409 안전망
+    from app.modules.docloops.facade import DocLoop, DocLoopStatus
+
+    with make_session(client) as db:
+        row = db.scalars(select(DocLoop).where(
+            DocLoop.project_id == pid, DocLoop.doc_slug == "uiux-design")).first()
+        row.status = DocLoopStatus.LOCKED
+        db.commit()
+    r = client.post(f"/api/projects/{pid}/interview/sessions",
+                    json={"doc_slug": "uiux-design"})
+    assert r.status_code == 409, r.text
+    assert "잠겨" in r.json()["detail"]
 
 
 def test_create_session_without_doc_slug_keeps_legacy_layout(client):
@@ -165,9 +175,9 @@ def test_create_doc_session_on_legacy_project_saves_slug_only(client):
     assert r.status_code == 201, r.text
     assert r.json()["doc_slug"] == "dev-design"
     wsroot = _ws_dir(client) / "docsesslegacyproj"
-    for sub in ("work", "output", "docs", "sources", "assets"):
-        assert (wsroot / sub).is_dir()  # create_workspace의 원본 5개 — 문서 하위 생성 없음
-    assert not (wsroot / "dev-design").exists()
+    # 생성은 sources 하나만 사전 생성 — 문서 하위 생성도 없다 (무이관 계약)
+    assert (wsroot / "sources").is_dir()
+    assert not [p for p in wsroot.iterdir() if p.name in (*DOC_SLUGS, "work", "output", "docs", "assets")]
 
 
 def test_list_plans_doc_slug_filter(client):
@@ -206,22 +216,22 @@ def _approve_doc_plan(client, app, pid: int, version_no: int,
 
 
 def test_approval_propagates_doc_loop(client, app):
-    """승인 전파 — proposal plan 승인 → proposal done·uiux active·dev locked,
-    이어 uiux plan 승인 → dev active. 루프 진행 훅은 승인 트랜잭션 안(com.commit 전)에서
-    docloops.facade.on_plan_approved로만 흐른다."""
+    """승인 전파(독립 진행) — proposal plan 승인 → proposal만 done·나머지는 active 유지,
+    이어 uiux plan 승인 → uiux만 done. 승인 훅은 다른 문서 행을 절대 건드리지 않는다
+    (루프 진행 훅은 승인 트랜잭션 안(com.commit 전)에서 docloops.facade.on_plan_approved로만 흐른다)."""
     pid = make_project(client, "docapprovethread")
     _approve_doc_plan(client, app, pid, 1, "proposal")
     assert _loop_statuses(client, pid) == {
-        "proposal": "done", "uiux-design": "active", "dev-design": "locked"}
+        "proposal": "done", "uiux-design": "active", "dev-design": "active"}
 
     _approve_doc_plan(client, app, pid, 2, "uiux-design")
     assert _loop_statuses(client, pid) == {
         "proposal": "done", "uiux-design": "done", "dev-design": "active"}
 
 
-def test_reapproval_keeps_latch_and_row_count(client, app):
-    """proposal 재승인(세대 교체)에도 래치가 역전되지 않는다 — done은 done,
-    active 이상 다음 문서의 재잠금 없음, 루프 행은 3개 유지."""
+def test_reapproval_keeps_independence_and_row_count(client, app):
+    """proposal 재승인(세대 교체)에도 다른 문서 행은 불변 — uiux·dev는 active 유지,
+    루프 행은 3개 유지."""
     pid = make_project(client, "docapprovelatch")
     _approve_doc_plan(client, app, pid, 1, "proposal")
     _approve_doc_plan(client, app, pid, 2, "uiux-design")
@@ -343,8 +353,8 @@ def test_doc_scoped_derive_writes_doc_workspace_files(client, app, db_env):
     assert (root / "work" / "report.json").is_file()
     assert list((root / "output").glob("*.pptx"))
     assert list((root / "output").glob("*.md"))
-    # 루트 output는 채번 파일 없음 (문서별 ws가 채번 소속)
-    assert not list((_ws_dir(client) / "docderive" / "output").iterdir())
+    # 루트 output는 문서별 ws가 채번 소속 — 아예 생성되지도 않는다 (지연 생성 규약)
+    assert not (_ws_dir(client) / "docderive" / "output").exists()
 
     with make_session(app) as db:
         builds = db.scalars(select(Build).where(Build.project_id == pid)).all()

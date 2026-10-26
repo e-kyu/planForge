@@ -100,15 +100,38 @@ def test_facts_unconfirmed_resolvable_is_yellow():
 
 def test_review_requires_approved_plan(client, app):
     make_project(client, "rev-gate")
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     assert r.status_code == 409
 
 
 def test_review_requires_derivatives(client, app):
     make_project(client, "rev-nod")
     insert_plan(app, 1, doc_slug="proposal")
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     assert r.status_code == 409
+
+
+def test_review_enqueue_doc_loop_requires_doc_slug(client, app):
+    """가드 — 문서 루프 프로젝트의 검수 enqueue는 doc_slug 필수다 (문서별 독립 검수).
+    미지정 → 409, 지정 시 해당 문서의 최신 승인 plan으로 큐잉한다."""
+    from app.modules.derivatives.infrastructure.models import Derivative, DerivativeKind
+
+    pid = make_project(client, "rev-docgate")
+    plan_id = insert_plan(app, pid, doc_slug="proposal")
+    insert_plan(app, pid, 2, doc_slug="dev-design")
+    # has_any 게이트 통과용 파생물 행 (test_enqueue_visibility._seed_derivative 패턴)
+    with make_session(app) as s:
+        s.add(Derivative(plan_id=plan_id, project_id=pid, kind=DerivativeKind.REPORT,
+                         doc="제안서", json={}))
+        s.commit()
+
+    r = client.post(f"/api/projects/{pid}/reviews")
+    assert r.status_code == 409, r.text
+    assert "doc_slug" in r.json()["detail"]
+
+    r = client.post(f"/api/projects/{pid}/reviews", json={"doc_slug": "dev-design"})
+    assert r.status_code == 202, r.text
+    assert "plan_id" in r.json()["payload"]
 
 
 def test_review_job_end_to_end(client, app):
@@ -124,7 +147,7 @@ def test_review_job_end_to_end(client, app):
                fmts=["md"], doc_slug="proposal")
 
     # 검수 큐 진입 → 실행 (review 프로필 fake LLM: 발견사항 2건 보고)
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     assert r.status_code == 202
     job_id = r.json()["id"]
     findings = [
@@ -172,7 +195,7 @@ def test_review_detects_injected_numeric_distortion(client, app):
         d.json = doc
         s.commit()
 
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
                profile="review")
 
@@ -206,7 +229,7 @@ def test_review_reports_stale_generation(client, app):
         s.commit()
         new_plan_id = plan2.id
 
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     run_queue(app, FakeLLM([tool_call("report_findings", {"summary": "", "findings": []})]),
                profile="review")
 
@@ -224,7 +247,7 @@ def test_review_llm_failure_keeps_deterministic_findings(client, app):
                FakeLLM([tool_call("write_report_json", correct_report_payload())]),
                fmts=["md"], doc_slug="proposal")
 
-    client.post("/api/projects/1/reviews")
+    client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     # review LLM이 도구 없이 텍스트만 반환 → 내용 검수 실패, 결정론 결과는 보존
     run_queue(app, FakeLLM([{"content": "도구를 못 찾겠습니다", "tool_calls": []}] * 2),
                profile="review")

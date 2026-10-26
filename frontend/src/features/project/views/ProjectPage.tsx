@@ -119,16 +119,13 @@ export default function ProjectPage({
         {tab === "sources" && <SourcesPanel pid={pid} />}
         {tab === "interview" &&
           (currentLoop?.status === "locked" ? (
-            <Empty>
-              {currentLoop.label}은 아직 잠겨 있습니다(locked) — 이전 문서의 plan 승인 후
-              활성화됩니다.
-            </Empty>
+            <Empty>{currentLoop.label}은(는) 잠겨 있습니다(locked).</Empty>
           ) : (
             <InterviewPanel key={doc ?? "legacy"} pid={pid} doc={doc} />
           ))}
         {tab === "plan" && <PlanPanel pid={pid} doc={doc} />}
         {tab === "outputs" && <OutputsPanel pid={pid} doc={doc} />}
-        {tab === "review" && <ReviewPanel pid={pid} />}
+        {tab === "review" && <ReviewPanel pid={pid} doc={doc} />}
       </section>
     </>
   );

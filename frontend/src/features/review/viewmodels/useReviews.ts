@@ -19,7 +19,7 @@ const hasReviewActive = (jobs: Job[]) =>
       (j.status === "queued" || j.status === "running"),
   );
 
-export function useReviews(pid: number) {
+export function useReviews(pid: number, docSlug?: string | null) {
   const qc = useQueryClient();
   const reviewsQ = useQuery({ queryKey: ["reviews", pid], queryFn: () => fetchReviews(pid) });
   const plansQ = useQuery({ queryKey: ["plans", pid], queryFn: () => fetchPlans(pid) });
@@ -94,7 +94,7 @@ export function useReviews(pid: number) {
     setEnqueueError(null);
     setNotice(null);
     setPending(true);
-    enqueueReview(pid)
+    enqueueReview(pid, docSlug)
       .then((job) => {
         setNotice(`검수 작업 큐 진입 (#${job.id}) — 워커가 결정론+LLM 검수를 실행합니다.`);
         seedJob(qc, pid, job);

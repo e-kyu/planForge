@@ -1811,7 +1811,7 @@
           "reviews"
         ],
         "summary": "Enqueue Review",
-        "description": "최신 승인 plan에 대한 검수 잡을 큐에 넣는다.",
+        "description": "검수 잡을 큐에 넣는다 — 문서 레이아웃 프로젝트는 문서별 독립 검수.\n\n- 문서 레이아웃 프로젝트: doc_slug 필수(미지정 → 409)이며 그 문서의 최신 승인\n  plan을 검수한다 (독립 진행 — 문서 간 순서 제약 없음).\n- 레거시 프로젝트: doc_slug 무시, 기존 동작(최신 승인 plan) 유지.",
         "operationId": "enqueue_review_api_projects__project_id__reviews_post",
         "parameters": [
           {
@@ -1824,6 +1824,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ReviewEnqueueRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "description": "Successful Response",
@@ -2167,6 +2184,14 @@
           "archive_path": {
             "type": "string",
             "title": "Archive Path"
+          },
+          "doc_log_paths": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Doc Log Paths",
+            "default": {}
           },
           "warnings": {
             "items": {
@@ -3086,6 +3111,23 @@
         },
         "type": "object",
         "title": "ProjectUpdate"
+      },
+      "ReviewEnqueueRequest": {
+        "properties": {
+          "doc_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Slug"
+          }
+        },
+        "type": "object",
+        "title": "ReviewEnqueueRequest"
       },
       "ReviewOut": {
         "properties": {

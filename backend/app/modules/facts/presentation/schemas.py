@@ -56,6 +56,7 @@ class CompactApplyRequest(BaseModel):
 class CompactApplyResult(BaseModel):
     archived: list[int]
     active_remaining: int
-    log_path: str
-    archive_path: str
+    log_path: str  # 루트(레거시) 미러 경로 — 루트 그룹 재작성이 없으면 ""
+    archive_path: str  # 루트(레거시) 아카이브 경로 — 루트 그룹 재작성이 없으면 ""
+    doc_log_paths: dict[str, str] = {}  # doc_slug → 문서 서브루트 미러 경로
     warnings: list[str]

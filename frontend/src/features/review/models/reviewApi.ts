@@ -6,7 +6,11 @@ export const fetchReviews = (pid: number) => apiGet<Review[]>(`/api/projects/${p
 
 export const fetchPlans = (pid: number) => apiGet<Plan[]>(`/api/projects/${pid}/plans`);
 
-export const enqueueReview = (pid: number) => apiPost<Job>(`/api/projects/${pid}/reviews`);
+/** 검수 enqueue — 문서 루프 프로젝트는 doc_slug 필수(문서별 독립 검수), 레거시는 무시. */
+export const enqueueReview = (pid: number, docSlug?: string | null) =>
+  docSlug
+    ? apiPost<Job>(`/api/projects/${pid}/reviews`, { doc_slug: docSlug })
+    : apiPost<Job>(`/api/projects/${pid}/reviews`);
 
 /** 선택 발견사항 plan 반영 (FR-4.3) — LLM이 고쳐 새 plan 세대(초안)를 만든다. */
 export const reviseFromReview = (planId: number, reviewId: number, findingIndices: number[]) =>

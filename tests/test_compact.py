@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fakes import FakeLLM, tool_call
-from _helpers import make_project
+from _helpers import make_project, make_session
 
 from app.modules.facts.application.compact import build_context, run_llm_compact
 
@@ -137,3 +137,49 @@ def test_compact_apply_skips_missing_ids(client):
     assert out["archived"] == [] and any("999" in w for w in out["warnings"])
     facts = client.get(f"/api/projects/{pid}/facts").json()
     assert all(f["status"] == "active" for f in facts)
+
+
+def test_compact_apply_writes_doc_scoped_mirrors(client):
+    """미러 재작성은 팩트 소속 문서별 루트를 따른다 — 문서 세션 팩트는
+    ws/{doc_slug}/docs/interview-log.md로, 수동(레거시) 팩트는 프로젝트 루트로.
+    SSOT은 DB Fact 행이며 미러만 문서별로 분할된다."""
+    from app.modules.facts.infrastructure.models import Fact, FactOrigin
+    from app.modules.interview.infrastructure.models import InterviewSession
+
+    pid = make_project(client, "compact-doc")
+    with make_session(client) as db:
+        sess = InterviewSession(project_id=pid, doc_slug="proposal")
+        db.add(sess)
+        db.commit()
+        sid = sess.id
+        d1 = Fact(project_id=pid, session_id=sid, content="3분기 매출 12.4억 원 (문서 확정)",
+                  source="제안서 인터뷰", origin=FactOrigin.INTERVIEW)
+        d2 = Fact(project_id=pid, session_id=sid, content="3분기 매출 11.9억 원 (문서 임시)",
+                  source="제안서 인터뷰", origin=FactOrigin.INTERVIEW)
+        db.add_all([d1, d2])
+        db.commit()
+        d1_id, d2_id = d1.id, d2.id
+
+    m1 = _fact(client, pid, "고객 47개사 (수동 확정)")
+    m2 = _fact(client, pid, "고객 43개사 (수동 임시)")
+
+    out = client.post(f"/api/projects/{pid}/facts/compact/apply",
+                      json={"groups": [
+                          {"topic": "문서 매출", "keep_id": d1_id, "archive_ids": [d2_id]},
+                          {"topic": "수동 고객", "keep_id": m1, "archive_ids": [m2]},
+                      ]}).json()
+    assert out["archived"] == sorted([d2_id, m2])
+    assert out["active_remaining"] == 2
+    # 문서 그룹 — 문서별 ws 루트 미러로 분할 기록
+    doc_log_path = Path(out["doc_log_paths"]["proposal"])
+    assert doc_log_path.parts[-4:] == ("compact-doc", "proposal", "docs", "interview-log.md")
+    doc_log = doc_log_path.read_text(encoding="utf-8")
+    doc_arch = Path(out["doc_log_paths"]["proposal"]).parent.joinpath(
+        "interview-log-archive.md").read_text(encoding="utf-8")
+    assert "문서 확정)" in doc_log and "문서 임시)" not in doc_log
+    assert "[archive: " in doc_arch and "문서 임시)" in doc_arch
+    # 루트 그룹 — 수동 팩트는 프로젝트 루트 미러 소속 (레거시 계약 유지)
+    log = Path(out["log_path"]).read_text(encoding="utf-8")
+    arch = Path(out["archive_path"]).read_text(encoding="utf-8")
+    assert "수동 확정)" in log and "수동 임시)" not in log
+    assert "수동 임시)" in arch and "문서 임시)" not in arch

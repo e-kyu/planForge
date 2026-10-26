@@ -44,10 +44,10 @@ def test_review_enqueue_visible_to_other_session(client, app):
     from app.modules.jobs.infrastructure.models import Job, JobStatus
 
     make_project(client, "vis-review", "가시")
-    plan_id = insert_plan(app, 1)
+    plan_id = insert_plan(app, 1, doc_slug="proposal")
     _seed_derivative(app, plan_id, 1)
 
-    r = client.post("/api/projects/1/reviews")
+    r = client.post("/api/projects/1/reviews", json={"doc_slug": "proposal"})
     assert r.status_code == 202
     job_id = r.json()["id"]
 

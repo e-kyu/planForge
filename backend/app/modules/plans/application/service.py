@@ -76,8 +76,9 @@ def approve_plan(db: Session, plan_id: int) -> Plan:
     write_plan_mirror(_mirror_root(db, plan.project_id, project.workspace_path,
                                    plan.doc_slug), plan.markdown)
 
-    # 루프 진행 훅 — 승인 커밋 전 이 트랜잭션 안에서 (자기 문서 done + 다음 문서
-    # 활성화 래치). 행 없는(레거시) 프로젝트는 facade가 no-op — 기존 프로젝트 안전.
+    # 루프 진행 훅 — 승인 커밋 전 이 트랜잭션 안에서 (자기 문서 행만 done — 문서 간
+    # 독립 진행, 잠금 해제 래치는 제거됐다). 행 없는(레거시) 프로젝트는 facade가
+    # no-op — 기존 프로젝트 안전.
     docloops.on_plan_approved(db, plan.project_id, plan.doc_slug)
 
     db.commit()

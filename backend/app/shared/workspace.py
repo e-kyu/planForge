@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 """워크스페이스 관리 (legacy 디렉토리 규약 유지 — §3.1).
 
-workspaces/<slug>/{work,output,docs,sources,assets}
-- work/   : 파생물 중간 파일 (slides.json/report.json — derive 경로만 기록, 원칙 1)
-- output/ : 빌더 산출물 (채번 append-only, 원칙 5)
-- docs/   : interview-log.md 미러 등
-- sources/: 프로젝트 소스 (FR-2.1 인터뷰 소스 확인)
-- assets/ : 템플릿 등
+workspaces/<slug>/ — 생성 시 sources/ 하나만 사전 생성한다.
+- sources/: 프로젝트 소스 (FR-2.1 인터뷰 소스 확인) — 문서 간 공유 저장소.
+- work/ · output/ · docs/ · assets/: 실제 사용 시점에 지연 생성된다 — 문서 루프
+  프로젝트는 문서 서브루트(ws/{doc_slug}/…)를 쓰고, 루트 경로 쓰기 지점(레거시
+  경로)은 전부 lazy mkdir을 갖는다 (atomic_build · Deriver · 로그 미러).
 """
 from __future__ import annotations
 
@@ -17,7 +16,9 @@ from pathlib import Path
 
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-WORKSPACE_SUBDIRS = ("work", "output", "docs", "sources", "assets")
+# 프로젝트 생성 시 사전 생성할 루트 하위 — sources만. work/output/docs/assets는
+# 사용 시점 지연 생성 (문서 서브루트가 실제 작업 공간이므로 루트 골격은 불필요).
+WORKSPACE_SUBDIRS = ("sources",)
 
 
 class WorkspaceError(ValueError):
@@ -35,7 +36,12 @@ def validate_slug(slug: str) -> str:
 
 
 def create_workspace(root: Path, slug: str) -> Path:
-    """프로젝트 워크스페이스 자동 생성 (FR-1.2). 기존 디렉토리면 오류."""
+    """프로젝트 워크스페이스 자동 생성 (FR-1.2) — sources 하나만 사전 생성.
+
+    work/output/docs/assets는 사용 시점 지연 생성으로 위임한다 (문서 루프
+    프로젝트는 문서 서브루트가 작업 공간 — 루트 빈 골격은 만들지 않는다).
+    기존 디렉토리면 오류.
+    """
     validate_slug(slug)
     ws = root / slug
     if ws.exists():
@@ -51,6 +57,11 @@ def workspace_path(settings, slug: str) -> Path:
 
 
 def ensure_workspace_dirs(ws: Path) -> None:
+    """루트 하위 멱등 보장 (기존 디렉토리 보존) — 이제 sources만 보장한다.
+
+    work/output/docs/assets를 루트에 되살릴 필요가 생기면(레거시 경로 유지 보수 등)
+    개별 사용 지점의 lazy mkdir이 담당한다 — 이 함수는 사전 생성기가 아니다.
+    """
     for sub in WORKSPACE_SUBDIRS:
         (ws / sub).mkdir(parents=True, exist_ok=True)
 

@@ -242,7 +242,8 @@ function ProjectRow(props: { p: Project; delBusy: boolean; onDelete: () => void 
   );
 }
 
-/** 문서 버튼 — 상태별 동작: locked=비활성, active=인터뷰 진입, done=plan 탭 진입.
+/** 문서 버튼 — 상태별 동작: locked=비활성(도달 불가 잔여의 안전망), active=인터뷰 진입,
+ *  done=plan 탭 진입. 문서는 각각 독립 진행이다 (independent-doc-loops).
  *  라벨 어휘는 백엔드 label 필드 그대로 (프론트 하드코딩 금지 — SSOT는 DOC_KINDS). */
 function DocButton({ p, l }: { p: Project; l: DocLoop }) {
   const locked = l.status !== "active" && l.status !== "done";
@@ -252,7 +253,7 @@ function DocButton({ p, l }: { p: Project; l: DocLoop }) {
       ? "project-doc-btn-done"
       : "project-doc-btn-active";
   const title = locked
-    ? `${l.label} — 이전 문서의 plan 승인 후 활성화`
+    ? `${l.label} — 잠겨 있습니다`
     : l.status === "done"
       ? `${l.label} — plan 승인 완료. plan 탭에서 재작업할 수 있습니다.`
       : `${l.label} — 인터뷰 진입`;

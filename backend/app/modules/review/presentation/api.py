@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.derivatives.facade import has_any
+from app.modules.docloops.facade import has_doc_layout
 from app.modules.jobs.facade import JobType, enqueue
 from app.modules.jobs.presentation.schemas import JobOut
 from app.modules.plans.facade import latest_approved
@@ -21,16 +22,27 @@ from app.shared.errors import http_404, http_409
 
 from ..facade import get_report
 from ..infrastructure.models import ReviewReport
-from .schemas import ReviewOut
+from .schemas import ReviewEnqueueRequest, ReviewOut
 
 router = APIRouter(prefix="/api/projects/{project_id}/reviews", tags=["reviews"])
 
 
 @router.post("", status_code=202, response_model=JobOut)
-def enqueue_review(project_id: int, db: Session = Depends(get_db)):
-    """최신 승인 plan에 대한 검수 잡을 큐에 넣는다."""
+def enqueue_review(project_id: int, body: ReviewEnqueueRequest | None = None,
+                   db: Session = Depends(get_db)):
+    """검수 잡을 큐에 넣는다 — 문서 레이아웃 프로젝트는 문서별 독립 검수.
+
+    - 문서 레이아웃 프로젝트: doc_slug 필수(미지정 → 409)이며 그 문서의 최신 승인
+      plan을 검수한다 (독립 진행 — 문서 간 순서 제약 없음).
+    - 레거시 프로젝트: doc_slug 무시, 기존 동작(최신 승인 plan) 유지.
+    """
     require_project(db, project_id)
-    plan = latest_approved(db, project_id)
+    if has_doc_layout(db, project_id):
+        if not body or not body.doc_slug:
+            raise http_409("검수할 문서를 지정하세요 (doc_slug)")
+        plan = latest_approved(db, project_id, body.doc_slug)
+    else:
+        plan = latest_approved(db, project_id)
     if plan is None:
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")
     if not has_any(db, project_id):

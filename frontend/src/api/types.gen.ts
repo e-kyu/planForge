@@ -606,7 +606,11 @@ export interface paths {
         put?: never;
         /**
          * Enqueue Review
-         * @description 최신 승인 plan에 대한 검수 잡을 큐에 넣는다.
+         * @description 검수 잡을 큐에 넣는다 — 문서 레이아웃 프로젝트는 문서별 독립 검수.
+         *
+         *     - 문서 레이아웃 프로젝트: doc_slug 필수(미지정 → 409)이며 그 문서의 최신 승인
+         *       plan을 검수한다 (독립 진행 — 문서 간 순서 제약 없음).
+         *     - 레거시 프로젝트: doc_slug 무시, 기존 동작(최신 승인 plan) 유지.
          */
         post: operations["enqueue_review_api_projects__project_id__reviews_post"];
         delete?: never;
@@ -734,6 +738,13 @@ export interface components {
             log_path: string;
             /** Archive Path */
             archive_path: string;
+            /**
+             * Doc Log Paths
+             * @default {}
+             */
+            doc_log_paths: {
+                [key: string]: string;
+            };
             /** Warnings */
             warnings: string[];
         };
@@ -1047,6 +1058,11 @@ export interface components {
             title?: string | null;
             /** Status */
             status?: ("active" | "archived") | null;
+        };
+        /** ReviewEnqueueRequest */
+        ReviewEnqueueRequest: {
+            /** Doc Slug */
+            doc_slug?: string | null;
         };
         /** ReviewOut */
         ReviewOut: {
@@ -2416,7 +2432,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewEnqueueRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {

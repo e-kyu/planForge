@@ -11,15 +11,19 @@ const SEV_ICON: Record<string, LucideIcon> = { red: XCircle, yellow: AlertTriang
 const SEV_LABEL: Record<string, string> = { red: "필수", yellow: "권고", white: "선택" };
 const SEV_ORDER: Record<string, number> = { red: 0, yellow: 1, white: 2 };
 
-/** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3). */
-export default function ReviewPanel({ pid }: { pid: number }) {
+/** 검수 리포트 (FR-4, FR-5) — 결정론+LLM 발견사항 심각도 정렬 표시 + 선택 반영(FR-4.3).
+ *  문서 루프 프로젝트는 doc이 지정된 문서의 최신 승인 plan을 검수한다 (독립 진행). */
+export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: string | null }) {
   const { reports, plans, jobs, jobsError, now, error, failedReviseJob, notice, busy, reviseDone, enqueue } =
-    useReviews(pid);
+    useReviews(pid, doc);
   const [sel, setSel] = useState<Review | null>(null);
 
   if (reports === null) return <Empty>불러오는 중…</Empty>;
 
-  const approvedPlan = [...plans].reverse().find((p) => p.status === "approved");
+  // 검수 대상 plan — 문서 컨텍스트가 있으면 그 문서의 승인 plan만 (독립 검수).
+  const approvedPlan = [...plans].reverse().find(
+    (p) => p.status === "approved" && (doc === null || p.doc_slug === doc),
+  );
   const verById = new Map(plans.map((p) => [p.id, p.version_no]));
   // 배너 기준 잡 — 타입별 최신(마지막 상태) 잡. 진행 문구·경과를 잡 폴링에서 파생한다.
   const reviseJob = latestByType(jobs, "plan_revise");

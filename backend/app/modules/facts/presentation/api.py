@@ -8,12 +8,17 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.interview.facade import session_doc_slugs
 from app.modules.projects.facade import require_project
 from app.shared.config import get_settings
 from app.shared.db import get_db
 from app.shared.errors import http_404
 from app.shared.llm import LLMRegistry
-from app.shared.workspace import compact_interview_log, workspace_path
+from app.shared.workspace import (
+    compact_interview_log,
+    doc_ws_root,
+    workspace_path,
+)
 
 from ..application.compact import clean_groups, fact_line, run_llm_compact, select_archives
 from ..facade import FactStatus
@@ -107,11 +112,41 @@ def compact_apply(project_id: int, body: CompactApplyRequest, db: Session = Depe
 
     remaining = [f for f in facts if f.id not in to_archive]
     today = dt.date.today().isoformat()
-    active_lines = [fact_line(f) for f in remaining]
-    archived_lines = [fact_line(f, marker=f"[archive: {today}]") for f in to_archive.values()]
-    log, arch = compact_interview_log(workspace_path(settings, project.slug),
-                                      active_lines, archived_lines)
+
+    # 미러 재작성은 팩트 소속 문서별 루트를 따른다 (SSOT은 DB Fact, 미러만 분할).
+    # 소속 판정은 session_id → interview_sessions.doc_slug (interview facade 경유) —
+    # 레거시 세션·수동 팩트(None)는 프로젝트 루트 미러 소속 (agent._mirror_root 규약).
+    ws = workspace_path(settings, project.slug)
+    session_docs = session_doc_slugs(db, project_id)
+
+    def mirror_key(f: Fact) -> str:
+        """미러 그룹 키 — "" = 프로젝트 루트, 아니면 doc_slug."""
+        doc = session_docs.get(f.session_id) if f.session_id is not None else None
+        return doc or ""
+
+    def mirror_root(key: str):
+        return doc_ws_root(ws, key, doc_layout=True) if key else ws
+
+    active_by_key: dict[str, list[str]] = {}
+    archived_by_key: dict[str, list[str]] = {}
+    for f in remaining:
+        active_by_key.setdefault(mirror_key(f), []).append(fact_line(f))
+    for f in to_archive.values():
+        archived_by_key.setdefault(mirror_key(f), []).append(
+            fact_line(f, marker=f"[archive: {today}]"))
+
+    log_path, archive_path, doc_log_paths = "", "", {}
+    for key in sorted(set(active_by_key) | set(archived_by_key)):
+        log, arch = compact_interview_log(mirror_root(key),
+                                          active_by_key.get(key, []),
+                                          archived_by_key.get(key, []))
+        if key == "":
+            log_path, archive_path = str(log), str(arch)
+        else:
+            doc_log_paths[key] = str(log)
+
     db.commit()
     return CompactApplyResult(
         archived=sorted(to_archive), active_remaining=len(remaining),
-        log_path=str(log), archive_path=str(arch), warnings=warnings)
+        log_path=log_path, archive_path=archive_path,
+        doc_log_paths=doc_log_paths, warnings=warnings)

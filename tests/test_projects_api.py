@@ -11,8 +11,11 @@ def test_create_project_makes_workspace(client, db_env):
     body = r.json()
     assert body["slug"] == "demo-proj"
     assert body["status"] == "active"
-    for sub in ("work", "output", "docs", "sources", "assets"):
-        assert (db_env / "demo-proj" / sub).is_dir(), sub
+    # 생성 시 sources 하나만 사전 생성 — work/output/docs/assets는 사용 시점
+    # 지연 생성 (문서 루프 프로젝트의 작업 공간은 문서 서브루트)
+    assert (db_env / "demo-proj" / "sources").is_dir()
+    for sub in ("work", "output", "docs", "assets"):
+        assert not (db_env / "demo-proj" / sub).is_dir(), sub
 
 
 def test_create_project_duplicate_slug_conflict(client, db_env):
@@ -129,7 +132,7 @@ def test_deleted_slug_and_workspace_reusable(client, db_env):
     assert client.delete("/api/projects/1").status_code == 204
     r = client.post("/api/projects", json={"slug": "reuse", "title": "재생성"})
     assert r.status_code == 201, r.text
-    assert (db_env / "reuse" / "work").is_dir()
+    assert (db_env / "reuse" / "sources").is_dir()
 
 
 def test_health(client):

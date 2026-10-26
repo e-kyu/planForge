@@ -13,7 +13,6 @@ import pytest
 
 from app.agents.tools import MAX_SUGGESTIONS
 from _helpers import make_session, run_queue
-from app.modules.docloops.facade import DocLoop, DocLoopStatus
 from fakes import (
     FakeLLM,
     FakeStreamLLM,
@@ -110,15 +109,6 @@ def _setup(sclient) -> int:
     r = sclient.post("/api/projects/1/interview/sessions", json={})
     assert r.status_code == 201
     return r.json()["id"]
-
-
-def _activate_docloop(client, pid: int, doc_slug: str) -> None:
-    """doc_loops 행을 ACTIVE로 세팅 — locked 409 방지 (tests/test_docloops_api.py의
-    직접 DB 접근 패턴). proposal 루프는 생성 직후 active라 후속 문서(dev-design 등)에만 쓴다."""
-    with make_session(client) as db:
-        row = db.query(DocLoop).filter_by(project_id=pid, doc_slug=doc_slug).one()
-        row.status = DocLoopStatus.ACTIVE
-        db.commit()
 
 
 def test_interview_full_flow_to_plan_approval(base_kit, db_env):
@@ -340,7 +330,7 @@ def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
     세션은 doc_slug=dev-design로 고정 — 문서 목록을 묻지 않는다(step 2)."""
     dclient, design_llm = design_kit.client, design_kit.fake
     dclient.post("/api/projects", json={"slug": "design-e2e", "title": "설계 아크 e2e"})
-    _activate_docloop(dclient, 1, "dev-design")  # proposal 승인 없이 개발설계서 세션 허용
+    # 개발설계서는 생성 직후 active — proposal 승인 없이 세션 생성 가능 (독립 진행)
     r = dclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "dev-design"})
     assert r.status_code == 201, r.text
     sid = r.json()["id"]

@@ -428,6 +428,23 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       없음). (3) done 문서 재작업 시 이전 산출물이 남는다 — 채번이 덮어쓰기 없으므로
       추적 가능(원칙 5). (4) 재잠금·문서별 재채번·문서별 compact 미러·plan 상호
       참조는 Phase 2 인터뷰 대상으로 (미확정) 보존.
+    - 결정 4 변경 (2026-10-13, `independent-doc-loops`): 문서 3종 독립 진행 —
+      (1) 시드를 3종 전부 active로(`init_project_loops`), 승인 래치(`on_plan_approved`의
+      다음 문서 잠금 해제) 제거 — 승인 훅은 자기 문서 행만 done으로 전환하고 다른
+      문서 행은 절대 건드리지 않는다. locked는 도달 불가 잔여 상태로 남아
+      `require_session_doc` 안전망 409 분기만 유지. 잔여 locked 행은 alembic
+      e8b2c6d4a9f3(데이터 전환 + server_default 'active' 교정)으로 해소.
+      (2) 검수 enqueue도 문서 스코프 보정 — doc-loop 프로젝트는 doc_slug 필수
+      (미지정 409)이며 그 문서의 최신 승인 plan을 검수(RV-review API 계약 확장,
+      gen:types 동반). (3) 결정 7의 Phase 2 후보였던 "문서별 compact 미러"를
+      선행 반영 — compact_apply 미러 재작성은 팩트 소속 문서(session_id →
+      interview_sessions.doc_slug, interview facade 경유)별 루트를 따르고, 루트
+      미러는 레거시(None) 소속 팩트만 남긴다. 팩트 스코프 자체는 결정 7대로
+      프로젝트 공유 유지. (4) 루트 골격 정리 (2026-10-13, 같은 흐름):
+      `create_workspace`는 이제 sources만 사전 생성하고 루트 work/output/docs/assets는
+      만들지 않는다 — 문서 서브루트가 실제 작업 공간이고, 루트 경로 쓰기 지점
+      (atomic_build · Deriver · 로그 미러)은 전부 lazy mkdir을 갖는다
+      (WORKSPACE_SUBDIRS는 ("sources",)로 축소, 기존 프로젝트의 루트 데이터는 무이관).
 
 ## 토큰 효율 (적용 목적의 정량화)
 

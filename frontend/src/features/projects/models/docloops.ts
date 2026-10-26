@@ -1,5 +1,6 @@
 /** 문서 루프 슬러그 — 백엔드 docloops DOC_KINDS와 동기 (SSOT는 백엔드,
- *  app/modules/docloops/application/service.py). 순서 = 활성화 순서. */
+ *  app/modules/docloops/application/service.py). 순서는 목차·표시 순서일 뿐 —
+ *  문서는 각각 독립 진행이다 (independent-doc-loops). */
 export const DOC_SLUGS = ["proposal", "uiux-design", "dev-design"] as const;
 export type DocSlug = (typeof DOC_SLUGS)[number];
 
