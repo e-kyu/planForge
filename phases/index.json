@@ -42,7 +42,8 @@
     },
     {
       "dir": "interview-arc-split",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-10-31T14:56:54+0900"
     }
   ]
 }
