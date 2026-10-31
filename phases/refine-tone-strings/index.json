@@ -7,7 +7,8 @@
       "name": "interview-tone",
       "status": "completed",
       "summary": "인터뷰 계약 완화(본문 맥락 허용 300자)·하세요체 톤 지시·ToolError 문체 통일 — 계약 4종+회귀테스트 3건 동시 갱신",
-      "started_at": "2026-10-31T12:41:23+0900"
+      "started_at": "2026-10-31T12:41:23+0900",
+      "completed_at": "2026-10-31T12:54:40+0900"
     },
     {
       "step": 1,
