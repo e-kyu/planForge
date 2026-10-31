@@ -7,7 +7,8 @@
       "name": "interview-paging",
       "status": "completed",
       "started_at": "2026-10-31T13:56:55+0900",
-      "summary": "답변 카드(AnswersCard)·이력 카드(StaticQuestions)를 1문항 step-by-step 페이징으로 개편 — 공용 훅 frontend/src/features/interview/viewmodels/useQuestionPager.ts 신설, InterviewGates.tsx·InterviewFeed.tsx 본문 교체(점 인디케이터 .q-dots·이전/다음 .q-pager, 제출 액션은 마지막 문항 한정·시그니처 무변경), chat.css 페이저 클래스 추가(토큰 참조만). npm run build 통과(0 에러), 제출 와이어 계약(answerItems/AnswerDraft) 미변경."
+      "summary": "답변 카드(AnswersCard)·이력 카드(StaticQuestions)를 1문항 step-by-step 페이징으로 개편 — 공용 훅 frontend/src/features/interview/viewmodels/useQuestionPager.ts 신설, InterviewGates.tsx·InterviewFeed.tsx 본문 교체(점 인디케이터 .q-dots·이전/다음 .q-pager, 제출 액션은 마지막 문항 한정·시그니처 무변경), chat.css 페이저 클래스 추가(토큰 참조만). npm run build 통과(0 에러), 제출 와이어 계약(answerItems/AnswerDraft) 미변경.",
+      "completed_at": "2026-10-31T13:58:19+0900"
     },
     {
       "step": 1,
