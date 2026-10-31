@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.agents.tools import (MAX_QUESTIONS, MAX_SUGGESTIONS,
-                              SUGGESTION_MAX_LEN, ToolError, _prose_option_lines,
-                              validate_tool_args)
+from app.agents.tools import (MAX_QUESTION_LEN, MAX_QUESTIONS,
+                              MAX_SUGGESTIONS, SUGGESTION_MAX_LEN, ToolError,
+                              _prose_option_lines, validate_tool_args)
 
 
 def _q(**extra):
@@ -116,6 +116,8 @@ def test_prose_choices_threshold_and_false_positives():
         "청중은 누구인가?",
         "시스템 구조는 어떻게 잡나요?",
         "언어·프레임워크·버전과 패키지 구조는?",
+        "지금 겪고 계신 문제의 핵심은 무엇이라고 보시나요?",   # 하세요체 톤
+        "디렉터리 레이아웃을 어떻게 나누고 싶으신가요?",       # 하세요체 톤
     ]
     for t in ok_texts:
         args = {"questions": [{"text": t, "allow_free": True},
@@ -161,6 +163,39 @@ def test_prose_detection_coexists_with_options():
     with pytest.raises(ToolError, match="선택지 나열"):
         validate_tool_args("ask_questions", {"questions": [
             {"text": bad_text, "options": [{"label": "A"}, {"label": "B"}]}]})
+
+
+# ---------------------------------------------------------------------------
+# 질문 본문 계약 — 배경 1~2문장 + 질문 1문장 허용(300자 상한)·빈 본문 거부 (2026-10-31)
+
+
+def test_question_text_context_sentences_pass():
+    """본문 맥락 허용 완화 잠금(핵심 회귀) — 배경 문장 + 질문 문장 본문이 통과한다.
+
+    과거 "본문은 질문 한 문장" 하드 제약을 폐지하고 서버는 길이 상한·빈 본문만
+    결정론으로 잠근다 (계약 문서 "질문 본문 구성" 불릿)."""
+    text = ("모듈 경계는 확장성에 큰 영향을 줍니다.\n"
+            "디렉터리 레이아웃을 어떻게 나누고 싶으신가요?")
+    args = {"questions": [{"text": text, "allow_free": True}]}
+    assert validate_tool_args("ask_questions", args) == args
+
+
+def test_question_text_over_max_len_rejected():
+    text = "가" * (MAX_QUESTION_LEN + 1)
+    with pytest.raises(ToolError, match=f"{MAX_QUESTION_LEN}자 이내") as e:
+        validate_tool_args("ask_questions", {
+            "questions": [{"text": text, "allow_free": True}]})
+    assert f"현재 {len(text)}자" in str(e.value)  # 현재 글자 수가 피드백에 실린다
+
+
+def test_question_text_blank_rejected():
+    with pytest.raises(ToolError, match="본문이 비어"):
+        validate_tool_args("ask_questions", {
+            "questions": [{"text": "   ", "allow_free": True}]})
+    # 비문자열 본문도 같은 가드로 되돌려진다 (빈 본문 취급)
+    with pytest.raises(ToolError, match="본문이 비어"):
+        validate_tool_args("ask_questions", {
+            "questions": [{"text": 5, "allow_free": True}]})
 
 
 # ---------------------------------------------------------------------------

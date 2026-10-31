@@ -29,6 +29,10 @@
       "dir": "refactor-standalone-cli",
       "status": "completed",
       "completed_at": "2026-10-26T21:52:04+0900"
+    },
+    {
+      "dir": "refine-tone-strings",
+      "status": "pending"
     }
   ]
 }

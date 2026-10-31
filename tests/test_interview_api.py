@@ -52,12 +52,17 @@ def _sse_raw_lines(client, url, payload=None):
 
 # ------------------------------------------------------- 기본 흐름 턴 스크립트 (모듈 상수)
 
+# 퓨샷 질문 문형(배경 1~2문장 + 질문 1문장, 하세요체 — 2026-10-31 계약)을 잠그는
+# 가짜 LLM 질문 상수 — 스크립트와 assert가 같은 값을 참조한다.
+AUDIENCE_Q = ("이 문서가 처음 읽힐 독자의 직책과 관심사를 알면 문제 정의와 어조를 맞출 수 "
+              "있습니다.\n이 문서를 주로 읽을 청중은 누구라고 보시나요?")
+
 BASE_TURNS = [
     # 턴1 kick: 가설 텍스트 + 라운드 1 질문
     ("가설 초안: 목적은 보고 업무 자동화 도입 설득이다.", [
         ("update_checklist", {"items": [{"id": "c1", "area": "공통", "text": "목적 확정", "done": True}]}),
         ("ask_questions", {"round_summary": "뼈대 확인",
-                           "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
+                           "questions": [{"text": AUDIENCE_Q, "allow_free": True}]}),
     ]),
     # 턴2 answers: 팩트 확인 게이트 제시
     ("", [
@@ -123,7 +128,7 @@ def test_interview_full_flow_to_plan_approval(base_kit, db_env):
     assert events[0][1] == {"step": "context"}
     s = sclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
-    assert s["pending_questions"][0]["text"] == "청중은 누구인가?"
+    assert s["pending_questions"][0]["text"] == AUDIENCE_Q
 
     # 시스템 프롬프트가 주입됐는지 — 첫 LLM 호출의 첫 메시지
     first_call = fake_llm.calls[0]
@@ -269,6 +274,11 @@ def test_interview_to_build_end_to_end(doc_e2e_kit, db_env):
 
 DESIGN_PLAN_MARKDOWN = plan_interview_design_markdown()
 
+DESIGN_ARCH_Q = ("시스템 전체 구조는 이후 운영·확장 비용에 큰 영향을 줍니다.\n"
+                 "어느 구조 방향이 이 프로젝트에 잘 맞는다고 보시나요?")
+DESIGN_STACK_Q = ("기술 스택은 팀 경험·운영 여건과 맞물려 결정됩니다.\n"
+                  "언어·프레임워크·버전과 패키지 구조를 어떻게 정하고 싶으신가요?")
+
 
 DESIGN_TURNS = [
     # 턴1 kick: 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) + 설계 결정 설문 라운드 1
@@ -282,12 +292,12 @@ DESIGN_TURNS = [
         ("ask_questions", {
             "round_summary": "라운드 1 목표: 아키텍처 스타일·기술 스택 확정",
             "questions": [
-                {"text": "시스템 구조는 어떻게 잡나요?", "options": [
+                {"text": DESIGN_ARCH_Q, "options": [
                     {"label": "레이어드 모놀리식",
                      "description": "계층 분리·단일 배포 — 운영이 단순"},
                     {"label": "마이크로서비스",
                      "description": "도메인별 독립 배포 — 운영이 복잡"}]},
-                {"text": "언어·프레임워크·버전과 패키지 구조는?", "allow_free": True},
+                {"text": DESIGN_STACK_Q, "allow_free": True},
             ]}),
     ]),
     # 턴2 answers: 설계 결정 팩트 확인 게이트 (주제당 1개 팩트 — 결정+이유+대안)
@@ -404,6 +414,11 @@ def test_interview_design_arc_full_flow_to_plan_approval(design_kit, db_env):
 
 PROPOSAL_PLAN_MARKDOWN = plan_interview_proposal_markdown()
 
+PROPOSAL_PROBLEM_Q = ("지금 겪고 계신 문제의 핵심은 무엇이라고 보시나요? 문제의 크기를 뒷받침하는 "
+                      "수치나 사례가 있다면 함께 알려 주시면 큰 도움이 됩니다.")
+PROPOSAL_SOLUTION_Q = ("어떤 해결책을 제안하고 싶으신지 그 범위와 함께, 기존 대안 대비 차별점도 "
+                       "알려 주시겠어요?")
+
 
 PROPOSAL_TURNS = [
     # 턴1 kick: 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) + 제안서 아크 주제 그룹 질문
@@ -423,12 +438,12 @@ PROPOSAL_TURNS = [
         ("ask_questions", {
             "round_summary": "라운드 1 목표: 현황·문제 정의·영향 확정",
             "questions": [
-                {"text": "해결하려는 문제의 본질은 무엇인가요?", "options": [
+                {"text": PROPOSAL_PROBLEM_Q, "options": [
                     {"label": "업무 효율 저하",
                      "description": "반복 수작업에 시간·인력 소모"},
                     {"label": "데이터 품질 저하",
                      "description": "수기 취합으로 오류·불일치 누적"}]},
-                {"text": "제안하는 해결책과 범위, 대안 대비 차별점은?", "allow_free": True},
+                {"text": PROPOSAL_SOLUTION_Q, "allow_free": True},
             ]}),
     ]),
     # 턴2 answers: 아크 팩트 확인 게이트 (주제당 1개 팩트 — 주장+근거, 수치는 (미확정))
@@ -727,6 +742,10 @@ def test_system_prompt_carries_fewshot_and_reminder(base_kit):
     assert "현황·문제 정의" in sys1         # 제안서 아크 주제 그룹 ①
     assert "제안서 구성 가이드" in sys1      # plan 포맷의 제안서 배치 가이드 (개발설계서 가이드 대칭)
     assert "대안 | 요약 | 판단 | 상태" in sys1  # 해결책·차별성 결정표 헤더 예시
+    assert "배경 1~2문장" in sys1           # 본문 맥락 허용 완화 (2026-10-31 계약)
+    assert "300자" in sys1                  # 본문 길이 상한 — 서버 검증 서술
+    assert "하세요체" in sys1                # 질문 톤 규칙 (톤 섹션·리마인더)
+    assert "본문은 질문 한 문장" not in sys1  # 구 하드 제약 문구는 폐지됐다
     # 레거시 세션(doc_slug NULL)에는 문서 정체성 주입이 없다 (step 0 negative) —
     # "이번 인터뷰 문서"는 헤더 문구에도 등장하므로 주입 블록 고유의 소제목으로 잠근다
     assert "### 이번 인터뷰 문서" not in sys1
@@ -1028,16 +1047,21 @@ def test_non_blocking_tool_loop_limit_fails_session(base_kit):
 RECOMMENDED_FACT = ("주요 고객: 사내 경영진·현업 부서 (미확정) — "
                     "소스 '보고 개선안'의 '매출·실무 부서 대상' 표기에 근거")
 
+# 답변 조립이 f"{i+1}. {text}\n→ …" 형태라 스크립트 질문은 1줄 문형(하세요체)으로 둔다.
+SUGGEST_CUSTOMER_Q = "이 문서가 꼭 설득해야 할 주요 고객은 누구라고 보시나요?"
+SUGGEST_DEADLINE_Q = "제출 마감은 언제까지라고 보시나요?"
+SUGGEST_SCHEDULE_Q = "남은 제출 일정은 어떻게 되는지 알려 주시겠어요?"
+
 
 SUGGEST_TURNS = [
     # 턴1 kick: 2문항 — 문항1 서술형+suggestions, 문항2 객관형
     ("가설 초안: 보고 업무 자동화.", [
         ("ask_questions", {"round_summary": "뼈대 확인",
                            "questions": [
-                               {"text": "주요 고객은 누구인가?", "allow_free": True,
+                               {"text": SUGGEST_CUSTOMER_Q, "allow_free": True,
                                 "suggestions": ["사내 경영진·현업 부서 (미확정)",
                                                 "외부 고객사 (미확정)"]},
-                               {"text": "언제까지 제출해야 하나요?", "options": [
+                               {"text": SUGGEST_DEADLINE_Q, "options": [
                                    {"label": "4월 말"},
                                    {"label": "5월 말"}]},
                            ]}),
@@ -1051,7 +1075,7 @@ SUGGEST_TURNS = [
     # 턴3 (팩트 승인 후): 남은 항목을 이어서 진행 (라운드 2)
     ("", [
         ("ask_questions", {"round_summary": "라운드 2 목표: 일정 확정",
-                           "questions": [{"text": "제출 일정은 어떻게 되나요?",
+                           "questions": [{"text": SUGGEST_SCHEDULE_Q,
                                           "allow_free": True}]}),
     ]),
 ]
@@ -1094,8 +1118,8 @@ def test_answers_lines_are_index_sorted_and_unanswered_marked(sg_kit):
     answered = [m["content"] for m in sg_llm.calls[1]
                 if m["role"] == "user" and "[라운드 답변]" in m["content"]]
     assert len(answered) == 1
-    assert "1. 주요 고객은 누구인가?\n→ 사내 경영진" in answered[0]
-    assert "2. 언제까지 제출해야 하나요?\n→ 4월 말" in answered[0]
+    assert f"1. {SUGGEST_CUSTOMER_Q}\n→ 사내 경영진" in answered[0]
+    assert f"2. {SUGGEST_DEADLINE_Q}\n→ 4월 말" in answered[0]
     assert answered[0].index("1. ") < answered[0].index("2. ")  # 역순 제출 → 정렬 조립
     assert "→ (모름)" not in answered[0]
 
@@ -1113,8 +1137,8 @@ def test_unanswered_question_marked_and_recommended_fact_staged(sg_kit, db_env):
                 {"answers": [{"index": 1, "option": 0}]})
     answered = [m["content"] for m in sg_llm.calls[1]
                 if m["role"] == "user" and "[라운드 답변]" in m["content"]]
-    assert "1. 주요 고객은 누구인가?\n→ (모름)" in answered[0]
-    assert "2. 언제까지 제출해야 하나요?\n→ 4월 말" in answered[0]
+    assert f"1. {SUGGEST_CUSTOMER_Q}\n→ (모름)" in answered[0]
+    assert f"2. {SUGGEST_DEADLINE_Q}\n→ 4월 말" in answered[0]
 
     # 추천 팩트 제시 → fact_gate에서 '인터뷰 추천' 출처가 그대로 노출된다
     s = sg_client.get(f"/api/interview/sessions/{sid}").json()

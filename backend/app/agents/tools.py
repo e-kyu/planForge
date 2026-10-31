@@ -37,7 +37,9 @@ INTERVIEW_TOOLS: list[dict] = [
             "description": ("다음 인터뷰 라운드의 질문을 제시한다 (라운드당 최대 4문항). "
                             "각 문항은 options 2개 이상 또는 allow_free=true 중 하나를 "
                             "반드시 갖는다 (둘 다 있어도 된다. 둘 다 없으면 서버가 거부한다). "
-                            "선택지는 상호배타적·실제 사례 기반으로 하고 근거를 설명에 포함한다."),
+                            "선택지는 상호배타적·실제 사례 기반으로 하고 근거를 설명에 포함한다. "
+                            "질문 본문(text)은 정중한 존댓말로 배경 1~2문장 + 질문 1문장"
+                            "(총 300자 이내)으로 쓰고, 선택지 나열은 본문에 두지 않는다."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -48,7 +50,8 @@ INTERVIEW_TOOLS: list[dict] = [
                         "items": {
                             "type": "object",
                             "properties": {
-                                "text": {"type": "string"},
+                                "text": {"type": "string",
+                                         "description": "질문 본문 — 배경 1~2문장 + 질문 1문장, 300자 이내"},
                                 "options": {
                                     "type": "array",
                                     "minItems": 2,
@@ -164,6 +167,8 @@ BLOCKING_TOOLS = {"ask_questions", "save_facts", "confirm_key_messages", "write_
 
 MAX_QUESTIONS = 4  # FR-2.3: 한 라운드 최대 4문항
 
+MAX_QUESTION_LEN = 300  # 질문 본문 상한 — 배경 1~2문장 + 질문 1문장 규모
+
 MAX_SUGGESTIONS = 3  # 문항당 추천 후보 상한 (답변 카드의 추천 칩)
 
 SUGGESTION_MAX_LEN = 120  # 추천 후보 한 줄 길이 상한
@@ -202,20 +207,20 @@ def _validate_suggestions(index: int, sugs) -> list[str]:
     """문항 suggestions 검증 → strip 정규화된 목록. 순서: 타입/빈 값/개행 → 개수 → 길이."""
     if not isinstance(sugs, list):
         raise ToolError(f"문항 {index}: suggestions는 문자열 배열이어야 합니다 "
-                        f"(현재 {type(sugs).__name__}) — 추천 후보 문장들의 배열로")
+                        f"(현재 {type(sugs).__name__}) — 추천 후보 문장들의 배열로 보내 주세요")
     for k, s in enumerate(sugs, 1):
         if not isinstance(s, str):
             raise ToolError(f"문항 {index} 추천 후보 {k}: 후보는 문자열이어야 합니다")
         if not s.strip():
             raise ToolError(f"문항 {index} 추천 후보 {k}: 후보가 비어 있습니다 — "
-                            f"빈 후보를 제거하거나 문장을 채워라")
+                            f"빈 후보를 제거하거나 문장을 채워 주세요")
         if "\n" in s or "\\n" in s:
             raise ToolError(f"문항 {index} 추천 후보 {k}: 추천 후보는 한 줄 문장이다 — "
                             f'"{s[:60]}…" (개행 제거 후 칩 한 줄로 요약)')
     if len(sugs) > MAX_SUGGESTIONS:
         raise ToolError(f"문항 {index}: 추천 후보는 최대 {MAX_SUGGESTIONS}개다 "
                         f"(현재 {len(sugs)}개) — 가장 설득력 있는 "
-                        f"{MAX_SUGGESTIONS}개만 남겨라")
+                        f"{MAX_SUGGESTIONS}개만 남겨 주세요")
     if any(len(s.strip()) > SUGGESTION_MAX_LEN for s in sugs):
         long_one = next(s for s in sugs if len(s.strip()) > SUGGESTION_MAX_LEN)
         raise ToolError(f"문항 {index}: 추천 후보는 {SUGGESTION_MAX_LEN}자 이내 한 줄이다 "
@@ -228,13 +233,24 @@ def _validate_ask_questions(args: dict[str, Any]) -> dict[str, Any]:
     _require(qs, "questions가 비어 있습니다 — 최소 1문항 필요")
     if len(qs) > MAX_QUESTIONS:
         raise ToolError(f"라운드당 최대 {MAX_QUESTIONS}문항입니다 (현재 {len(qs)}개) — "
-                        f"{MAX_QUESTIONS}개만 남기고 나머지는 다음 라운드로")
+                        f"{MAX_QUESTIONS}개만 남기고 나머지는 다음 라운드로 넘겨 주세요")
     # 문항별 선택지 계약: options 2개 이상 또는 allow_free=true (둘 다 없으면 거부)
     prose_bad: list[tuple[int, list[str]]] = []
     for i, q in enumerate(qs, 1):
         if not isinstance(q, dict):
             raise ToolError(f"문항 {i}: 문항은 object여야 합니다")
-        prose_bad.append((i, _prose_option_lines(q.get("text") or "")))
+        # 본문 가드 — 빈 본문 거부·길이 상한(배경 1~2문장 + 질문 1문장 규모). 문장
+        # 수·톤(하세요체)은 콘텐츠 규칙이라 잠그지 않는다(계약 문서: 구조만 잠근다 —
+        # interview.md 소관). 길이는 원문 그대로 잰다(raw 이력 보존 — 정규화는
+        # pending_questions만).
+        text = q.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise ToolError(f"문항 {i}: 질문 본문이 비어 있습니다 — 본문을 배경 1~2문장 + "
+                            f"질문 1문장으로 채워 주세요")
+        if len(text) > MAX_QUESTION_LEN:
+            raise ToolError(f"문항 {i}: 질문 본문은 {MAX_QUESTION_LEN}자 이내입니다 "
+                            f"(현재 {len(text)}자) — 배경 1~2문장 + 질문 1문장으로 다듬어 주세요")
+        prose_bad.append((i, _prose_option_lines(text)))
         # 추천 후보 칩 계약(선택 필드 — 없는 문항 통과). options 분기의 continue가
         # 이 검증을 우회하지 않도록 options 처리 앞에서 검증한다.
         sugs = q.get("suggestions")
@@ -245,11 +261,11 @@ def _validate_ask_questions(args: dict[str, Any]) -> dict[str, Any]:
             if q.get("allow_free") is not True:
                 raise ToolError(f"문항 {i}: 선택지가 없습니다 — 객관형이면 options를 "
                                 f"2개(라벨+설명) 이상 채우고, 서술형 주제면 options 없이 "
-                                f"allow_free=true를 명시하라")
+                                f"allow_free=true를 명시해 주세요")
             continue
         if len(opts) < 2:
             raise ToolError(f"문항 {i}: 선택지는 2개 이상이어야 합니다 (현재 {len(opts)}개) — "
-                            f"서술형 주제면 options를 빼고 allow_free=true로")
+                            f"서술형 주제면 options를 빼고 allow_free=true로 바꿔 주세요")
         for j, o in enumerate(opts, 1):
             if not isinstance(o, dict):
                 raise ToolError(f"문항 {i} 옵션 {j}: 옵션은 object여야 합니다")
@@ -267,14 +283,14 @@ def _validate_ask_questions(args: dict[str, Any]) -> dict[str, Any]:
         names = "; ".join(f'문항 {i}("{lines[0][:30]}…")' for i, lines in bad)
         raise ToolError(
             f"질문 본문에 선택지 나열이 있습니다 — {names}. 선택지는 본문 텍스트에서 빼고 "
-            f"options 배열({{label, description}})로 옮겨라. 서술형 주제면 나열을 모두 "
-            f"제거하고 allow_free=true만 남긴다. 문항당 1개 주제로 나눌 것")
+            f"options 배열({{label, description}})로 옮겨 주세요. 서술형 주제면 나열을 모두 "
+            f"제거하고 allow_free=true만 남겨 주세요. 문항당 1개 주제로 나눠 주세요")
     return args
 
 
 def _validate_save_facts(args: dict[str, Any]) -> dict[str, Any]:
     facts = args.get("facts") or []
-    _require(facts, "facts가 비어 있습니다 — 확정된 팩트가 없으면 save_facts를 호출하지 말 것")
+    _require(facts, "facts가 비어 있습니다 — 확정된 팩트가 없으면 save_facts를 호출하지 말아 주세요")
     return args
 
 

@@ -32,6 +32,10 @@
 - **선택지를 질문 본문(text)에 나열하는 것은 언제나 위반이다** — `예:`·`예)`·`보기:`·
   `답:`·`1.`·`2)`·`①..⑳`·`가)`·`(1)`·`(가)`·불릿 등 옵션 유사 줄이 2줄 이상이면
   options 유무와 무관하게 서버가 거부한다. 선택지는 options 배열로만 전달된다.
+- **질문 본문 구성(맥락 허용 완화, 2026-10-31)**: `text`는 배경 1~2문장 + 질문 1문장까지
+  허용된다 — 과거 "본문은 질문 한 문장" 하드 제약을 폐지했다. 문장 수·톤(정중한
+  존댓말)은 콘텐츠 규칙이라 `interview.md` 소관이고, 서버가 결정론으로 잠그는 것은
+  길이 상한 `MAX_QUESTION_LEN`=300자와 빈 본문 거부뿐이다.
 - 프론트는 `options.length > 0`일 때만 버튼을, `allow_free ?? true`(기본 true)일 때
   "직접 입력" 인풋을 렌더한다
   (`frontend/src/features/interview/views/InterviewPanel.tsx`) — 본문 마크다운을
@@ -163,6 +167,17 @@ Event 객체로 만들어 이력에 영속하면 리플레이 오염·seq 커서
 (progress_event의 emit-only 설계와 같은 맥락). `Event.sse()` 프레임 자체는
 `event:`+`data:` 조합으로 불변.
 
+2026-10-31 질문 본문 맥락 허용 완화 + 하세요체 톤 (`refine-tone-strings` step 0):
+"본문은 질문 한 문장" 하드 제약을 폐지하고 배경 1~2문장 + 질문 1문장(총 300자
+이내)을 허용한다 — 서버가 결정론으로 잠그는 것은 `MAX_QUESTION_LEN`=300자 길이
+상한과 빈 본문 거부뿐이고, 문장 수·톤(하세요체)은 interview.md 소관이다
+(위 "질문 본문 구성" 불릿). 선택지 나열 거부(`_PROSE_OPTION_LINE`, 임계 2줄)는
+무변경 유지, 도구 스키마의 이름·필드명·required도 무변경(description 보강만).
+계약 4종(tools.py 스키마 description·본문 가드·ToolError 하세요체 문체,
+interview.md 질문 설계 규칙·퓨샷 본문 3건·톤·아크 예시 질문, 이 문서, 테스트
+2종)을 한 커밋에 갱신하고 신규 잠금(본문 맥락 통과·길이 초과·빈 본문 회귀,
+시스템 프롬프트 "배경 1~2문장"·"300자"·"하세요체" 서술)을 추가했다.
+
 ## 모델 교체 시 체크리스트
 
 1. `backend/planforge/config.json`의 프로필을 교체한다 — 도구 호출이 흔들리는 모델이면
@@ -186,6 +201,8 @@ Event 객체로 만들어 이력에 영속하면 리플레이 오염·seq 커서
 | 문항에 options도 allow_free도 없음 | "선택지가 없습니다" | `tools.py validate_tool_args` |
 | options가 1개뿐 | "선택지는 2개 이상이어야" | `tools.py validate_tool_args` |
 | 선택지를 본문에 `예:` 등으로 나열 | "질문 본문에 선택지 나열이 있습니다" | `tools.py validate_tool_args` |
+| 질문 본문이 300자 초과 | "질문 본문은 300자 이내입니다 (현재 N자)" | `tools.py validate_tool_args` |
+| 질문 본문이 빈 문자열 | "질문 본문이 비어 있습니다" | `tools.py validate_tool_args` |
 | options 라벨 비어 있음 | "label이 비어 있습니다" | `tools.py validate_tool_args` |
 | 추천 후보(suggestions)를 4개 이상 제시 | "추천 후보는 최대 3개다" | `tools.py validate_tool_args` |
 | 추천 후보가 빈 문자열 | "추천 후보가 비어 있습니다" | `tools.py validate_tool_args` |
