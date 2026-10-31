@@ -36,7 +36,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 아키텍처 요점
 
 **구조**: 가이드(`sources/default_architecture_guidelines.md`) 적용 — 백엔드 모듈러 모놀리식
-(§1), 프론트엔드 feature-MVVM(§2). 결정·편차 기록: `docs/ADR.md`.
+(§1), 프론트엔드 feature-MVVM(§2). 아키텍처 상세는 `docs/ARCHITECTURE.md`, 요구사항은
+`docs/PRD.md`, 결정·편차 기록: `docs/ADR.md`. backend·frontend 디렉토리별 가이드는
+각 `backend/CLAUDE.md`·`frontend/CLAUDE.md`.
 **모듈 경계 규칙**: 타 모듈의 테이블·내부 파일 직접 import 금지 — 반드시 대상 모듈의
 `facade.py` 공개 함수 또는 `shared/` 경유. 새 모듈/기능은 기존 모듈·feature를 템플릿으로 복제.
 
@@ -101,7 +103,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   등 ignored 경로가 섞이지 않았는지 확인.
 - 도구 설정: 저장소 `.ignore`(ripgrep)가 `frontend/openapi.json`·`package-lock.json`·
   이미지 바이너리를 Grep/Glob 콘텐츠 검색에서 제외한다. `.claude/settings.json`은
-  `backend/planforge/config.json`·`data/**`·`.env*`의 Read/Edit를 deny한다(키·DB 보호).
+  `backend/planforge/config.json`·`data/**`·`.env*`·`**/*.db(-wal·-shm)`의 Read/Edit를
+  deny한다(키·DB 보호).
 
 ## 테스트
 
@@ -113,6 +116,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 브라우저 e2e 스모크: 양쪽 dev 서버(backend 8000 + frontend 5173) 기동 후 frontend/에서
   `node e2e-smoke.mjs` — 실제 LLM을 호출하는 수동 검증 스크립트(커밋 대상 아님),
   스크린샷은 `.e2e-shots/`에 쌓인다. `visual-smoke.mjs`는 임시 리스타일 확인용.
+  브라우저 자동화는 Playwright(frontend devDependency)다.
 - 앱 테스트는 테스트별 tmp_path 임시 SQLite DB로 완전 격리 (`TEST_DATABASE_URL`로 오버라이드).
 - 앱 테스트는 워커 루프를 비활성(`create_app(start_worker=False)`)하고 job은 `run_job`
   직접 호출로 결정론 검증한다 (tests/test_jobs_worker.py 참조).

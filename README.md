@@ -17,6 +17,9 @@
 담당한다. 콘텐츠의 유일한 원본(SSOT)은 plan이며, 산출물은 항상 plan에서 재생성되고
 **절대 덮어쓰지 않는다**(`<문서 제목>_vNN.<확장자>`, 확장자별 독립 시퀀스).
 
+**개발 상태**: M1~M4 코드 완료 — 남은 것은 브라우저 e2e 완주. 결정·편차 기록은
+`docs/ADR.md`, 아키텍처 상세는 `docs/ARCHITECTURE.md` 참조.
+
 ---
 
 ## 1. 전체 워크플로우 (사용자가 경험하는 흐름)
@@ -52,7 +55,8 @@ backend/                  FastAPI 백엔드 (모듈러 모놀리식)
                           interview·review·docloops)
       └ <모듈>/           facade.py · presentation/(api·schemas) · application/ · infrastructure/models.py
                           ※ docloops는 리프 모듈 — 문서별 루프 상태머신, 타 모듈 facade 미import
-    shared/               모듈 간 공용 — config·db·errors·workspace·llm(LLMRegistry)·types
+    shared/               모듈 간 공용 — config·db·errors·collections·factline·workspace·
+                          llm(LLMRegistry)·types
     agents/tools.py       인터뷰 도구 OpenAI function 스키마 + 서버측 검증
   planforge/              런타임 LLM 설정(config.json·config.example.json)만 남는다
   scripts/                앱 관리 CLI — admin.py(openapi·job-timing) · _bootstrap.py
@@ -63,7 +67,8 @@ packages/
     pyproject.toml        배포명 planforge-cli · 콘솔 스크립트 `planforge`
     src/planforge/
       common/             UTF-8/JSON I/O · 상수 · slug · 빌드 파일명 · 설정 경로 해석
-      cli/                콘솔 진입점(planforge ...) — __main__.py는 `python -m planforge` shim
+      cli/                콘솔 진입점 — commands/(parse·numcheck·build·derive 서브커맨드 본문)
+                          __main__.py는 `python -m planforge` shim
       plan/               plan.md 파서·문서 필터·골격 검증·로더
       builders/           build_ppt.py · build_doc.py · theme.py (계약 테스트로 고정 — 로직 변경 금지)
       llm/                OpenAI 호환 provider(langchain-openai ChatOpenAI) + 공용
@@ -74,7 +79,8 @@ frontend/                 React 19 + TypeScript (Vite) — feature-MVVM
     └ <feature>/          models/(API 호출) · viewmodels/(상태·로직 훅) · views/(표현 전용)
   src/shared/             components/(CodeMirror 에디터·마크다운 미리보기·공통 UI) · lib/ · styles/
   e2e-smoke.mjs           전체 흐름 스모크 (실제 LLM 호출 — 수동 검증 스크립트, 커밋 대상 아님)
-  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용 — 브라우저 e2e는 별도 완주 예정)
+  visual-smoke.mjs        임시 시각 스모크 (스크린샷 확인용 — 브라우저 e2e는 별도 완주 예정,
+                          브라우저 자동화는 devDependency의 Playwright로 작성)
 workspaces/               프로젝트별 워크스페이스 (gitignored — 산출물이 여기 쌓인다)
 sources/                  글로벌 소스 (모든 프로젝트가 공유, gitignored)
 data/                     SQLite DB (planforge.db, gitignored)
@@ -363,13 +369,14 @@ LLM 설정은 웹과 동일하게 `backend/planforge/config.json`을 읽는다
 
 | 영역 | 엔드포인트 |
 |---|---|
-| 프로젝트 | `POST/GET /api/projects` · `DELETE /api/projects/{pid}` |
+| 프로젝트 | `POST/GET /api/projects` · `GET/PATCH/DELETE /api/projects/{pid}` |
 | 소스 | `GET/POST/DELETE /api/projects/{pid}/sources` · `GET .../sources/{name}/download` · `GET/PUT .../overview`(개요 문서) · `GET /api/sources`(글로벌 읽기전용) |
 | 인터뷰(SSE) | `POST .../interview/sessions` → `.../kick` · `.../turn` · `.../answers` · `.../facts/confirm` · `.../key-messages` · `GET .../messages?after=seq` |
 | plan | `GET /api/projects/{pid}/plans` · `GET /api/plans/{id}` · `POST /api/plans/{id}/approve` · `POST /api/plans/{id}/revise` · `POST /api/plans/{id}/revise-from-review`(검수 발견사항 → plan 수정 job) |
 | 검수 | `POST /api/projects/{pid}/reviews` · `GET /api/projects/{pid}/reviews`(및 단건) |
-| 팩트 | `POST /api/projects/{pid}/facts/compact`(미리보기) → `.../compact/apply` · `PATCH .../facts/{fact_id}` |
-| 산출물 | `GET /api/projects/{pid}/outputs` · `GET .../outputs/{build_id}/download` |
+| 팩트 | `GET/POST /api/projects/{pid}/facts`(조회·직접 등록) · `PATCH .../facts/{fact_id}` · `POST .../facts/compact`(미리보기) → `.../compact/apply` |
+| 산출물 | `POST/GET /api/projects/{pid}/derivatives`(202 수락) · `GET .../outputs` · `GET .../outputs/{build_id}/download` |
+| 루프 상태 | `GET /api/projects/{pid}/docloops` — 문서별 선순환 루프 조회(FR-1 확장) |
 | 작업 | `GET /api/jobs/{job_id}` · `GET /api/projects/{pid}/jobs` — 202 수락 후 폴링 |
 
 비동기 작업(derive·review 등)은 **202 수락 → job 폴링** 방식이다. 작업은 단일 워커가
