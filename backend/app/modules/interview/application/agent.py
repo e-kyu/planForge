@@ -46,6 +46,9 @@ from ..infrastructure.transcript import append_message
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+ARC_MARKER = "<!--ARC-->"       # interview.md 내 아크 조각 치환 지점 (계약 — docs/INTERVIEW-TURN-CONTRACT.md에 기록)
+ARC_LEGACY_SLUG = "proposal"    # 레거시 세션(doc_slug=None) 폴백 — "레거시는 제안서 아크로 진행" 계약 준수
+
 MAX_TOOL_TURNS = 8   # 한 턴 내 LLM 호출 한도 (도구 루프 폭주 방지)
 MAX_ROUNDS = 8       # 세션 전체 라운드 한도
 PLAN_FIX_ATTEMPTS = 3  # write_plan 검증 실패 재시도 한도 (포맷 오류 2회 연속 사고 대응)
@@ -106,10 +109,26 @@ class InterviewAgent:
 
     # ---------------------------------------------------------------- 컨텍스트 구성 (FR-2.1)
 
+    def _arc_section(self) -> str:
+        """doc_slug → 아크 조각(arc_{slug}.md) 읽기. 레거시 세션(None)은 제안서 폴백.
+
+        조각은 헤딩부터 자기완결이어야 한다 (로더가 헤딩을 만들지 않는다) —
+        절차·질문 설계 규칙·plan 포맷 공통 규칙은 base(interview.md) 단일 소관이고
+        조각은 아크 서사·체크리스트 항목·plan 구성 가이드만 담는다. 미상 slug는
+        FileNotFoundError로 조기 실패 — 세션 생성 시 require_session_doc이
+        DOC_KINDS로 통제하므로 정상 경로에서 발생하지 않는다.
+        """
+        slug = self.sess.doc_slug or ARC_LEGACY_SLUG
+        return (PROMPTS_DIR / f"arc_{slug}.md").read_text(encoding="utf-8-sig").rstrip("\n")
+
     def _system_prompt(self) -> str:
         base = (PROMPTS_DIR / "interview.md").read_text(encoding="utf-8-sig")
+        if ARC_MARKER not in base:
+            raise RuntimeError(
+                f"interview.md에 아크 마커({ARC_MARKER!r})가 없다 — 로더 계약 위반")
+        prompt = base.replace(ARC_MARKER, self._arc_section())
         ctx = self._turn_context()
-        return (base + "\n\n## 이번 턴 주입 컨텍스트 (이번 인터뷰 문서·소스·확립 팩트 — 임의 "
+        return (prompt + "\n\n## 이번 턴 주입 컨텍스트 (이번 인터뷰 문서·소스·확립 팩트 — 임의 "
                 "추측 금지)\n\n" + ctx
                 + "\n\n## 이번 턴 ask_questions 리마인더 (완성 예시를 그대로 모방한다)\n\n"
                 + self._remind_ask())

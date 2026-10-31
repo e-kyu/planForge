@@ -746,6 +746,9 @@ def test_system_prompt_carries_fewshot_and_reminder(base_kit):
     assert "300자" in sys1                  # 본문 길이 상한 — 서버 검증 서술
     assert "하세요체" in sys1                # 질문 톤 규칙 (톤 섹션·리마인더)
     assert "본문은 질문 한 문장" not in sys1  # 구 하드 제약 문구는 폐지됐다
+    # 레거시 세션은 proposal 폴백 조각 취득 — 다른 아크의 고유 문자열은 없다 (arc 조각 분리 음성)
+    assert "개발설계서 구성 가이드" not in sys1
+    assert "UI·UX설계서 구성 가이드" not in sys1
     # 레거시 세션(doc_slug NULL)에는 문서 정체성 주입이 없다 (step 0 negative) —
     # "이번 인터뷰 문서"는 헤더 문구에도 등장하므로 주입 블록 고유의 소제목으로 잠근다
     assert "### 이번 인터뷰 문서" not in sys1
@@ -754,6 +757,61 @@ def test_system_prompt_carries_fewshot_and_reminder(base_kit):
                 {"answers": [{"index": 0, "free_text": "경영진"}]})
     sys2 = fake_llm.calls[1][0]["content"]
     assert "라운드 2 목표" in sys2  # 라운드 진행 → 서버 계산 번호 증가
+
+
+# ------------------------------------------------------- 아크 조각 분리 (base + arc_{slug}.md 로더)
+
+# doc_slug → 체크리스트 area(한글 라벨) — DOC_KINDS와 동기 (docloops facade 소관이지만
+# 턴 스크립트 구성용 상수라 테스트 안에 둔다)
+ARC_AREA = {"proposal": "제안서", "dev-design": "개발설계서", "uiux-design": "UI·UX설계서"}
+
+# 조각 고유 다중 토큰 마커 — 양성(있어야)·음성(없어야). 단어 단위("제안서" 등)는
+# base에 남는 태그 규칙 예시·완성 예시("아키텍처 스타일과")와 겹치므로 음성 단언에 쓰지 않는다.
+ARC_POSITIVE = {
+    "proposal": ("제안서 구성 가이드", "현황·문제 정의"),
+    "dev-design": ("개발설계서 구성 가이드", "설계 결정 설문"),
+    "uiux-design": ("UI·UX설계서 구성 가이드", "화면 목록·정보 구조"),
+}
+ARC_NEGATIVE = {
+    "proposal": ("개발설계서 구성 가이드", "UI·UX설계서 구성 가이드",
+                 "설계 결정 설문", "화면 목록·정보 구조"),
+    "dev-design": ("제안서 구성 가이드", "UI·UX설계서 구성 가이드",
+                   "현황·문제 정의", "화면 목록·정보 구조"),
+    "uiux-design": ("제안서 구성 가이드", "개발설계서 구성 가이드",
+                    "현황·문제 정의", "설계 결정 설문"),
+}
+
+
+@pytest.mark.parametrize("doc_slug", ["proposal", "dev-design", "uiux-design"])
+def test_system_prompt_carries_arc_sections(llm_app_factory, doc_slug):
+    """아크 조각 분리 — 세션 doc_slug에 따라 base(interview.md)에 자기 아크 조각만
+    조립된다. 3종 문서는 승인 없이 즉시 세션 생성 가능(독립 진행), 미니 킥 턴으로
+    첫 LLM 호출의 system 프롬프트를 검증한다. 음성 단언은 조각 고유 마커
+    (ARC_NEGATIVE)로만 — base에 남는 "제안서"(태그 규칙 예시)·"아키텍처 스타일과"
+    (완성 예시 round_summary)는 단어 단위 부정이 불가하다."""
+    kick = ("가설 초안: 주입된 문서 단독 세션 — 아크 섹션의 아크를 진행한다.", [
+        ("update_checklist", {"items": [{"id": "a1", "area": ARC_AREA[doc_slug],
+                                         "text": "이번 아크 문서별 항목 확정", "done": False}]}),
+        ("ask_questions", {"round_summary": "뼈대 확인",
+                           "questions": [{"text": "청중은 누구인가?", "allow_free": True}]}),
+    ])
+    fake = FakeStreamLLM([kick])
+    with llm_app_factory({"interview": fake}) as kit:
+        sclient = kit.client
+        sclient.post("/api/projects", json={"slug": f"arc-split-{doc_slug}",
+                                            "title": "아크 분리"})
+        r = sclient.post("/api/projects/1/interview/sessions", json={"doc_slug": doc_slug})
+        assert r.status_code == 201, r.text
+        sid = r.json()["id"]
+        _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
+
+    sys1 = fake.calls[0][0]["content"]
+    assert sys1.startswith("# 인터뷰 에이전트")
+    assert "## 이번 인터뷰 아크:" in sys1
+    for marker in ARC_POSITIVE[doc_slug]:
+        assert marker in sys1, f"{doc_slug}: 양성 마커 누락 — {marker}"
+    for marker in ARC_NEGATIVE[doc_slug]:
+        assert marker not in sys1, f"{doc_slug}: 타 아크 마커 유출 — {marker}"
 
 
 def test_doc_session_injects_doc_identity_into_system_prompt(base_kit):
