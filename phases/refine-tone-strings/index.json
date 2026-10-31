@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "frontend-strings",
-      "status": "pending"
+      "status": "completed",
+      "summary": "프론트엔드 UI 문자 전면 순화(용어 기준표 적용·하세요체 통일) — views/shared-lib/viewmodels 15개 파일, npm run build 통과",
+      "started_at": "2026-10-31T12:54:40+0900",
+      "completed_at": "2026-10-31T12:56:33+0900"
     },
     {
       "step": 2,
