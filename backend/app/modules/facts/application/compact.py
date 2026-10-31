@@ -137,7 +137,7 @@ def select_archives(facts, groups) -> tuple[dict[int, object], list[str]]:
     to_archive: dict[int, object] = {}
     for g in groups:
         if g.keep_id not in by_id:
-            warnings.append(f"그룹 '{g.topic}': keep #{g.keep_id}가 활성 팩트가 아닙니다 — 건너뜀")
+            warnings.append(f"그룹 '{g.topic}': 유지할 팩트 #{g.keep_id}가 목록에 없습니다 — 건너뛰었습니다")
             continue
         for aid in g.archive_ids:
             if aid == g.keep_id:
@@ -146,7 +146,7 @@ def select_archives(facts, groups) -> tuple[dict[int, object], list[str]]:
             if f is None:
                 continue
             if UNCONFIRMED in f.content:
-                warnings.append(f"팩트 #{aid}는 (미확정) 항목이라 archive하지 않았습니다")
+                warnings.append(f"팩트 #{aid}는 (미확정) 항목이라 보관 대상에서 제외했습니다")
                 continue
             to_archive[aid] = f
     return to_archive, warnings

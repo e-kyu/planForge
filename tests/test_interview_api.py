@@ -998,11 +998,11 @@ def test_plan_retry_exhaustion_marks_session_failed(base_kit):
     names = [n for n, _ in events]
     assert "plan_draft" not in names
     err = next(p for n, p in events if n == "error")
-    assert err["message"] == "plan 검증 재시도 한도 초과"
+    assert err["message"] == "plan 검증 재시도 한도를 초과했습니다"
     assert len(fake_llm.calls) == 7  # 게이트 3회 + write_plan 4회 — MAX_TOOL_TURNS(8) 이내, plan 가드가 먼저 끊는다
     s = sclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "failed" and s["status"] == "aborted"
-    assert "plan 검증 재시도 한도 초과" in (s["error"] or "")
+    assert "plan 검증 재시도 한도를 초과했습니다" in (s["error"] or "")
 
 
 def test_text_only_turn_exhaustion_fails_session(base_kit):
@@ -1035,7 +1035,7 @@ def test_non_blocking_tool_loop_limit_fails_session(base_kit):
     sid = _setup(sclient)
     events = _sse_events(sclient, f"/api/interview/sessions/{sid}/kick")
     err = next(p for n, p in events if n == "error")
-    assert err["message"] == "턴 내 도구 루프 한도(8) 초과"
+    assert err["message"] == "한 턴에서 진행할 수 있는 횟수(8회)를 초과했습니다"
     s = sclient.get(f"/api/interview/sessions/{sid}").json()
     assert s["phase"] == "failed" and s["status"] == "aborted"
 

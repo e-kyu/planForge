@@ -94,7 +94,7 @@ def test_unsupported_extension_skipped(tmp_path):
                        ("a.md", "본문".encode())])
     saved, skipped = extract_zip(data, tmp_path)
     assert saved == ["a.md"]
-    assert skipped == [("img/logo.png", "지원하지 않는 확장자")]
+    assert skipped == [("img/logo.png", "지원하지 않는 확장자라 저장하지 않았습니다")]
     assert _files(tmp_path) == ["a.md"]
 
 
@@ -115,7 +115,7 @@ def test_traversal_and_absolute_members_rejected(tmp_path):
                        ("ok.md", "정상".encode())])
     saved, skipped = extract_zip(data, tmp_path)
     assert saved == ["ok.md"]
-    assert all(reason == "지원하지 않는 경로" for _, reason in skipped)
+    assert all(reason == "지원하지 않는 경로라 저장하지 않았습니다" for _, reason in skipped)
     assert _files(tmp_path) == ["ok.md"]                      # dest 내 성분만
     assert not (tmp_path.parent / "evil.md").exists()          # dest 밖 기록 없음
 
@@ -127,9 +127,9 @@ def test_macosx_and_hidden_members_rejected(tmp_path):
                        ("ok.md", "정상".encode())])
     saved, skipped = extract_zip(data, tmp_path)
     assert saved == ["ok.md"]
-    assert sorted(skipped) == [(".DS_Store", "지원하지 않는 경로"),
-                               (".hidden/plan.md", "지원하지 않는 경로"),
-                               ("__MACOSX/doc/._notes.md", "지원하지 않는 경로")]
+    assert sorted(skipped) == [(".DS_Store", "지원하지 않는 경로라 저장하지 않았습니다"),
+                               (".hidden/plan.md", "지원하지 않는 경로라 저장하지 않았습니다"),
+                               ("__MACOSX/doc/._notes.md", "지원하지 않는 경로라 저장하지 않았습니다")]
     assert _files(tmp_path) == ["ok.md"]
 
 

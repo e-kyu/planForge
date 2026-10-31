@@ -215,7 +215,7 @@ interview.md 질문 설계 규칙·퓨샷 본문 3건·톤·아크 예시 질문
 | 표 데이터 행을 `- 행: …`(키 붙인 최상위 불릿)으로 작성 | "plan 포맷 검증 실패 — 해석할 수 없는 불릿" + 치트시트 (교정 예: 들여쓰기 + 키 없는 `셀\|셀\|셀`) | `agent.py _write_plan` + `packages/planforge-cli/src/planforge/plan/parser.py` |
 | plan 포맷은 통과했으나 표지·목차·마무리·내용 슬라이드 누락 (SkeletonError) | "plan 골격 검증 실패 — 문서명 포함" ERROR 피드백 → 재시도 참여 | `agent.py _write_plan` |
 | 다중 문서 plan에서 `## 메타` `산출 문서:` 누락 (슬라이드 태그는 정상) | "plan 포맷 검증 실패 — 슬라이드 문서 태그 '개발설계서'가 메타 '산출 문서'(제안서)에 없습니다…" + 치트시트 | `agent.py _write_plan` + `packages/planforge-cli/src/planforge/plan/parser.py` |
-| plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도 초과" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
+| plan 검증 실패 3회 소진 후 4번째 write_plan 호출 | TurnError "plan 검증 재시도 한도를 초과했습니다" → 세션 FAILED | `turn_graph.py dispatch_blocking` |
 
 참고: 같은 수업의 병행 결함은 plans 모듈 후속 커밋으로 잠갔다 — `planrevise.py`의
 `validate_plan_markdown`(단일 권위)이 SkeletonError를 "plan 골격 검증 실패 — 문서 '…'"

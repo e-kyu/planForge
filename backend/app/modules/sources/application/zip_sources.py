@@ -43,9 +43,9 @@ def _admit_member(info: zipfile.ZipInfo, shown: str, dest: Path,
     """채택 판정 — 크기/경로/중복 검사. (상대경로, None) 또는 (None, 기각 사유)."""
     rel = sanitize_source_relpath(shown)
     if rel is None:
-        return None, "지원하지 않는 경로"
+        return None, "지원하지 않는 경로라 저장하지 않았습니다"
     if os.path.splitext(rel)[1].lower() not in SOURCE_EXTS:
-        return None, "지원하지 않는 확장자"
+        return None, "지원하지 않는 확장자라 저장하지 않았습니다"
     if info.file_size > MAX_SOURCE_BYTES:
         return None, "파일이 너무 큽니다"
     if rel in seen or (dest / rel).exists():
@@ -59,7 +59,7 @@ def _scan_member(info: zipfile.ZipInfo, dest: Path, seen: set[str]
     """1페이즈 멤버 판정 — (채택 (info, 표기명, 상대경로), None) 또는 (None, 스킵)."""
     shown = _restore_member_name(info)
     if info.is_dir():
-        return None, (shown, "디렉터리 항목")
+        return None, (shown, "폴더 항목이라 저장하지 않았습니다")
     rel, reason = _admit_member(info, shown, dest, seen)
     if rel is None:
         return None, (shown, reason)
@@ -99,7 +99,7 @@ def extract_zip(data: bytes, dest: Path) -> tuple[list[str], list[tuple[str, str
     with zf:
         infos = zf.infolist()
         if len(infos) > MAX_ZIP_MEMBERS:
-            raise SourceError(f"zip 멤버 수가 너무 많습니다 (최대 {MAX_ZIP_MEMBERS}개)")
+            raise SourceError(f"zip 안의 파일 수가 너무 많습니다 (최대 {MAX_ZIP_MEMBERS}개)")
         if sum(i.file_size for i in infos) > MAX_ZIP_UNCOMPRESSED_BYTES:
             raise SourceError("zip 압축 해제 총량이 너무 큽니다 "
                               f"(최대 {MAX_ZIP_UNCOMPRESSED_BYTES // (1024 * 1024)}MB)")

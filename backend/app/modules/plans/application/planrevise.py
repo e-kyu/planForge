@@ -112,5 +112,5 @@ def run_plan_revise(chat_fn, base_markdown: str, findings: list[dict],
                           on_attempt=on_attempt)
     if final["result"] is None:
         raise PlanReviseError(
-            f"plan 반영 실패 — {MAX_ATTEMPTS}회 재시도 후에도 해소되지 않았습니다: {last_error}")
+            f"plan 반영 실패 — {MAX_ATTEMPTS}회 재시도 후에도 해결되지 않았습니다: {last_error}")
     return final["result"]

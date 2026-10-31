@@ -67,7 +67,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
     def nudge(state: TurnState) -> dict:
         # 스트리밍 폴백(D9): 도구 호출 없이 텍스트만 나온 턴 — 1회 재호출 유도
         if state["turns"] >= max_turns:
-            raise TurnError(f"턴 내 도구 루프 한도({max_turns}) 초과")
+            raise TurnError(f"한 턴에서 진행할 수 있는 횟수({max_turns}회)를 초과했습니다")
         return {"messages": state["messages"] + [
             {"role": "assistant", "content": state["text"]},
             {"role": "user", "content": NUDGE_TEXT},
@@ -85,7 +85,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
         if not any(tc["name"] in BLOCKING_TOOLS for tc in state["tool_calls"]):
             # 비차단 도구만 있으면 같은 턴에서 루프 지속 — 단, LLM 호출 한도 검사
             if state["turns"] >= max_turns:
-                raise TurnError(f"턴 내 도구 루프 한도({max_turns}) 초과")
+                raise TurnError(f"한 턴에서 진행할 수 있는 횟수({max_turns}회)를 초과했습니다")
             return {"messages": messages, "next": "call_llm"}
         return {"messages": messages, "next": "dispatch_blocking"}
 
@@ -93,7 +93,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
         events.add(progress_event("tool"))
         tc = next(tc for tc in state["tool_calls"] if tc["name"] in BLOCKING_TOOLS)
         if tc["name"] == "write_plan" and state["plan_fixes"] >= plan_fix_attempts:
-            raise TurnError("plan 검증 재시도 한도 초과")
+            raise TurnError("plan 검증 재시도 한도를 초과했습니다")
         result = agent._dispatch(tc, events)
         agent._persist_tool_exchange(tc, result)
         error = isinstance(result, str) and result.startswith("ERROR:")
@@ -108,7 +108,7 @@ def build_turn_graph(agent, events, max_turns: int = MAX_TOOL_TURNS,
         if not state["blocking_error"]:
             return END  # blocking 도구로 턴 종료
         if state["turns"] >= max_turns:
-            raise TurnError(f"턴 내 도구 루프 한도({max_turns}) 초과")
+            raise TurnError(f"한 턴에서 진행할 수 있는 횟수({max_turns}회)를 초과했습니다")
         return "call_llm"  # 검증 실패 피드백 → 재호출 유도
 
     graph = StateGraph(TurnState)

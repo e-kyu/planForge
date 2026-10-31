@@ -40,7 +40,7 @@ def _load_context(session, job) -> tuple:
     if review is None or review.project_id != job.project_id:
         raise ValueError("검수 리포트가 없습니다")
     if review.plan_id != plan.id:
-        raise ValueError("검수 리포트의 plan 세대가 job payload와 다릅니다")
+        raise ValueError("검수 리포트가 다른 plan 버전을 가리킵니다")
     return plan, project, review
 
 
@@ -84,7 +84,7 @@ def _persist_new_generation(session, plan, project, md: str, parsed, selected: l
     """결정론 이중 검증 → 무변경 판정 → 새 DRAFT 세대 + SSOT 미러."""
     validate_plan_markdown(md)  # 이중 방어 — run_plan_revise 내부 검증과 동일 권위
     if md.strip() == (plan.markdown or "").strip():
-        raise PlanError("LLM 결과에 변경이 없습니다 — plan 세대를 만들지 않았습니다")
+        raise PlanError("LLM 결과에 변경이 없습니다 — 새 plan 버전을 만들지 않았습니다")
 
     new_plan = create_generation(session, plan.project_id, markdown=md, docs=parsed.docs,
                                  parsed_ok=True, origin=PlanOrigin.REVIEW,

@@ -66,9 +66,9 @@ def revise_plan_from_review(plan_id: int, body: PlanReviseFromReview,
     plan = require_plan(db, plan_id)
     r = get_report(db, body.review_id)
     if r is None or r.project_id != plan.project_id:
-        raise http_404(f"검수 리포트 없음: {body.review_id}")
+        raise http_404(f"검수 리포트를 찾을 수 없습니다: {body.review_id}")
     if r.plan_id != plan_id:
-        raise http_409("검수 리포트의 plan 세대가 다릅니다 — 검수 대상 세대의 plan에 반영하세요")
+        raise http_409("검수 리포트의 plan 버전이 다릅니다 — 검수 대상 버전의 plan에 반영해 주세요")
 
     findings = list(r.findings or [])
     if body.finding_indices is None:
@@ -76,12 +76,12 @@ def revise_plan_from_review(plan_id: int, body: PlanReviseFromReview,
     else:
         indices = body.finding_indices
         if len(set(indices)) != len(indices):
-            raise http_409("finding_indices에 중복이 있습니다")
+            raise http_409("선택한 발견사항에 중복이 있습니다")
         for i in indices:
             if not 0 <= i < len(findings):
-                raise http_409(f"finding 인덱스가 범위 밖입니다: {i} (0..{len(findings) - 1})")
+                raise http_409(f"선택한 발견사항 번호가 범위를 벗어났습니다: {i} (0..{len(findings) - 1})")
     if not indices:
-        raise http_409("반영할 발견사항이 선택되지 않았습니다")
+        raise http_409("반영할 발견사항을 선택해 주세요")
 
     # 202 계약 — enqueue_accepted가 반환 전에 커밋한다 (get_db teardown 커밋은
     # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).

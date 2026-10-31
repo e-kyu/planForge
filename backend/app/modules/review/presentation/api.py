@@ -47,7 +47,7 @@ def enqueue_review(project_id: int, body: ReviewEnqueueRequest | None = None,
     if plan is None:
         raise http_409("승인된 plan이 없습니다 — 먼저 plan을 승인하세요")
     if not has_any(db, project_id):
-        raise http_409("검수할 파생물이 없습니다 — 먼저 산출물을 생성하세요")
+        raise http_409("검수할 산출물이 없습니다 — 먼저 산출물을 생성해 주세요")
     # 202 계약 — enqueue_accepted가 반환 전에 커밋한다 (get_db teardown 커밋은
     # 응답 전송 후에 실행되므로 202 직후 /jobs refetch가 잡을 놓친다).
     return enqueue_accepted(db, project_id, JobType.REVIEW, {"plan_id": plan.id})
@@ -67,5 +67,5 @@ def list_reviews(project_id: int, db: Session = Depends(get_db)):
 def get_review(project_id: int, review_id: int, db: Session = Depends(get_db)):
     r = get_report(db, review_id)
     if r is None or r.project_id != project_id:
-        raise http_404(f"검수 리포트 없음: {review_id}")
+        raise http_404(f"검수 리포트를 찾을 수 없습니다: {review_id}")
     return ReviewOut.model_validate(r)

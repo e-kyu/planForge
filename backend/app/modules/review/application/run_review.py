@@ -105,7 +105,7 @@ def _check_generation(session, project, plan) -> list[dict]:
         if b.plan_id != plan.id:
             out.append(_finding(
                 "generation", "red", f"산출물 {b.title}_v{b.version_no:02d}.{b.ext}",
-                "이전 plan 세대의 산출물입니다 — plan을 고친 뒤 파생물을 재생성하세요 (재생성 대상)"))
+                "이전 plan 버전으로 만든 산출물입니다 — plan을 고친 뒤 산출물을 재생성해 주세요"))
     return out
 
 
@@ -146,7 +146,7 @@ def _run_llm_review(ctx, session, job, plan, derivative_docs, facts,
     if not llm_ok and not any(f["code"] == "llm-review" for f in findings):
         findings.append(_finding(
             "llm-review", "yellow", "내용 검수",
-            "LLM 내용 검수가 도구 호출 없이 종료됐습니다 — 결정론 검수 결과만 반영됨"))
+            "LLM 내용 검수가 도구 호출 없이 종료됐습니다 — 자동 검사 결과만 반영했습니다"))
     return llm_ok, summary
 
 

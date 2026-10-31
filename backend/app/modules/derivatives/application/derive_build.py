@@ -58,7 +58,7 @@ def _load_job_context(session, job) -> tuple:
     if plan is None or project is None:
         raise ValueError("plan 또는 project가 없습니다")
     if plan.status != PlanStatus.APPROVED:
-        raise PlanError("승인되지 않은 plan으로는 파생물을 생성할 수 없습니다")
+        raise PlanError("승인되지 않은 plan으로는 산출물을 생성할 수 없습니다")
     return plan, project
 
 

@@ -147,7 +147,7 @@ def test_upload_zip_skipped_members_reported(client, db_env):
     saved = [s["name"] for s in r.json()["saved"]]
     assert saved == ["ok/메모.md"]                       # 나머지는 살아서 저장된다
     skipped = r.json()["skipped"]
-    assert skipped == [{"name": "img/logo.png", "reason": "지원하지 않는 확장자"},
+    assert skipped == [{"name": "img/logo.png", "reason": "지원하지 않는 확장자라 저장하지 않았습니다"},
                        {"name": "legacy.txt",
                         "reason": "UTF-8 텍스트 파일만 저장할 수 있습니다"}]
     assert not (db_env / "src-demo" / "sources" / "img").exists()
