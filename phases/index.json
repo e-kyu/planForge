@@ -32,7 +32,8 @@
     },
     {
       "dir": "refine-tone-strings",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-10-31T13:19:34+0900"
     }
   ]
 }
