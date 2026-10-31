@@ -1,7 +1,5 @@
 import type { ReactNode, RefObject } from "react";
-import { Button } from "../../../shared/components/ui";
 import type { Message } from "../../../api/client";
-import { useQuestionPager } from "../viewmodels/useQuestionPager";
 import type { FactCard, QuestionCard } from "./interviewTypes";
 
 /** progress 이벤트 step → 대기 문구 (백엔드 progress_event의 emit-only 진행 알림).
@@ -148,24 +146,16 @@ function StaticCard(props: { title: string; children: ReactNode }) {
   );
 }
 
-/** 이력 질문 카드 본문 (읽기 전용) — 활성 답변 카드와 동일한 1문항 페이징 (UI 일관).
+/** 이력 질문 카드 본문 (읽기 전용) — 이력은 한눈에 보는 기록이므로 전 문항을
+ *  나열한다 (페이징하지 않는다 — 페이저는 활성 답변 카드 AnswersCard 전용).
  *  입력창·제출 버튼 없음 — 이력은 확정 완료 기록이다. e2e-smoke 선택자(.free-input·
  *  '답변 제출'·'승인 · 기록')는 모두 활성 게이트(AnswersCard·FactGate·KeyGate) 대상이라
  *  이 변경의 영향이 없다. */
 function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
-  const pager = useQuestionPager(questions);
-  const q = questions[pager.current];
   return (
-    <div className="q-static">
-      {pager.total > 1 && (
-        <div className="q-dots" aria-hidden="true">
-          {questions.map((_, k) => (
-            <span key={k} className={`q-dot ${k === pager.current ? "q-dot-active" : ""}`} />
-          ))}
-        </div>
-      )}
-      {q && (
-        <div>
+    <ol className="compact-list q-history-list">
+      {questions.map((q, i) => (
+        <li key={i}>
           <div className="q-text">{q.text}</div>
           {q.options && q.options.length > 0 && (
             <ul className="option-list">
@@ -177,20 +167,8 @@ function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
               ))}
             </ul>
           )}
-        </div>
-      )}
-      {pager.total > 1 && (
-        <div className="q-pager">
-          <Button variant="ghost" disabled={pager.isFirst} onClick={pager.prev}>
-            이전
-          </Button>
-          {!pager.isLast && (
-            <Button variant="ghost" onClick={pager.next}>
-              다음
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
+        </li>
+      ))}
+    </ol>
   );
 }

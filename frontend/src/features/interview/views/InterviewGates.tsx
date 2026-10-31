@@ -36,13 +36,6 @@ export function AnswersCard(props: {
       </div>
       {q && (
         <>
-          {pager.total > 1 && (
-            <div className="q-dots" aria-hidden="true">
-              {props.questions.map((_, k) => (
-                <span key={k} className={`q-dot ${k === pager.current ? "q-dot-active" : ""}`} />
-              ))}
-            </div>
-          )}
           <div className="q-text">{q.text}</div>
           {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
             <div className="suggest-row">
@@ -73,44 +66,57 @@ export function AnswersCard(props: {
             </div>
           )}
           {(q.allow_free ?? true) && (
-            <input
-              className="free-input"
-              placeholder="직접 입력 (선택지 대신)"
-              value={props.answers[pager.current]?.free ?? ""}
-              onChange={(e) => props.onPick(pager.current, { option: undefined, free: e.target.value })}
-            />
-          )}
-          {pager.total > 1 && (
-            <div className="q-pager">
-              <Button variant="ghost" disabled={pager.isFirst} onClick={pager.prev}>
-                이전
-              </Button>
-              {!pager.isLast && (
-                <Button variant="ghost" onClick={pager.next}>
-                  다음
-                </Button>
-              )}
+            <div className="free-field">
+              <input
+                className="free-input"
+                placeholder="직접 입력 (선택지 대신)"
+                value={props.answers[pager.current]?.free ?? ""}
+                onChange={(e) => props.onPick(pager.current, { option: undefined, free: e.target.value })}
+              />
             </div>
           )}
         </>
       )}
-      {pager.isLast && (
-        <div className="center-actions">
-          {hasSuggestions && (
-            <Button
-              variant="ghost"
-              disabled={props.busy}
-              title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
-              onClick={props.onSubmitAll}
-            >
-              추천으로 전체 제출
-            </Button>
-          )}
-          <Button onClick={props.onSubmit} disabled={props.busy}>
-            답변 제출
-          </Button>
+      {/* 페이징 표시 — 질문 영역과 이전/다음 액션 사이 */}
+      {pager.total > 1 && (
+        <div className="q-dots" aria-hidden="true">
+          {props.questions.map((_, k) => (
+            <span key={k} className={`q-dot ${k === pager.current ? "q-dot-active" : ""}`} />
+          ))}
         </div>
       )}
+      {/* 액션 한 줄 — 제출(마지막 문항) 좌측 + 문항 이동(이전/다음) 우측. */}
+      <div className="q-actions">
+        {pager.isLast && (
+          <>
+            {hasSuggestions && (
+              <Button
+                variant="ghost"
+                disabled={props.busy}
+                title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
+                onClick={props.onSubmitAll}
+              >
+                추천으로 전체 제출
+              </Button>
+            )}
+            <Button onClick={props.onSubmit} disabled={props.busy}>
+              답변 제출
+            </Button>
+          </>
+        )}
+        {pager.total > 1 && (
+          <div className="q-pager">
+            <Button variant="ghost" disabled={pager.isFirst} onClick={pager.prev}>
+              이전
+            </Button>
+            {!pager.isLast && (
+              <Button variant="ghost" onClick={pager.next}>
+                다음
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

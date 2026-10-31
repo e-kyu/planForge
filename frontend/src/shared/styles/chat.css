@@ -179,6 +179,16 @@
   margin-bottom: 10px;
 }
 
+/* 활성 카드(답변·팩트/핵심 게이트) 타이틀 — 라운드명 가독성 강조 (구분선 + 넓은 간격).
+   이력 카드(compact)는 기본 규칙을 유지한다. */
+.chat-card-active .chat-card-title {
+  font-weight: 700;
+  line-height: 1.5;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+
 .chat-card-active {
   border-color: var(--blue);
 }
@@ -191,11 +201,37 @@
   gap: 6px;
 }
 
+/* 이력 질문 카드의 옵션 목록 — 활성 카드와 같은 시각 언어로 정돈:
+   옵션 라벨은 14px·600(읽기 톤), 근거(description)는 caption·보조 톤,
+   불릿은 활성 카드와 동일한 파랑 '·' 마커(박스 밖 — 계약 동일 수식). */
 .option-list {
-  margin: 4px 0 0;
-  padding-left: 18px;
-  color: var(--text-sub);
-  font-size: var(--fs-caption);
+  margin: var(--space-2) 0 0;
+  padding-left: 14px;
+  list-style: none;
+  line-height: 1.5;
+}
+
+.option-list > li {
+  position: relative;
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--fs-body);
+  margin-bottom: var(--space-1);
+}
+
+.option-list > li::before {
+  content: "·";
+  position: absolute;
+  left: -12px;
+  top: 0;
+  color: var(--blue);
+  font-size: var(--fs-heading);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.option-list > li .hint {
+  font-weight: 400; /* 근거는 라벨과 톤·무게를 나눈다 */
 }
 
 .question-list {
@@ -208,20 +244,26 @@
 }
 
 .q-text {
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-weight: 700;
+  color: var(--navy);
+  font-size: var(--fs-heading); /* 질문 본문을 시각 주체로 (14px → 18px) */
+  line-height: 1.55;
+  margin-bottom: var(--space-4);
   white-space: pre-wrap; /* 질문 본문 개행 보존 — 붕괴(한 줄 압축) 방지 */
 }
 
-/* 선택지 — 세로 단일 열 (1행 1개). .option은 행 전폭을 차지한다. */
+/* 선택지 — 세로 단일 열 (1행 1개). .option은 행 전폭을 차지한다.
+   질문 본문에 종속되도록 들여쓰기. */
 .options {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-4);
 }
 
 .option {
+  position: relative; /* '·' 블릿 기준점 */
   width: 100%;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -229,6 +271,19 @@
   padding: 8px 12px;
   text-align: left;
   transition: border-color var(--speed), background var(--speed);
+}
+
+/* 선택지 블릿 — 박스 밖(좌측 여백)에서 선택지를 가리키는 '·' 마커.
+   .options의 16px 들여쓰기(padding-left) 안에 블릿이 위치한다. */
+.option::before {
+  content: "·";
+  position: absolute;
+  left: -12px;
+  top: 7px;
+  color: var(--blue);
+  font-size: var(--fs-heading);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .option:hover {
@@ -261,7 +316,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-2);
 }
 
 .suggest-label {
@@ -296,6 +351,26 @@
   background: var(--surface);
 }
 
+/* '직접 입력' 래퍼 — 선택지와 동일한 들여쓰기(16px) + '·' 블릿.
+   input은 가상요소를 가질 수 없어 래퍼의 ::before로 마커를 그린다. */
+.free-field {
+  position: relative;
+  margin-bottom: var(--space-3);
+  padding-left: var(--space-4);
+}
+
+.free-field::before {
+  content: "·";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--blue);
+  font-size: var(--fs-heading);
+  font-weight: 700;
+  line-height: 1;
+}
+
 .free-input:focus,
 .fact-edit:focus {
   border-color: var(--blue);
@@ -313,13 +388,16 @@
   flex-wrap: wrap;
 }
 
-/* 문항 페이저 — 답변 카드·이력 카드 공용 (라운드 문항을 1개씩 노출하는 step-by-step).
+/* 문항 페이저 — 활성 답변 카드(AnswersCard) 전용 (이력 카드는 전 문항 나열).
    점 인디케이터(q-dots·q-dot)는 문항 수만큼 나열하고 현재 위치만 강조한다.
-   이전/다음(q-pager)은 카드 하단 액션 영역 위에 놓인다. */
+   액션 행(q-actions)은 제출 액션과 이전/다음(q-pager)을 한 라인에 두고,
+   q-pager를 오른쪽 끝으로 민다. */
 .q-dots {
   display: flex;
-  gap: 5px;
-  margin: 2px 0 10px;
+  justify-content: center; /* 점 인디케이터를 카드 가운데 정렬 */
+  gap: var(--space-2); /* 점 간격 — 8px 토큰 */
+  margin: var(--space-3) 0 var(--space-2); /* 질문↔점↔이동 버튼 간 호흡 */
+  align-items: center;
 }
 
 .q-dot {
@@ -334,15 +412,37 @@
   background: var(--blue);
 }
 
-/* 이력 카드의 단일 문항 래퍼 (compact-list <ol> 번호 매김 대체) */
-.q-static > :last-child {
-  margin-bottom: 0;
+/* 이력 카드(StaticQuestions) 나열 모드 — 문항↔옵션 간격을 타이트하게 유지
+   (나열에서는 18px 질문의 하단 간격이 과하다) */
+.compact-list .q-text {
+  margin-bottom: var(--space-2);
+}
+
+/* 이력 질문 카드의 문항 번호 1~4 — 질문 본문(q-text)과 같은 폰트·크기·색으로
+   일관 (18px·700·navy). KeyGate 등 공용 compact-list는 이 스코프 밖이다. */
+.q-history-list {
+  padding-left: var(--space-5); /* 18px bold 숫자 마커 여유 */
+}
+
+.q-history-list > li::marker {
+  color: var(--navy);
+  font-weight: 700;
+  font-size: var(--fs-heading);
+  line-height: 1.55; /* q-text 행간과 정렬 */
+}
+
+.q-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* 좁은 카드에서 제출·이동 버튼이 겹치지 않도록 복행 허용 */
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .q-pager {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  margin-left: auto; /* 이전/다음을 행 오른쪽 끝 배치 */
 }
 
 .q-pager .btn {
