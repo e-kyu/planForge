@@ -100,6 +100,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   하나만 고치는 PR은 반려).
 - Windows 개발 환경: `PYTHONUTF8=1` 필수(settings.json env). 파일명 금지 문자 정규화는
   legacy `_sanitize_title` 규칙 유지.
+- 루트의 `quick_overview.md`·`webtoon_scenario.json`·`toons/`는 공모전/제출용 자료
+  (에이전트 소개·홍보 웹툰)로 앱 코드가 아니다 — 구현 대상에서 제외.
 - 커밋 전 `git status`로 `workspaces/`·`sources/`·`data/`·`backend/planforge/config.json`
   등 ignored 경로가 섞이지 않았는지 확인.
 - 도구 설정: 저장소 `.ignore`(ripgrep)가 `frontend/openapi.json`·`package-lock.json`·
