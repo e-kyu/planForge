@@ -213,14 +213,16 @@
   white-space: pre-wrap; /* 질문 본문 개행 보존 — 붕괴(한 줄 압축) 방지 */
 }
 
+/* 선택지 — 세로 단일 열 (1행 1개). .option은 행 전폭을 차지한다. */
 .options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: var(--space-2);
   margin-bottom: 6px;
 }
 
 .option {
+  width: 100%;
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: var(--radius-sm);

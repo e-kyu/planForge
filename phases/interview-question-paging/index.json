@@ -13,7 +13,10 @@
     {
       "step": 1,
       "name": "option-vertical",
-      "status": "pending"
+      "status": "completed",
+      "started_at": "2026-10-31T13:58:19+0900",
+      "summary": "chat.css의 .options를 세로 단일 열(flex-direction: column + gap var(--space-2))로 전환하고 .option에 width: 100% 적용 — 선택지 1행 1개 배치, .free-input(기존 전폭)과 수직 통일. 컴포넌트·토큰·fixture 무변경(토큰 4종 세트 트리거 없음), npm run build 통과(0 에러).",
+      "completed_at": "2026-10-31T13:58:45+0900"
     }
   ],
   "created_at": "2026-10-31T13:56:55+0900"
