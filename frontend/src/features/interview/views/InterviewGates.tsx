@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { Button } from "../../../shared/components/ui";
+import { useQuestionPager } from "../viewmodels/useQuestionPager";
 import type { AnswerDraft } from "../viewmodels/useInterview";
 import type { FactCard, QuestionCard } from "./interviewTypes";
 
-/** 답변 카드 (FR-2.3) — 선택지 클릭 + 서술형 입력. 부제에 라운드 목표(round_summary)를 표시한다.
+/** 답변 카드 (FR-2.3) — 라운드 문항을 한 번에 1개씩 노출하는 step-by-step 페이징
+ *  (문항 이동은 답변 여부와 무관한 자유 이동 — 미답변은 서버가 (모름) 마킹).
+ *  제출 액션은 마지막 문항 화면에서만 노출한다. 부제에 라운드 목표(round_summary)를 표시.
  *  선택↔입력은 상호배타다 — 입력하면 선택이 해제, 선택하면 입력이 지워진다
- *  (과거에는 옵션 선택 중 입력값이 제출에서 조용히 폐기됐다). */
+ *  (과거에는 옵션 선택 중 입력값이 제출에서 조용히 폐기됐다).
+ *  onPick의 i는 props.answers(AnswerDraft)의 배열 인덱스 키 = props.questions 실제
+ *  인덱스(= current)다 — 페이징이 키를 바꾸지 않는다. */
 export function AnswersCard(props: {
   questions: QuestionCard[];
   answers: AnswerDraft;
@@ -16,9 +21,11 @@ export function AnswersCard(props: {
   onSubmitAll: () => void;
   busy: boolean;
 }) {
+  const pager = useQuestionPager(props.questions);
+  const q = props.questions[pager.current];
   // 추천 칩·전체제출의 공통 표시 조건 — 서술형 입력으로 반영되는 문항만 (객관 전용 문항 제외)
-  const canFill = (q: QuestionCard) =>
-    (q.suggestions ?? []).length > 0 && (q.allow_free ?? true);
+  const canFill = (qc: QuestionCard) =>
+    (qc.suggestions ?? []).length > 0 && (qc.allow_free ?? true);
   const hasSuggestions = props.questions.some(canFill);
   return (
     <div className="card chat-card chat-card-active">
@@ -27,64 +34,83 @@ export function AnswersCard(props: {
           ? `라운드 ${props.round ?? "?"} — 목표: ${props.summary}`
           : "라운드 답변 — 선택지를 고르거나 직접 적어 주세요"}
       </div>
-      <ol className="question-list">
-        {props.questions.map((q, i) => (
-          <li key={i}>
-            <div className="q-text">{q.text}</div>
-            {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
-              <div className="suggest-row">
-                <span className="suggest-label">추천</span>
-                {q.suggestions!.map((sug, k) => (
-                  <button
-                    key={k}
-                    className="suggest-chip"
-                    onClick={() => props.onPick(i, { option: undefined, free: sug })}
-                  >
-                    {sug}
-                  </button>
-                ))}
-              </div>
-            )}
-            {q.options && q.options.length > 0 && (
-              <div className="options">
-                {q.options.map((o, j) => (
-                  <button
-                    key={j}
-                    className={`option ${props.answers[i]?.option === j ? "option-picked" : ""}`}
-                    onClick={() => props.onPick(i, { option: j, free: undefined })}
-                  >
-                    <span className="option-label">{o.label}</span>
-                    {o.description ? <span className="option-desc">{o.description}</span> : null}
-                  </button>
-                ))}
-              </div>
-            )}
-            {(q.allow_free ?? true) && (
-              <input
-                className="free-input"
-                placeholder="직접 입력 (선택지 대신)"
-                value={props.answers[i]?.free ?? ""}
-                onChange={(e) => props.onPick(i, { option: undefined, free: e.target.value })}
-              />
-            )}
-          </li>
-        ))}
-      </ol>
-      <div className="center-actions">
-        {hasSuggestions && (
-          <Button
-            variant="ghost"
-            disabled={props.busy}
-            title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
-            onClick={props.onSubmitAll}
-          >
-            추천으로 전체 제출
+      {q && (
+        <>
+          {pager.total > 1 && (
+            <div className="q-dots" aria-hidden="true">
+              {props.questions.map((_, k) => (
+                <span key={k} className={`q-dot ${k === pager.current ? "q-dot-active" : ""}`} />
+              ))}
+            </div>
+          )}
+          <div className="q-text">{q.text}</div>
+          {(q.suggestions ?? []).length > 0 && (q.allow_free ?? true) && (
+            <div className="suggest-row">
+              <span className="suggest-label">추천</span>
+              {q.suggestions!.map((sug, k) => (
+                <button
+                  key={k}
+                  className="suggest-chip"
+                  onClick={() => props.onPick(pager.current, { option: undefined, free: sug })}
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+          )}
+          {q.options && q.options.length > 0 && (
+            <div className="options">
+              {q.options.map((o, j) => (
+                <button
+                  key={j}
+                  className={`option ${props.answers[pager.current]?.option === j ? "option-picked" : ""}`}
+                  onClick={() => props.onPick(pager.current, { option: j, free: undefined })}
+                >
+                  <span className="option-label">{o.label}</span>
+                  {o.description ? <span className="option-desc">{o.description}</span> : null}
+                </button>
+              ))}
+            </div>
+          )}
+          {(q.allow_free ?? true) && (
+            <input
+              className="free-input"
+              placeholder="직접 입력 (선택지 대신)"
+              value={props.answers[pager.current]?.free ?? ""}
+              onChange={(e) => props.onPick(pager.current, { option: undefined, free: e.target.value })}
+            />
+          )}
+          {pager.total > 1 && (
+            <div className="q-pager">
+              <Button variant="ghost" disabled={pager.isFirst} onClick={pager.prev}>
+                이전
+              </Button>
+              {!pager.isLast && (
+                <Button variant="ghost" onClick={pager.next}>
+                  다음
+                </Button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {pager.isLast && (
+        <div className="center-actions">
+          {hasSuggestions && (
+            <Button
+              variant="ghost"
+              disabled={props.busy}
+              title="미답변 문항을 추천 후보로 채워 제출합니다 (추천 없는 문항은 (모름)으로 전달)"
+              onClick={props.onSubmitAll}
+            >
+              추천으로 전체 제출
+            </Button>
+          )}
+          <Button onClick={props.onSubmit} disabled={props.busy}>
+            답변 제출
           </Button>
-        )}
-        <Button onClick={props.onSubmit} disabled={props.busy}>
-          답변 제출
-        </Button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -311,6 +311,43 @@
   flex-wrap: wrap;
 }
 
+/* 문항 페이저 — 답변 카드·이력 카드 공용 (라운드 문항을 1개씩 노출하는 step-by-step).
+   점 인디케이터(q-dots·q-dot)는 문항 수만큼 나열하고 현재 위치만 강조한다.
+   이전/다음(q-pager)은 카드 하단 액션 영역 위에 놓인다. */
+.q-dots {
+  display: flex;
+  gap: 5px;
+  margin: 2px 0 10px;
+}
+
+.q-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  transition: background var(--speed);
+}
+
+.q-dot-active {
+  background: var(--blue);
+}
+
+/* 이력 카드의 단일 문항 래퍼 (compact-list <ol> 번호 매김 대체) */
+.q-static > :last-child {
+  margin-bottom: 0;
+}
+
+.q-pager {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.q-pager .btn {
+  padding: 5px 12px;
+  font-size: var(--fs-ui);
+}
+
 .chat-actions {
   display: flex;
   flex-direction: column;

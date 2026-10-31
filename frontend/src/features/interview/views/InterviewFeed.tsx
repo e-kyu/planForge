@@ -1,5 +1,7 @@
 import type { ReactNode, RefObject } from "react";
+import { Button } from "../../../shared/components/ui";
 import type { Message } from "../../../api/client";
+import { useQuestionPager } from "../viewmodels/useQuestionPager";
 import type { FactCard, QuestionCard } from "./interviewTypes";
 
 /** progress 이벤트 step → 대기 문구 (백엔드 progress_event의 emit-only 진행 알림).
@@ -21,8 +23,7 @@ function progressLabel(status: string, phase: string): string {
   return PROGRESS_LABEL[status] ?? status;
 }
 
-/** 채팅 피드 — 이력 메시지 + 스트리밍 버블 + 진행(타이핑) 버블 (표현 전용).
- *  DOM 구조·클래스는 분할 전과 동일하게 유지한다 (e2e 선택자 보존). */
+/** 채팅 피드 — 이력 메시지 + 스트리밍 버블 + 진행(타이핑) 버블 (표현 전용). */
 export function InterviewFeed(props: {
   messages: Message[];
   streaming: string;
@@ -147,12 +148,25 @@ function StaticCard(props: { title: string; children: ReactNode }) {
   );
 }
 
+/** 이력 질문 카드 본문 (읽기 전용) — 활성 답변 카드와 동일한 1문항 페이징 (UI 일관).
+ *  입력창·제출 버튼 없음 — 이력은 확정 완료 기록이다. e2e-smoke 선택자(.free-input·
+ *  '답변 제출'·'승인 · 기록')는 모두 활성 게이트(AnswersCard·FactGate·KeyGate) 대상이라
+ *  이 변경의 영향이 없다. */
 function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
+  const pager = useQuestionPager(questions);
+  const q = questions[pager.current];
   return (
-    <ol className="compact-list">
-      {questions.map((q, i) => (
-        <li key={i}>
-          {q.text}
+    <div className="q-static">
+      {pager.total > 1 && (
+        <div className="q-dots" aria-hidden="true">
+          {questions.map((_, k) => (
+            <span key={k} className={`q-dot ${k === pager.current ? "q-dot-active" : ""}`} />
+          ))}
+        </div>
+      )}
+      {q && (
+        <div>
+          <div className="q-text">{q.text}</div>
           {q.options && q.options.length > 0 && (
             <ul className="option-list">
               {q.options.map((o, j) => (
@@ -163,8 +177,20 @@ function StaticQuestions({ questions }: { questions: QuestionCard[] }) {
               ))}
             </ul>
           )}
-        </li>
-      ))}
-    </ol>
+        </div>
+      )}
+      {pager.total > 1 && (
+        <div className="q-pager">
+          <Button variant="ghost" disabled={pager.isFirst} onClick={pager.prev}>
+            이전
+          </Button>
+          {!pager.isLast && (
+            <Button variant="ghost" onClick={pager.next}>
+              다음
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
