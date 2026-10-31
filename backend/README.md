@@ -38,7 +38,10 @@ backend/
 │   │   ├── interview/            인터뷰 에이전트 + SSE 턴
 │   │   │                         (application/agent.py 상태머신 + turn_graph.py langgraph
 │   │   │                          턴 루프 · domain/events.py SSE 이벤트
-│   │   │                          · infrastructure/transcript.py seq 채번·이력 · prompts/interview.md)
+│   │   │                          · infrastructure/transcript.py seq 채번·이력
+│   │   │                          · prompts/interview.md (base)
+│   │   │                            + arc_{proposal,dev-design,uiux-design}.md (아크 조각 —
+│   │   │                              로더가 세션 doc_slug로 조립, 레거시 proposal 폴백))
 │   │   ├── review/               결정론 검수 + LLM 내용 검수 (application/{run_review,review_agent}.py)
 │   │   └── docloops/             문서별 루프 상태머신(doc_slug·locked/active/done) — 리프 모듈
 │   ├── agents/tools.py           인터뷰 도구 5종 OpenAI function 스키마 + 서버측 검증
@@ -203,7 +206,9 @@ plan 본문의 원본은 DB `Plan.markdown`이다. `app/shared/workspace.py`의 
 
 - `application/agent.py`: `InterviewAgent.run_turn`이 한 POST = 한 턴. 상수
   `MAX_TOOL_TURNS=8`, `MAX_ROUNDS=8`, `PLAN_FIX_ATTEMPTS=3`. system prompt에
-  `prompts/interview.md` + 소스/팩트 컨텍스트를 주입한다.
+  `prompts/interview.md`(base)의 `<!--ARC-->` 마커를 아크 조각
+  `arc_{doc_slug}.md`(레거시 proposal 폴백)로 치환해 조립하고, 소스/팩트
+  컨텍스트를 주입한다.
 - `application/turn_graph.py`: 턴 루프의 langgraph StateGraph 오케스트레이션
   (편차 10). 턴 1건 = 그래프 1회 invoke, checkpointer 없음(세션 상태는 DB가 SSOT).
   도구 판정·게이트·검증·커밋은 서버 코드 권한 — 프리셋 에이전트 미채택.

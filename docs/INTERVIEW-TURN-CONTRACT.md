@@ -126,7 +126,7 @@
 | # | 파일 | 결합 방식 | 계약 변경 시 |
 |---|---|---|---|
 | 1 | `backend/app/agents/tools.py` | `INTERVIEW_TOOLS` 스키마 + `validate_tool_args` (권위·기준점) | **수정** |
-| 2 | `backend/app/modules/interview/application/prompts/interview.md` | 런타임 LLM 프롬프트 — 계약 서술의 원문 | **수정** — 같은 계약으로 |
+| 2 | `backend/app/modules/interview/application/prompts/interview.md (공통 base) + arc_{proposal,dev-design,uiux-design}.md (아크 조각)` | 런타임 LLM 프롬프트 — 계약 서술의 원문 (base+조각 세트가 함께 수행) | **수정** — 같은 계약으로 |
 | 3 | `docs/INTERVIEW-TURN-CONTRACT.md` | 이 대조표 | **수정** — 같은 계약으로 |
 | 4 | `tests/test_agents_tools.py` · `tests/test_interview_api.py` | 스키마 잠금·재시도 잠금 (스크립트된 가짜 LLM) | **수정** — 새 위반 케이스 회귀 테스트 추가 |
 
@@ -181,6 +181,32 @@ interview.md 질문 설계 규칙·퓨샷 본문 3건·톤·아크 예시 질문
 같은 날 step 2~3(사용자 노출 문자 순화)로 파서 오류 문구가 "해석할 수 없는
 불릿" → "해석할 수 없는 목록 항목"으로 바뀌었다 — 위 실패 수업 표의 서버 반응
 인용을 코드에 맞춰 갱신했다(검증·재시도 동작은 무변경).
+
+2026-10-31 인터뷰 프롬프트 아크 분리 (`interview-arc-split` step 0~1):
+`interview.md`를 공통 base + 문서별 아크 조각 3종으로 분리했고, 동시 점검 표의
+2번 파일이 base+조각 세트로 확장됐다 (위 표).
+
+- 분리 구조: base=`interview.md`(행동 규칙·질문 설계 규칙·plan 포맷 공통 규칙·
+  `ask_questions` 완성 예시·톤), 조각=`arc_{slug}.md` 3종 — 각 조각은
+  `## 이번 인터뷰 아크` 헤딩 기재(헤딩부터 자기완결 — 로더가 헤딩을 만들지 않는다)이며
+  아크 서사·예시 질문·`[문서]` 체크리스트·plan 구성 가이드를 담는다. **콘텐츠 규칙
+  소관이 base→base+조각 세트로 확장**된 것이지 소관이 바뀐 게 아니다 — 위 원칙
+  (이 문서는 구조만 잠근다) 대응 파일이 세트로 늘어난 것이다.
+- 로더 조립 규약: `agent.py` `_system_prompt()`가 base의 `<!--ARC-->` 마커
+  (`ARC_MARKER` — 계약 어휘)를 `arc_{doc_slug}.md` 내용으로 치환해 조립하며,
+  slug→파일명(`arc_{slug}.md`)이 SSOT다. `doc_slug=None`(레거시 세션)은
+  `ARC_LEGACY_SLUG = "proposal"` 폴백으로 제안서 아크를 쓰고, 마커 부재 시
+  RuntimeError로 조기 실패한다 (로더 계약 위반 조기 노출). 미상 slug는
+  FileNotFoundError — 세션 생성 시 `require_session_doc`이 DOC_KINDS로 통제하므로
+  정상 경로에서 발생하지 않는다.
+- 점검 결과: `tools.py`는 **점검 후 무수정** — `update_checklist` area 소프트
+  어휘·도구 스키마 계약 무변경 (2026-10-04 제안서 아크 고도화 선례와 동일 기록).
+- 이후 규칙: 아크 콘텐츠(서사·예시 질문·체크리스트 항목·구성 가이드)를 바꾸는 PR은
+  base(`interview.md`)·조각(`arc_*.md` 3종)·이 문서·테스트의 동시 점검 대상이다 —
+  **아크 조각 3종이 계약 4종의 일부**다.
+- 테스트 잠금 근거: `test_system_prompt_carries_arc_sections`(3-slug
+  파라미터화·아크 격리 음성 단언)·`test_interview_uiux_arc_full_flow_to_plan_approval`
+  (UI·UX설계서 full-flow e2e). 기존 e2e/레거시 단언은 무수정으로 통과 — 무손실 이동.
 
 ## 모델 교체 시 체크리스트
 

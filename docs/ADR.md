@@ -508,6 +508,35 @@ PlanForge 코드베이스에 적용하며 내린 결정과 **가이드 대비 �
       README·CLAUDE·docs를 일괄 정합화하고 `pytest`·`openapi diff 0`·프론트 빌드로
       최종 확인한다.
 
+24. **인터뷰 프롬프트 아크 분리 — 공통 base + 문서별 아크 조각 조립** (2026-10-31,
+    `interview-arc-split`, steps 0~1)
+    - 배경: 매 세션은 아크 1개(세션 doc_slug 고정 — 결정 22)로 진행되는데 프롬프트에는
+      3종 아크(제안서·개발설계서·UI·UX설계서) 서사가 함께 실려 매턴 전송됐다 — 무관
+      아크 토큰(~35%)이 회던 시점의 실측에 대응. "한 세션 한 아크" 규칙은
+      `interview.md` 문구로만 방어됐고, UI·UX설계서에는 아크가 없었다 (개발설계서
+      설계 결정 설문·제안서 서사 아크만 존재).
+    - 결정: 프롬프트를 공통 base(`interview.md` — 행동 규칙·질문 설계 규칙·plan 포맷
+      공통 규칙·`ask_questions` 완성 예시·톤) + 문서별 아크 조각
+      (`arc_{proposal,dev-design,uiux-design}.md` — 아크 서사·예시 질문·`[문서]`
+      체크리스트·plan 구성 가이드)로 분리하고, `agent.py` `_system_prompt()`가
+      base의 `<!--ARC-->` 마커(`ARC_MARKER`)를 세션 `doc_slug` 기반 조각으로 치환해
+      조립한다. slug→파일명(`arc_{slug}.md`)이 SSOT, `doc_slug=None`(레거시 세션)은
+      `ARC_LEGACY_SLUG="proposal"` 폴백, 마커 부재 시 RuntimeError·미상 slug는
+      FileNotFoundError로 조기 실패. UI·UX설계서 아크(대상 사용자·페르소나 →
+      화면 목록·정보 구조 → 사용자 흐름 → UI 디자인 방향 → 접근성·제약·비목표)를
+      신규 설계해 3종을 완성했다.
+    - 계약 점검 세트 확장: 아크 조각 3종이 인터뷰 턴 계약 4종의 일부가 된다 — 아크
+      콘텐츠(서사·예시 질문·체크리스트 항목·구성 가이드)를 바꾸는 PR은 base·조각·
+      `docs/INTERVIEW-TURN-CONTRACT.md`·테스트 동시 점검 대상. 콘텐츠 규칙 소관이
+      base→base+조각 세트로 확장된 것이다. `tools.py`는 점검 후 무수정(`update_checklist`
+      area 소프트 어휘·도구 스키마 계약 무변경 — 계약 4종 동시 점검 관행).
+    - 결과: 기존 e2e/레거시 단언 무수정 통과(무손실 이동). 테스트 잠금:
+      `test_system_prompt_carries_arc_sections`(3-slug 파라미터화·조각 고유 마커
+      양성/타 아크 마커 음성 단언)·
+      `test_interview_uiux_arc_full_flow_to_plan_approval`(UI·UX설계서 full-flow e2e,
+      fixture `plan.interview-uiux.md`). 차후 4번째 문서 타입은 조각 파일 추가 +
+      `ARC_POSITIVE`·`ARC_NEGATIVE` 마커 갱신으로 확장한다 (로더·계약 문서 무변경).
+
 ## 토큰 효율 (적용 목적의 정량화)
 
 - 기능 수정 시 읽는 범위: 이전 — `models.py`(9 테이블 전부)·`api/<domain>.py`·`pages/*.tsx` 통째.

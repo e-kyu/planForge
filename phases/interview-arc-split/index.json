@@ -21,7 +21,10 @@
     {
       "step": 2,
       "name": "contract-docs",
-      "status": "pending"
+      "status": "completed",
+      "summary": "계약 문서 동기화 — INTERVIEW-TURN-CONTRACT.md(동시 점검 4종 표 갱신+아크 조각 분리 결정 기록·tools.py 무수정)+CLAUDE.md·backend/README.md·ADR.md, 전체 pytest 통과",
+      "started_at": "2026-10-31T14:52:33+0900",
+      "completed_at": "2026-10-31T14:56:43+0900"
     }
   ],
   "created_at": "2026-10-31T14:37:00+0900"
