@@ -16,7 +16,7 @@
       "status": "completed",
       "summary": "UI·UX설계서 아크 e2e 잠금 — fixture plan.interview-uiux.md(표/구성/2단 골격+미확정 1행)+UIUX_TURNS+uiux_kit+full-flow e2e(아크 격리 음성 단언 포함), 전체 pytest 통과",
       "started_at": "2026-10-31T14:44:10+0900",
-      "completed_at": "2026-10-31T14:52:21+0900"
+      "completed_at": "2026-10-31T14:52:32+0900"
     },
     {
       "step": 2,
