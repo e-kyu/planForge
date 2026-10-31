@@ -37,7 +37,8 @@
     },
     {
       "dir": "interview-question-paging",
-      "status": "pending"
+      "status": "completed",
+      "completed_at": "2026-10-31T13:58:54+0900"
     }
   ]
 }
