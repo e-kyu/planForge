@@ -114,6 +114,12 @@ def plan_interview_proposal_markdown() -> str:
     """인터뷰 e2e 제안서 아크 시나리오의 최종 plan (제안서 단독 문서)."""
     return _fixture_md("plan.interview-proposal.md")
 
+
+def plan_interview_uiux_markdown() -> str:
+    """인터뷰 e2e UI·UX설계서 아크 시나리오의 최종 plan (UI·UX설계서 단독 문서)."""
+    return _fixture_md("plan.interview-uiux.md")
+
+
 class FakeStreamLLM:
     """stream_fn 계약(provider.stream) 가짜 — 인터뷰 에이전트 턴 스크립트.
 

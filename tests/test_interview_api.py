@@ -19,6 +19,7 @@ from fakes import (
     correct_report_payload,
     plan_interview_design_markdown,
     plan_interview_proposal_markdown,
+    plan_interview_uiux_markdown,
     plan_sample_markdown,
     tool_call,
 )
@@ -560,6 +561,178 @@ def test_interview_proposal_arc_full_flow_to_plan_approval(proposal_kit, db_env)
     assert chart.source == "(미확정)"  # 근거 없는 수치 — 근거 라인 (미확정) 원문 보존
     assert chart.chart.series[0].values == [10, 2]  # 수치 무결성 — plan 표기 그대로
     validate_skeleton(filter_slides(plan.slides, "제안서"))  # 골격 검증 (원칙 8)
+
+
+# ------------------------------------------------------- UI·UX설계서 아크 (arc_uiux-design.md 조각 대칭)
+
+UIUX_PLAN_MARKDOWN = plan_interview_uiux_markdown()
+
+UIUX_USERS_Q = ("화면이 누구를 위해 만들어지는지에 따라 화면 목록과 밀도가 달라집니다.\n"
+                "주요 사용자와 각자의 목표는 무엇이라고 보시나요?")
+UIUX_SCREENS_Q = ("산출할 화면 목록과 메뉴·화면 구조를 정하고 싶습니다.\n"
+                  "필요한 화면들과 화면을 묶는 계층 구조를 알려 주시겠어요?")
+
+UIUX_CHECKLIST = [
+    {"id": "u1", "area": "UI·UX설계서",
+     "text": "대상 사용자·페르소나 확정 — 사용자 유형별 니즈·목표를 근거와 함께 정리",
+     "done": False},
+    {"id": "u2", "area": "UI·UX설계서",
+     "text": "화면 목록 확정 — 산출 화면과 각 화면의 목적을 근거와 함께 정리",
+     "done": False},
+    {"id": "u3", "area": "UI·UX설계서",
+     "text": "정보 구조(메뉴·화면 계층) 확정 — `[유형: 구성]` 슬라이드로 확보",
+     "done": False},
+    {"id": "u4", "area": "UI·UX설계서",
+     "text": "주요 사용자 흐름 확정 — 대표 시나리오의 단계·화면 전환을 근거와 함께",
+     "done": False},
+    {"id": "u5", "area": "UI·UX설계서",
+     "text": "UI 디자인 방향 확정 — 톤·밀도·레이아웃 원칙의 결정+이유 포함",
+     "done": False},
+    {"id": "u6", "area": "UI·UX설계서",
+     "text": "접근성·제약·비목표(하지 않는 것) 기재 — 미확정은 `(미확정)` 표기",
+     "done": False},
+]
+
+UIUX_TURNS = [
+    # 턴1 kick: 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) + UI·UX 아크 주제 그룹 질문
+    ("이번 인터뷰는 UI·UX설계서 단독 인터뷰다. 가설 초안: UI·UX 아크(사용자·화면 구조 → 사용자 흐름 → …)를 진행한다.", [
+        ("update_checklist", {"items": UIUX_CHECKLIST}),
+        ("ask_questions", {
+            "round_summary": "라운드 1 목표: 사용자·화면 구조 확정",
+            "questions": [
+                {"text": UIUX_USERS_Q, "options": [
+                    {"label": "실무 담당자",
+                     "description": "등록·조회 같은 반복 업무를 매일 수행"},
+                    {"label": "관리자",
+                     "description": "승인·설정을 주기적으로 수행"}]},
+                {"text": UIUX_SCREENS_Q, "allow_free": True},
+            ]}),
+    ]),
+    # 턴2 answers: 아크 팩트 확인 게이트 (주제당 1개 팩트 — 결정+이유+근거, 정해지지 않은 항목은 (미확정))
+    ("", [
+        ("save_facts", {"facts": [
+            {"content": "사용자: 실무 담당자(등록·조회 반복 업무)와 관리자(승인·설정 주기 수행) — "
+                        "등록 절차 단순화가 핵심 니즈", "source": "인터뷰 라운드 1"},
+            {"content": "화면 목록: 보고 등록·조회 화면과 승인·설정 화면 — 문서 세션은 등록 중심",
+             "source": "인터뷰 라운드 1"},
+            {"content": "정보 구조: 보고 업무(등록·조회 화면) + 관리 업무(승인·설정 화면) 2계층",
+             "source": "인터뷰 라운드 1"},
+            {"content": "디자인 방향: 레이아웃 톤은 단순성 우선(현업 온보딩 부담 반영) — 데이터 표시 "
+                        "밀도는 화면 시안 검토 후 결정 (미확정)", "source": "인터뷰 라운드 1"},
+        ]}),
+    ]),
+    # 턴3 팩트 승인 후: 핵심 메시지 승인 카드 (아크 세 축 1:1)
+    ("", [
+        ("confirm_key_messages", {"messages": [
+            "실무 담당자·관리자 2개 사용자 유형으로 화면 구조를 고정한다",
+            "등록 흐름을 정상·예외 경로로 함께 확정해 되돌림을 없앤다",
+            "단순성 우선 방향으로 시안을 진행하고 남은 항목을 시안 리뷰에서 확정한다"]}),
+    ]),
+    # 턴4 핵심 메시지 승인 후: plan 작성 (단일 문서 — 태그 없음 규칙)
+    ("", [
+        ("write_plan", {"markdown": UIUX_PLAN_MARKDOWN}),
+    ]),
+]
+
+
+@pytest.fixture()
+def uiux_kit(llm_app_factory):
+    """UI·UX설계서 아크 fake LLM 킷 — kit.client·kit.fake (턴 스크립트 UIUX_TURNS)."""
+    fake = FakeStreamLLM(UIUX_TURNS)
+    with llm_app_factory({"interview": fake}) as kit:
+        kit.fake = fake
+        yield kit
+
+
+def test_interview_uiux_arc_full_flow_to_plan_approval(uiux_kit, db_env):
+    """UI·UX설계서 아크 — 가설(아크 · 뼈대 선제시 — 문서는 세션 고정) → 아크 주제 그룹
+    질문 → 아크 팩트(결정+이유+근거, (미확정)) → 핵심 메시지(아크 세 축 1:1) →
+    plan(표·구성·2단 골격·(미확정) 원문 보존) → 승인. 세션은 doc_slug=uiux-design으로
+    고정 — 제안서 e2e와 대칭인 아크 격리 잠금(타 아크 마커 음성 단언)을 함께 검증한다."""
+    uclient, uiux_llm = uiux_kit.client, uiux_kit.fake
+    uclient.post("/api/projects", json={"slug": "uiux-e2e", "title": "UI·UX 아크 e2e"})
+    # UI·UX설계서는 생성 직후 active — 승인 없이 세션 생성 가능 (독립 진행)
+    r = uclient.post("/api/projects/1/interview/sessions", json={"doc_slug": "uiux-design"})
+    assert r.status_code == 201, r.text
+    sid = r.json()["id"]
+
+    # kick — 가설 선제시 + UI·UX 아크 질문 카드
+    events = _sse_events(uclient, f"/api/interview/sessions/{sid}/kick")
+    assert "questions" in [n for n, _ in events]
+    s = uclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "awaiting_answers" and s["round_no"] == 1
+    assert s["pending_round_summary"] == "라운드 1 목표: 사용자·화면 구조 확정"
+    assert any(i["area"] == "UI·UX설계서" for i in s["checklist"])
+    # 주입된 아크 조각 — arc_uiux-design.md의 고유 마커 (아크 격리 양성)
+    first_call = uiux_llm.calls[0]
+    assert first_call[0]["role"] == "system"
+    assert "인터뷰 에이전트" in first_call[0]["content"]
+    assert "UI·UX설계서 구성 가이드" in first_call[0]["content"]
+    assert "화면 목록·정보 구조" in first_call[0]["content"]
+    # 타 아크 마커 유출 없음 (아크 격리 음성 — 조각 고유 마커 기준)
+    assert "제안서 구성 가이드" not in first_call[0]["content"]
+    assert "개발설계서 구성 가이드" not in first_call[0]["content"]
+
+    # 체크리스트 저장 — 아크 조각 체크리스트 6항 전부가 UI·UX설계서 area로 적립된다
+    checklist = s["checklist"]
+    assert len(checklist) == 6
+    assert all(i["area"] == "UI·UX설계서" for i in checklist)
+
+    # answers → 아크 팩트 게이트
+    _sse_events(uclient, f"/api/interview/sessions/{sid}/answers",
+                {"answers": [{"index": 0, "option": 0},
+                             {"index": 1, "free_text": "보고 등록·조회·승인·설정 화면 — "
+                                                       "데이터 표시 밀도는 모름"}]})
+    s = uclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "fact_gate" and len(s["pending_facts"]) == 4
+
+    # 팩트 승인 — 결정+이유+근거가 팩트 저장소에 적립된다 (원칙 4)
+    _sse_events(uclient, f"/api/interview/sessions/{sid}/facts/confirm", {"approve": True})
+    facts = uclient.get("/api/projects/1/facts").json()
+    assert len(facts) == 4
+    contents = " ".join(f["content"] for f in facts)
+    assert "실무 담당자" in contents
+    assert "데이터 표시" in contents and "(미확정)" in contents  # 모름 답변 → (미확정) 팩트
+    # interview-log 미러 — 문서 세션은 문서별 ws 루트에 기록된다 (doc_loops 행 권위)
+    log = db_env / "uiux-e2e" / "uiux-design" / "docs" / "interview-log.md"
+    assert "등록 절차 단순화" in log.read_text(encoding="utf-8")
+    s = uclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "key_message_gate"
+
+    # 핵심 메시지 승인 → plan 작성
+    events = _sse_events(uclient, f"/api/interview/sessions/{sid}/key-messages",
+                         {"approve": True})
+    assert "plan_draft" in [n for n, _ in events]
+    draft = events[[n for n, _ in events].index("plan_draft")][1]
+    assert draft["docs"] == ["UI·UX설계서"]
+    s = uclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "plan_review" and s["key_messages_approved"] is True
+
+    # plan 승인 게이트
+    r = uclient.post(f"/api/plans/{draft['plan_id']}/approve")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "approved"
+    s = uclient.get(f"/api/interview/sessions/{sid}").json()
+    assert s["phase"] == "approved" and s["status"] == "done"
+
+    # plan.md 미러 — 아크 순서 슬라이드·(미확정)이 원문 그대로 보존된다 (문서별 ws 루트, SSOT)
+    mirror = (db_env / "uiux-e2e" / "uiux-design" / "plan.md").read_text(encoding="utf-8")
+    assert mirror == UIUX_PLAN_MARKDOWN
+    from planforge.plan import filter_slides, parse_plan_text, validate_skeleton
+
+    plan = parse_plan_text(mirror)
+    assert plan.docs == ["UI·UX설계서"]
+    assert {s.type for s in plan.slides} >= {"table", "arch", "two-col"}
+    table = next(s for s in plan.slides
+                 if s.type == "table" and s.table.headers == ["항목", "방향", "이유", "상태"])
+    assert any(row[-1] == "(미확정)" for row in table.table.rows)  # (미확정) 상태 셀 원문 보존
+    arch = next(s for s in plan.slides if s.type == "arch")
+    assert [g.name for g in arch.arch] == ["보고 업무", "관리 업무"]
+    two_col = next(s for s in plan.slides if s.type == "two-col")
+    assert two_col.left.heading == "정상 흐름" and two_col.right.heading == "예외·분기"
+    closing = next(s for s in plan.slides if s.type == "closing")
+    assert "(미확정)" in closing.message  # 남은 (미확정)의 확인 계획 — 원문 보존
+    validate_skeleton(filter_slides(plan.slides, "UI·UX설계서"))  # 골격 검증 (원칙 8)
 
 
 # ---------------------------------------------------------------------------
