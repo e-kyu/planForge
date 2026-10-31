@@ -74,15 +74,15 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
     <section>
       <PageHeader
         icon={Layout}
-        title="파생 산출물 (결정론 빌드)"
-        desc="승인된 plan(SSOT)에서 Python 빌더가 결정론적으로 생성합니다. 채번 규칙: 문서제목_vNN.확장자 — 절대 덮어쓰지 않습니다 (원칙 5)."
+        title="산출물 (자동 빌드)"
+        desc="승인된 plan(SSOT)에서 Python 빌더가 자동으로 생성합니다. 버전 번호 규칙: 문서제목_vNN.확장자 — 같은 파일을 절대 덮어쓰지 않습니다."
       >
         {approvedPlan ? (
           <>
             {docs.length > 1 && (
               <select className="doc-select" aria-label="대상 문서" value={docLabelSel} onChange={(e) => setDocLabelSel(e.target.value)}>
                 <option value="" disabled>
-                  문서유형선택
+                  문서 유형을 선택하세요
                 </option>
                 {docs.map((d) => (
                   <option key={d} value={d}>
@@ -105,7 +105,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
             </Button>
           </>
         ) : (
-          <span className="hint">파생물 생성에는 승인된 plan이 필요합니다 (plan 탭).</span>
+          <span className="hint">산출물 생성에는 승인된 plan이 필요합니다 (plan 탭).</span>
         )}
       </PageHeader>
 
@@ -118,7 +118,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
         <Banner kind="info" onDismiss={() => setResidualDismissId(residual.id)}>
           {/* 수치 위반이 남은 채 생성 완료 — 실패가 아니라 검수 자동 큐잉 (결정 17).
               최신 클린 생성이 이 배너를 대체한다 (latestDoneDeriveWithReds 규약). */}
-          생성 완료 — 수치 무결성 미달 {residual.total}건 (🔴 {residual.reds}건) — 검수가
+          생성 완료 — 수치 검증에서 문제 {residual.total}건 (🔴 {residual.reds}건) — 검수가
           자동 실행되어 대조합니다.
           <Button variant="ghost" onClick={() => navigate(`/projects/${pid}/review`)}>
             검수로 이동
@@ -136,7 +136,7 @@ export default function OutputsPanel({ pid, doc = null }: { pid: number; doc?: D
       <div className="card">
         <div className="panel-head">
           <h4>갤러리</h4>
-          <span className="hint">채번 규칙: 문서제목_vNN.확장자 — 절대 덮어쓰지 않습니다 (원칙 5)</span>
+          <span className="hint">버전 번호 규칙: 문서제목_vNN.확장자 — 같은 파일을 절대 덮어쓰지 않습니다</span>
         </div>
         {builds.length === 0 ? (
           <Empty>아직 산출물이 없습니다 — 승인된 plan으로 생성하세요.</Empty>
@@ -248,8 +248,8 @@ function OutputBanners(props: { jobsError: string | null; error: string | null; 
 
 /** 진행 상태창 문구 — running은 job 진행+경과, 그 외(queued)는 큐 직렬 대기 안내. */
 function busyBannerText(job: Job | undefined, now: number): string {
-  if (job?.status === "running") return jobStateText(job, now) ?? "파생물 생성 — 처리 중";
-  return "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (큐 직렬 처리)";
+  if (job?.status === "running") return jobStateText(job, now) ?? "산출물 생성 — 처리 중";
+  return "작업 대기 중 — 앞의 작업이 끝나면 시작됩니다 (한 번에 하나씩 처리)";
 }
 
 /** 미리보기 본문 — md는 마크다운, html은 iframe. */

@@ -25,7 +25,7 @@ export function usePlans(pid: number, doc: DocSlug | null = null) {
     setError(null);
     try {
       const p = await approvePlan(planId);
-      setNotice(`plan ${formatVersion(p.version_no)} 승인 — 산출물 탭에서 파생물을 생성하세요.`);
+      setNotice(`plan ${formatVersion(p.version_no)} 승인 — 산출물 탭에서 산출물을 생성하세요.`);
       await qc.invalidateQueries({ queryKey: ["plans", pid] });
       return p.id;
     } catch (e) {

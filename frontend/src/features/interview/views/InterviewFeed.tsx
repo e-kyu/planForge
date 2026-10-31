@@ -12,7 +12,7 @@ const PROGRESS_LABEL: Record<string, string> = {
 const LLM_LABEL: Record<string, string> = {
   hypothesis: "가설과 질문을 준비하는 중…",
   awaiting_answers: "답변을 정리하는 중…",
-  fact_gate: "팩트 적립을 준비하는 중…",
+  fact_gate: "팩트 기록을 준비하는 중…",
   key_message_gate: "핵심 메시지를 확정하는 중…",
 };
 
@@ -107,7 +107,7 @@ function renderMessage(m: Message, pid: number) {
       );
     case "event:plan_draft":
       return (
-        <StaticCard key={m.seq} title={`plan v${p.version_no ?? "?"} 초안 작성됨`}>
+        <StaticCard key={m.seq} title={`plan v${p.version_no ?? "?"} 초안이 작성됐습니다`}>
           <a href={`#/projects/${pid}/plan`}>plan 탭에서 검토·승인 →</a>
         </StaticCard>
       );

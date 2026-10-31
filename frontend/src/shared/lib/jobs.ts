@@ -83,7 +83,7 @@ export function hasActive(jobs: Job[] | undefined): boolean {
 }
 
 export const JOB_TYPE_LABEL: Record<string, string> = {
-  derive_build: "파생물 생성",
+  derive_build: "산출물 생성",
   review: "검수",
   plan_revise: "plan 반영",
 };
@@ -104,13 +104,13 @@ type ProgressInfo = { step?: string; attempt?: number; max_attempts?: number; de
 
 /** 잡 타입별 step → 한국어 문구 (interview PROGRESS_LABEL 규약과 동일 패턴). */
 const STEP_LABEL: Record<string, Record<string, string>> = {
-  derive_build: { llm: "LLM 변환 중", build: "결정론 빌드 중" },
+  derive_build: { llm: "LLM 변환 중", build: "산출물 조립 중" },
   review: { llm: "검수 분석 중" },
   plan_revise: { llm: "plan 반영 처리 중" },
 };
 
-/** running 잡의 진행 문구 — "결정론 빌드 중 — HTML 작성 중 (재시도 2/3)" 형태. running이 아니면 null.
- * progress가 아직 기록되지 않은 단계(예: review의 결정론 대조 구간)는 fallback 사용. */
+/** running 잡의 진행 문구 — "산출물 조립 중 — HTML 작성 중 (재시도 2/3)" 형태. running이 아니면 null.
+ * progress가 아직 기록되지 않은 단계(예: review의 자동 대조 구간)는 fallback 사용. */
 export function progressText(j: Job, fallback = "처리 중"): string | null {
   if (j.status !== "running") return null;
   const p = j.progress as ProgressInfo | null | undefined;
@@ -136,7 +136,7 @@ export function elapsedText(j: Job, now: number): string | null {
   return `경과 ${Math.floor(m / 60)}시간 ${String(m % 60).padStart(2, "0")}분`;
 }
 
-/** running 잡의 배너/pill 공용 문구 — "파생물 생성 — LLM 변환 중 · 경과 12초".
+/** running 잡의 배너/pill 공용 문구 — "산출물 생성 — LLM 변환 중 · 경과 12초".
  * queued 짝(queuedStateText)과 달리 running 전용 — status가 아니면 null. */
 export function jobStateText(j: Job, now: number, fallback = "처리 중"): string | null {
   if (j.status !== "running") return null;

@@ -131,10 +131,10 @@ export default function InterviewPanel({ pid, doc = null }: { pid: number; doc?:
           </Banner>
         )}
         {phase === "approved" && (
-          <Banner kind="ok">인터뷰가 완료됐습니다 — 산출물 탭에서 파생물을 생성하세요.</Banner>
+          <Banner kind="ok">인터뷰가 완료됐습니다 — 산출물 탭에서 산출물을 생성하세요.</Banner>
         )}
         {phase === "failed" && (
-          <Banner kind="error">세션 실패: {session.error ?? "원인 불명"} — 새 세션으로 다시 시도하세요.</Banner>
+          <Banner kind="error">세션 실패: {session.error ?? "알 수 없는 오류"} — 새 세션으로 다시 시도하세요.</Banner>
         )}
 
         {phase === "awaiting_answers" && session.pending_questions && (

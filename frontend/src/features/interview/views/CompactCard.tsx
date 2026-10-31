@@ -11,7 +11,7 @@ export function CompactCard({ pid }: { pid: number }) {
       {error && <Banner kind="error">{error}</Banner>}
       {result && (
         <Banner kind="ok">
-          압축 완료 — {result.archived.length}건 아카이브, 활성 {result.active_remaining}건.
+          압축 완료 — {result.archived.length}건 아카이브, 남은 팩트 {result.active_remaining}건.
           {result.warnings.length > 0 ? ` (${result.warnings.join(" / ")})` : ""}
         </Banner>
       )}
@@ -52,7 +52,7 @@ export function CompactCard({ pid }: { pid: number }) {
           <Button
             onClick={() => void propose()}
             disabled={busy || (facts?.length ?? 0) < 2}
-            title="중복된 이전 팩트를 아카이브로 밀어내고 최종 확정값만 활성에 남깁니다 (FR-6.1)."
+            title="중복된 이전 팩트를 아카이브로 옮기고 최종 확정값만 살아 있는 팩트로 남깁니다."
           >
             팩트 압축 (통합 + 아카이브)
           </Button>

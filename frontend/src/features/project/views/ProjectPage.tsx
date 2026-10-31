@@ -23,7 +23,7 @@ const TABS: {
 }[] = [
   { key: "sources", no: 1, label: "소스", icon: FileText },
   { key: "interview", no: 2, label: "인터뷰", icon: Bot },
-  { key: "plan", no: 3, label: "계획정의", sub: "plan.md", icon: Layers },
+  { key: "plan", no: 3, label: "기획 정의", sub: "plan.md", icon: Layers },
   { key: "outputs", no: 4, label: "산출물", icon: Layout },
   { key: "review", no: 5, label: "검수", icon: ShieldCheck },
 ];
@@ -119,7 +119,7 @@ export default function ProjectPage({
         {tab === "sources" && <SourcesPanel pid={pid} />}
         {tab === "interview" &&
           (currentLoop?.status === "locked" ? (
-            <Empty>{currentLoop.label}은(는) 잠겨 있습니다(locked).</Empty>
+            <Empty>{currentLoop.label} 문서는 잠겨 있어 인터뷰를 시작할 수 없습니다.</Empty>
           ) : (
             <InterviewPanel key={doc ?? "legacy"} pid={pid} doc={doc} />
           ))}

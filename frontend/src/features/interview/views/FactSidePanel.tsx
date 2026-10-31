@@ -7,7 +7,7 @@ import { CompactCard } from "./CompactCard";
 
 const FACT_FILTERS = [
   { id: "all", label: "전체" },
-  { id: "active", label: "확립" },
+  { id: "active", label: "확정" },
   { id: "unconfirmed", label: "미확정" },
   { id: "archived", label: "아카이브" },
 ] as const;
@@ -66,7 +66,7 @@ export function FactSidePanel({
   }
 
   const shown = (facts ?? []).filter((f) => matchesFilter(f, filter));
-  const STATUS_TEXT = { ok: "확립", warn: "미확정", arch: "아카이브" } as const;
+  const STATUS_TEXT = { ok: "확정", warn: "미확정", arch: "아카이브" } as const;
 
   return (
     <aside className="fact-side" id="fact-side">
@@ -110,7 +110,7 @@ export function FactSidePanel({
       <div className="fact-side-list">
         {shown.length === 0 ? (
           <p className="hint">
-            {filter === "all" ? "아직 팩트가 없습니다 — 인터뷰를 진행하면 적립됩니다." : "해당 상태의 팩트가 없습니다."}
+            {filter === "all" ? "아직 팩트가 없습니다 — 인터뷰를 진행하면 기록됩니다." : "해당 상태의 팩트가 없습니다."}
           </p>
         ) : (
           shown.map((f) => {
@@ -136,8 +136,8 @@ export function FactSidePanel({
       </div>
 
       <p className="fact-side-note">
-        팩트 확정(승인·적립)은 인터뷰의 [팩트 확인] 단계에서만 수행됩니다 — 게이트 우회 기록은 허용되지 않습니다.
-        중복 정리는 하단 [팩트 압축]을 사용하세요.
+        팩트는 인터뷰의 [팩트 확인] 단계에서 승인할 때 저장됩니다 — 확인 단계를 거치지 않은
+        기록은 받지 않습니다. 중복 정리는 하단 [팩트 압축]을 사용하세요.
       </p>
 
       <CompactCard pid={pid} />

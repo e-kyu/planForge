@@ -36,7 +36,7 @@ export default function ReviewPanel({ pid, doc = null }: { pid: number; doc?: st
       <PageHeader
         icon={ShieldCheck}
         title="수치·내용 검수 (Review)"
-        desc="원본 plan.md(SSOT)와 생성된 파생 산출물 간 수치 오기와 구조 손실을 결정론 대조하고, LLM이 내용 검수를 수행합니다."
+        desc="원본 plan.md(SSOT)와 생성된 산출물 간 수치 오기와 구조 손실을 자동으로 대조하고, LLM이 내용 검수를 수행합니다."
       >
         {reviseDone && (
           <Button onClick={() => navigate(`/projects/${pid}/plan`)}>plan 탭으로 이동</Button>
@@ -148,7 +148,7 @@ function busyBannerText(
   if (reviseActive && !reviewActive) {
     return bannerText(reviseJob, now, "plan 반영 처리 중… (LLM plan 수정 + 포맷 검증)");
   }
-  return bannerText(reviewJob, now, "검수 처리 중… (결정론 대조 + LLM 내용 검수)");
+  return bannerText(reviewJob, now, "검수 처리 중… (자동 대조 + LLM 내용 검수)");
 }
 
 /** 활성 잡의 진행 문구 + 경과 — 경과는 useTickingNow의 now로 갱신한다 (폴링만으론 정지).
@@ -193,7 +193,7 @@ function ReviewDetail({ r, pid }: { r: Review; pid: number }) {
               onClick={() => void apply([...selected].sort((a, b) => a - b))}
               disabled={busy || selected.size === 0}
             >
-              선택 항목 plan에 반영 (새 세대)
+              선택한 항목을 plan에 반영 (새 버전 만들기)
             </Button>
           </div>
         )}
@@ -202,7 +202,7 @@ function ReviewDetail({ r, pid }: { r: Review; pid: number }) {
       {notice && <Banner kind="info">{notice}</Banner>}
       {r.summary && <p className="review-summary">{r.summary}</p>}
       {findings.length === 0 ? (
-        <Empty>발견사항이 없습니다 — 결정론 대조와 LLM 내용 검수를 모두 통과했습니다.</Empty>
+        <Empty>발견사항이 없습니다 — 자동 대조와 LLM 내용 검수를 모두 통과했습니다.</Empty>
       ) : (
         <ul className="finding-list">
           {findings.map(({ f, idx }) => {
@@ -233,9 +233,9 @@ function ReviewDetail({ r, pid }: { r: Review; pid: number }) {
         </ul>
       )}
       <p className="hint">
-        반영하면 선택한 발견사항을 LLM이 plan에 고쳐 새 plan 세대(초안)를 만듭니다.
-        plan 탭에서 diff로 검토한 뒤 승인해야 산출물이 재생성됩니다 (FR-4.3 — SSOT 게이트).
-        🔴는 재생성 전 필수 수정 대상입니다.
+        반영하면 선택한 발견사항을 LLM이 plan에 수정 반영해 새 plan 버전(초안)을 만듭니다.
+        plan 탭에서 diff로 검토한 뒤 승인해야 산출물이 재생성됩니다 — 원본은 plan 하나뿐이므로
+        산출물을 직접 수정하는 대신 plan만 고칩니다. 🔴는 재생성 전 필수 수정 대상입니다.
       </p>
     </div>
   );

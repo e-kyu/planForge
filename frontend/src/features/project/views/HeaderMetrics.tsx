@@ -30,17 +30,17 @@ export default function HeaderMetrics(props: { pid: number }) {
 
   return (
     <div className="header-metrics">
-      <div className="metric-pill" title="현재 plan 세대 (SSOT)">
+      <div className="metric-pill" title="현재 plan 버전 (SSOT)">
         <FileCode />
         <div>
           <div className="metric-label">plan SSOT</div>
           <div className="metric-value">{planValue(m.planVersion, m.planStatus)}</div>
         </div>
       </div>
-      <div className="metric-pill" title="확립(활성) 팩트 수">
+      <div className="metric-pill" title="확정된 팩트 수">
         <ShieldCheck />
         <div>
-          <div className="metric-label">확립 팩트</div>
+          <div className="metric-label">확정된 팩트</div>
           <div className="metric-value">{m.activeFacts == null ? "—" : `${m.activeFacts}건`}</div>
         </div>
       </div>

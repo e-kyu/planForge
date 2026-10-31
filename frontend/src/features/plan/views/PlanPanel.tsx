@@ -101,7 +101,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
     <section className={`plan-layout ${planCollapsed ? "plan-collapsed" : ""}`}>
       <aside className="plan-side" id="plan-side">
         <div className="plan-side-head">
-          <h3>plan 세대 (DB Plan — SSOT)</h3>
+          <h3>plan 버전 (DB Plan — SSOT)</h3>
           <button
             type="button"
             ref={headBtn}
@@ -109,8 +109,8 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
             onClick={toggle}
             aria-expanded={!planCollapsed}
             aria-controls="plan-side"
-            aria-label="plan 세대 접기"
-            title="plan 세대 접기"
+            aria-label="plan 버전 목록 접기"
+            title="plan 버전 목록 접기"
           >
             <PanelLeftClose aria-hidden="true" />
           </button>
@@ -147,13 +147,13 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
             onClick={toggle}
             aria-expanded={!planCollapsed}
             aria-controls="plan-side"
-            aria-label="plan 세대 펼치기"
-            title="plan 세대 펼치기"
+            aria-label="plan 버전 목록 펼치기"
+            title="plan 버전 목록 펼치기"
           >
             <PanelLeftOpen aria-hidden="true" />
           </button>
           <span className="plan-rail-label" aria-hidden="true">
-            플랜
+            plan
           </span>
         </div>
       </aside>
@@ -193,7 +193,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
               disabled={busy || !before}
               onClick={() => setMode(before ? "diff" : "view")}
             >
-              {before ? `이전 세대 대비 (${formatVersion(before.version_no)} → ${formatVersion(sel.version_no)})` : "diff (이전 세대 없음)"}
+              {before ? `이전 버전과 비교 (${formatVersion(before.version_no)} → ${formatVersion(sel.version_no)})` : "diff (이전 버전 없음)"}
             </Button>
             <StyleToggle
               mode={mode}
@@ -207,7 +207,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
             {mode === "edit" && (
               <>
                 <Button onClick={() => void onRevise()} disabled={busy || draft === sel.markdown}>
-                  저장 (새 세대)
+                  저장 (새 버전)
                 </Button>
                 <Button
                   variant="ghost"
@@ -223,7 +223,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
             )}
             {mode === "view" && sel.status === "draft" && (
               <Button variant="ok" onClick={() => void onApprove()} disabled={busy}>
-                승인 (파생 단계 진입)
+                승인 (산출물 생성 단계로 넘어갑니다)
               </Button>
             )}
           </div>
@@ -251,7 +251,7 @@ export default function PlanPanel({ pid, doc = null }: { pid: number; doc?: DocS
           {mode === "diff" && before && viewStyle === "viewer" && (
             <div className="plan-viewer-split">
               <div className="plan-viewer-col">
-                <div className="plan-viewer-head">{formatVersion(before.version_no)} (이전 세대)</div>
+                <div className="plan-viewer-head">{formatVersion(before.version_no)} (이전 버전)</div>
                 <MarkdownPreview markdown={before.markdown} />
               </div>
               <div className="plan-viewer-col">

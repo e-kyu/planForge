@@ -6,14 +6,14 @@
 export const PLAN_STATUS_LABEL: Record<string, string> = {
   draft: "초안",
   approved: "승인됨",
-  superseded: "이전 세대",
+  superseded: "이전 버전",
 };
 
 /** plan 세대 상태 약어 — 헤더 메트릭(HeaderMetrics). 목록 배지와 문구가 다르다. */
 export const PLAN_STATUS_SHORT_LABEL: Record<string, string> = {
   draft: "초안",
   approved: "승인",
-  superseded: "대체됨",
+  superseded: "이전 버전",
 };
 
 /** job 상태 — 아이콘·라벨(작업 큐). */

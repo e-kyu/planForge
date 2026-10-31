@@ -130,10 +130,10 @@ export function FactGate(props: {
       </ul>
       <div className="center-actions">
         <Button onClick={() => props.onConfirm(true, edits)} disabled={props.busy}>
-          승인 · 적립
+          승인 · 기록
         </Button>
         <Button variant="ghost" onClick={() => props.onConfirm(false, [])} disabled={props.busy}>
-          반려 (다시 제시)
+          거절 (다시 제시)
         </Button>
       </div>
     </div>
@@ -164,11 +164,11 @@ export function KeyGate(props: {
           disabled={props.busy}
           onClick={() => props.onConfirm(false, feedback.trim() || undefined)}
         >
-          반려
+          거절
         </Button>
         <input
           className="free-input"
-          placeholder="반려 사유 / 수정 방향 (선택)"
+          placeholder="거절 사유 / 수정 방향 (선택)"
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
         />

@@ -72,7 +72,7 @@ export function useOutputs(pid: number, doc: DocSlug | null = null) {
       fmts?: string[];
     }) => enqueueDerivative(pid, body),
     onSuccess: async (job) => {
-      setNotice(`작업 큐 진입 (#${job.id}) — 워커가 직렬 처리합니다.`);
+      setNotice(`작업이 큐에 등록됐습니다 (#${job.id}) — 워커가 순서대로 처리합니다.`);
       seedJob(qc, pid, job);
       await refresh();
     },

@@ -90,7 +90,7 @@ export function useReviews(pid: number, docSlug?: string | null) {
     setPending(true);
     enqueueReview(pid, docSlug)
       .then((job) => {
-        setNotice(`검수 작업 큐 진입 (#${job.id}) — 워커가 결정론+LLM 검수를 실행합니다.`);
+        setNotice(`검수 작업이 큐에 등록됐습니다 (#${job.id}) — 워커가 자동 검사+LLM 검수를 실행합니다.`);
         seedJob(qc, pid, job);
         return refresh();
       })
@@ -128,7 +128,7 @@ export function useReviewApply(planId: number, reviewId: number, pid: number) {
     setNotice(null);
     try {
       const job = await reviseFromReview(planId, reviewId, findingIndices);
-      setNotice(`plan 반영 작업 큐 진입 (#${job.id}) — 워커가 LLM plan 수정을 실행합니다.`);
+      setNotice(`plan 반영 작업이 큐에 등록됐습니다 (#${job.id}) — 워커가 LLM plan 수정을 실행합니다.`);
       // jobs 갱신 — 시딩으로 최신 revise 잡(queued)이 즉시 목록에 들어오며 과거 실패
       // 파생 배너가 소멸하고, invalidate-refetch가 서버 목록으로 확정한다
       seedJob(qc, pid, job);
