@@ -56,7 +56,7 @@ def test_load_fails_when_skeleton_missing():
     with pytest.raises(SkeletonError) as ei:
         load_plan_for_doc(SKELETON_BAD)
     msg = str(ei.value)
-    assert "골격 검증 미달" in msg
+    assert "필수 슬라이드가 최소 1개씩 없어" in msg
     assert "표지, 목차, 마무리" in msg        # 누락 유형 목록 원문 그대로
     assert "내용" not in msg                  # 표 슬라이드 1개는 있으므로 내용은 충족
 
@@ -70,7 +70,7 @@ def test_validate_each_doc_names_failing_doc():
     plan = parse_plan_file(SKELETON_BAD)
     with pytest.raises(SkeletonError) as ei:
         validate_each_doc(plan)
-    assert str(ei.value).startswith("문서 '제안서': 골격 검증 미달")
+    assert str(ei.value).startswith("문서 '제안서': 필수 슬라이드가 최소 1개씩 없어")
 
 
 # ---------------------------------------------------------------- Deriver 위임

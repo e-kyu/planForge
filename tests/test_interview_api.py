@@ -887,7 +887,7 @@ def test_plan_format_feedback_carries_remedy(base_kit):
     assert len(fake_llm.calls) == 5                       # 실패 1회 → 재시도 1회에 수렴
     fb = [m["content"] for m in fake_llm.calls[4] if m["role"] == "tool"][-1]
     assert fb.startswith("ERROR: plan 포맷 검증 실패")
-    assert "슬라이드 2: 해석할 수 없는 불릿입니다: 내용:" in fb  # 파서 원문 그대로 (변경 없음)
+    assert "슬라이드 2: 해석할 수 없는 목록 항목입니다: 내용:" in fb  # 파서 원문 그대로
     assert "치트시트" in fb
     assert "핵심문장: 01 배경 및 필요성 / 02 주요 기능 / 03 기대 효과" in fb  # 모범 표기
     assert "- 표: [항목 | 형식 | 상태]" in fb              # 표 행 교정 예 — 치트시트에서만 나온다

@@ -36,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     sn.add_argument("--doc", help="대상 문서명 (기본: 첫 산출 문서)")
     sn.set_defaults(fn=cmd_numcheck)
 
-    sd = sub.add_parser("derive", help="plan.md → 파생물 생성 (LLM 변환 + 빌드) — make-ppt/make-doc 이식")
+    sd = sub.add_parser("derive", help="plan.md → 산출물 생성 (LLM 변환 + 빌드) — make-ppt/make-doc 이식")
     sd.add_argument("plan")
     sd.add_argument("--workspace", required=True, help="워크스페이스 디렉토리 (work/·output/ 생성)")
     sd.add_argument("--kind", choices=["slides", "report"], required=True)

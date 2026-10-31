@@ -154,19 +154,20 @@ def _doc_tokens(doc: dict) -> Counter:
 
 def _diff(plan: Counter, derived: Counter, where: str, out: list[Finding],
           strict_extra: bool = True) -> None:
-    missing = plan - derived   # plan에 있는데 파생물에 없음 (유실)
-    extra = derived - plan     # 파생물 초과분
+    missing = plan - derived   # plan에 있는데 산출물에 없음 (유실)
+    extra = derived - plan     # 산출물 초과분
     for tok, n in sorted(missing.items()):
         out.append(Finding("numeric-missing", "red", where,
-                           f"수치 '{tok}'가 plan에는 있으나 파생물에서 사라졌습니다 ({n}회)"))
+                           f"수치 '{tok}'가 plan에는 있지만 산출물에서 사라졌습니다 ({n}회)"))
     for tok, n in sorted(extra.items()):
         if strict_extra or plan[tok] == 0:
             out.append(Finding("numeric-extra", "red", where,
-                               f"수치 '{tok}'가 plan에 없는데 파생물에 추가되었습니다 ({n}회)"))
+                               f"수치 '{tok}'가 plan에 없는데 산출물에 추가되었습니다 ({n}회)"))
         else:
-            # 문서체 재구성에서의 자연스러운 재진술 — 창작은 아니므로 경고
+            # 문서체 재구성에서의 자연스러운 수치 재진술 — 창작은 아니므로 경고
             out.append(Finding("numeric-extra", "yellow", where,
-                               f"수치 '{tok}'가 plan보다 {n}회 더 많이 언급되었습니다 (재진술)"))
+                               f"수치 '{tok}'가 plan보다 {n}회 더 많이 언급되었습니다 "
+                               "(같은 수치가 다른 표현으로 반복)"))
 
 
 # ---------------------------------------------------------------- slides.json 대조
@@ -205,10 +206,10 @@ def check_slides(plan_slides: list[Slide], key_messages: list[str], slides_doc: 
         j_text = " ".join(_iter_strings(js))
         if p_unconf and UNCONFIRMED not in j_text:
             out.append(Finding("unconfirmed-lost", "red", where,
-                               "plan의 (미확정) 표기가 파생물에서 사라졌습니다"))
+                               "plan의 (미확정) 표기가 산출물에서 사라졌습니다"))
         if not p_unconf and UNCONFIRMED in j_text:
             out.append(Finding("unconfirmed-extra", "red", where,
-                               "plan에 (미확정)이 없는데 파생물에 추가되었습니다"))
+                               "plan에 (미확정)이 없는데 산출물에 추가되었습니다"))
         # 근거/출처 대조는 report.json 쪽에서만 한다 — slides.json에는 표지 등
         # 근거를 담을 슬롯이 없어 유실로 볼 수 없다 (table.note·chart.source는 캡션 역할).
     return out
@@ -231,7 +232,7 @@ def check_report(plan_slides: list[Slide], key_messages: list[str], report_doc: 
         where = f"슬라이드 {ps.no} ({ps.type})"
         if (UNCONFIRMED in (ps.source or "") or UNCONFIRMED in (ps.message or "")) and UNCONFIRMED not in r_text:
             out.append(Finding("unconfirmed-lost", "red", where,
-                               "plan의 (미확정) 표기가 문서 어디에도 남아있지 않습니다"))
+                               "plan의 (미확정) 표기가 문서 어디에도 남아 있지 않습니다"))
         if ps.source and not ps.source.startswith("(") and ps.source not in r_text:
             out.append(Finding("source-missing", "yellow", where,
                                f"근거/출처 문자열이 문서에 없습니다: {ps.source[:50]}"))

@@ -35,6 +35,6 @@ def validate_skeleton(filtered: list[Slide]) -> None:
         missing.append("내용(2단/표/차트/구성)")
     if missing:
         raise SkeletonError(
-            "골격 검증 미달 — 다음 슬라이드가 최소 1개씩 없어 생성을 중단합니다: "
+            "필수 슬라이드가 최소 1개씩 없어 생성을 중단합니다: "
             + ", ".join(missing)
-            + " (plan.md 수정 필요)")
+            + " — plan.md를 수정해 주세요")

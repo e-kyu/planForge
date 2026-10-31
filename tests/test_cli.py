@@ -28,7 +28,7 @@ def test_numcheck_red_exits_one(capsys):
                  "--doc", "제안서"]) == 1
     out = capsys.readouterr().out
     assert "[red]" in out
-    assert "파생물 재생성 필요" in out
+    assert "산출물을 다시 생성해 주세요" in out
 
 
 def test_numcheck_missing_target_exits_two(capsys):

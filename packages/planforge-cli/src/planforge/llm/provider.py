@@ -214,8 +214,8 @@ class OpenAICompatProvider:
             for chunk in inner:
                 if time.monotonic() > deadline:
                     raise TimeoutError(
-                        f"LLM 호출이 {STREAM_DEADLINE:.0f}초를 넘었다 — 스트림이 정체됐다 "
-                        "(keepalive 트리클은 read timeout으로 잡히지 않는다)")
+                        f"LLM 호출이 {STREAM_DEADLINE:.0f}초를 넘었습니다 — 스트림이 정체됐습니다 "
+                        "(keepalive 트리클은 read timeout으로 잡히지 않습니다)")
                 for part in _text_deltas(chunk):
                     _mark_first_token()
                     yield {"type": "text", "delta": part}

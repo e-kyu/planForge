@@ -3,7 +3,7 @@
 
 LLM이 판단할 수 없는 기계적 대조를 담당한다:
 - 문서 태그 검수: 태그 어휘·문서별 골격·목차 재채번 정합
-- 팩트 대조: 활성 팩트의 수치가 plan에 반영됐는지 / (미확정)이 팩트로 해소 가능한지
+- 팩트 대조: 활성 팩트의 수치가 plan에 반영됐는지 / (미확정)이 팩트로 해결 가능한지
 - 수치 무결성·구조 대조는 numcheck가, 세대 대응성은 DB 오케스트레이터(워커)가 담당한다.
 
 발견사항은 numcheck.Finding을 그대로 쓴다 (severity: red|yellow|white).
@@ -46,14 +46,14 @@ def check_doc_tags(plan: Plan) -> list[Finding]:
                 if missing:
                     out.append(Finding(
                         "doc-skeleton", "red", f"문서 '{d}'",
-                        "문서별 골격 미달 — 다음 슬라이드가 없습니다: " + ", ".join(missing)))
-            # 목차 불릿 ↔ 실제 내용 슬라이드 정합 (재채번 01..NN, 누락·과다 참조 없음)
+                        "문서별 필수 슬라이드가 없습니다: " + ", ".join(missing)))
+            # 목차 항목 ↔ 실제 내용 슬라이드 정합 (번호 01..NN, 빠지거나 불필요한 항목 없음)
             out.extend(_check_toc(d, filtered))
     return out
 
 
 def _check_toc(doc: str, filtered: list[Slide]) -> list[Finding]:
-    """해당 문서의 목차 불릿이 태그 필터 결과(내용 슬라이드)와 일치하는지."""
+    """해당 문서의 목차 항목이 태그 필터 결과(내용 슬라이드)와 일치하는지."""
     tocs = [s for s in filtered if s.type == "toc"]
     content = [s for s in filtered if s.is_content()]
     out: list[Finding] = []
@@ -64,14 +64,14 @@ def _check_toc(doc: str, filtered: list[Slide]) -> list[Finding]:
     if len(items) != len(content):
         out.append(Finding(
             "doc-toc", "yellow", f"문서 '{doc}' 목차 (슬라이드 {toc.no})",
-            f"목차 불릿 {len(items)}개 vs 내용 슬라이드 {len(content)}개 — "
-            "누락·과다 참조가 있습니다"))
+            f"목차 항목 {len(items)}개 vs 내용 슬라이드 {len(content)}개 — "
+            "빠졌거나 불필요한 항목이 있습니다"))
     labels = [it.label for it in items]
     expect = [f"{i + 1:02d}" for i in range(len(labels))]
     if labels != expect:
         out.append(Finding(
             "doc-toc", "yellow", f"문서 '{doc}' 목차 (슬라이드 {toc.no})",
-            f"목차 라벨이 01..{len(labels):02d} 재채번이 아닙니다: {', '.join(labels)}"))
+            f"목차 라벨이 01..{len(labels):02d} 순서에 맞지 않습니다: {', '.join(labels)}"))
     return out
 
 
@@ -101,11 +101,11 @@ def _fact_contexts(content: str, missing: set[str], before: int = 14, after: int
 
 
 def check_facts(plan: Plan, facts: list[dict]) -> list[Finding]:
-    """확립 팩트 ↔ plan 대조.
+    """확정 팩트 ↔ plan 대조.
 
     - 팩트의 수치가 plan에 없으면 red (수치 유실 — plan 반영 누락). 메시지에는
       누락 수치의 원문 문맥 조각과 팩트 전문·출처를 담아 사용자가 수치를 식별하게 한다.
-    - plan의 (미확정) 항목과 팩트가 같은 수치를 담으면 yellow — (미확정) 해소 대상.
+    - plan의 (미확정) 항목과 팩트가 같은 수치를 담으면 yellow — (미확정) 해결 대상.
     facts: [{content, source, date}] — DB Fact 행의 dict 표현.
     """
     out: list[Finding] = []
@@ -127,11 +127,11 @@ def check_facts(plan: Plan, facts: list[dict]) -> list[Finding]:
             src_part = f" (출처: {src})" if src else ""
             quote = content[:_FACT_QUOTE_MAX] + ("…" if len(content) > _FACT_QUOTE_MAX else "")
             out.append(Finding(
-                "fact-mismatch", "red", "확립 팩트 대조",
+                "fact-mismatch", "red", "확정 팩트 대조",
                 f"팩트의 수치 {', '.join(repr(t) for t in sorted(missing))}가 plan에 없습니다"
                 f"{ctx_part} — 팩트: {quote}{src_part}",
                 "plan에 수치를 반영하거나, 수치가 틀렸다면 팩트를 정정하세요."))
-        # (미확정) 해소 제안: plan의 미확정 슬라이드와 같은 수치를 팩트가 갖고 있으면
+        # (미확정) 해결 제안: plan의 미확정 슬라이드와 같은 수치를 팩트가 갖고 있으면
         for s in plan.slides:
             if UNCONFIRMED not in (s.source or "") and UNCONFIRMED not in (s.message or ""):
                 continue
@@ -140,7 +140,8 @@ def check_facts(plan: Plan, facts: list[dict]) -> list[Finding]:
                 quote = content[:_FACT_QUOTE_MAX] + ("…" if len(content) > _FACT_QUOTE_MAX else "")
                 out.append(Finding(
                     "unconfirmed-resolvable", "yellow", f"슬라이드 {s.no} ({s.type})",
-                    f"(미확정) 수치가 확립 팩트와 일치합니다 — 확인 후 plan에서 표기를 해소하세요: "
+                    f"(미확정) 수치가 확정 팩트와 일치합니다 — 확인 후 plan에서 "
+                    f"(미확정) 표기를 확정 수치로 바꿔 주세요: "
                     f"{quote}"))
                 break
     return out

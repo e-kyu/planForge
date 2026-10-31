@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""`planforge derive` — plan.md → 파생물 생성 (LLM 변환 + 빌드)."""
+"""`planforge derive` — plan.md → 산출물 생성 (LLM 변환 + 빌드)."""
 from __future__ import annotations
 
 from ...common.configpath import resolve_config_path
@@ -23,7 +23,7 @@ def cmd_derive(args) -> int:
     # (미확정) 탐지를 한 번에 하며, 그 결과를 Deriver에 그대로 넘겨 재파싱하지 않는다.
     prepared = load_plan_for_doc(args.plan, args.doc)
     if prepared.unconfirmed and not args.allow_unconfirmed:
-        print(f"(미확정) 표기가 남은 슬라이드: {prepared.unconfirmed} — 확정 수치로 채울지 확인이 필요합니다.")
+        print(f"(미확정) 표기가 남은 슬라이드: {prepared.unconfirmed} — 확정 수치로 채울지 확인해 주세요.")
         print("그대로 진행하려면 --allow-unconfirmed 옵션을 사용하세요.")
         return 2
 
@@ -34,11 +34,11 @@ def cmd_derive(args) -> int:
     if res.findings:
         # 결정 17 — 측정만 하고 진행한다(생성 실패 아님). 판정 권위는 검수 단계.
         reds = sum(1 for f in res.findings if f.severity == "red")
-        print(f"주의: 수치 무결성 대조에서 미달 {len(res.findings)}건 (🔴 {reds}건)")
+        print(f"주의: 수치 대조에서 문제 {len(res.findings)}건 (🔴 {reds}건)")
         for f in res.findings:
             print(f"  - {f}")
-        print("수치 판정은 검수 단계 소관입니다 (결정 17) — 위반 여부 게이트는 "
-              "`python -m planforge numcheck`(exit 1 계약)로 별행하세요.")
+        print("수치 판정은 검수 단계에서 확인합니다 — 위반 검사는 "
+              "`python -m planforge numcheck`(exit 1 계약)으로 별도로 실행해 주세요.")
     if res.unconfirmed:
         print(f"주의: (미확정) 표기 슬라이드 {res.unconfirmed} — 산출물에 그대로 유지됩니다")
     if args.no_build:

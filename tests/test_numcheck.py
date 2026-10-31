@@ -168,7 +168,7 @@ def test_report_repetition_is_yellow_not_red():
     }
     findings = check_report(plan_slides, KEY_MESSAGES, report)
     rep = [f for f in findings if f.code == "numeric-extra" and f.severity == "yellow"]
-    assert any("10" in f.message and "재진술" in f.message for f in rep)
+    assert any("10" in f.message and "다른 표현으로 반복" in f.message for f in rep)
     # '10'의 초과분이 red(창작)로 오분류되지 않는지 — 창작 판정은 test_report_fabrication_is_red
     assert not any(f.code == "numeric-extra" and f.severity == "red" and "10" in f.message
                    for f in findings)

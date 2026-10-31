@@ -24,13 +24,13 @@ def test_doc_tags_unknown_tag_is_red():
 
 def test_doc_tags_toc_mismatch_and_renumber():
     plan = parse_plan_text(MULTIDOC_PLAN)
-    # 제안서 목차: 불릿 3개 ↔ 내용 슬라이드 1개 (표 1개) → 누락 참조 + 라벨 정상이므로 불일치 1건
+    # 제안서 목차: 항목 3개 ↔ 내용 슬라이드 1개 (표 1개) → 빠진 항목 + 라벨 정상이므로 불일치 1건
     out = check_doc_tags(plan)
     toc_finds = [f for f in out if f.code == "doc-toc"]
-    assert any("불릿 3개 vs 내용 슬라이드 1개" in f.message for f in toc_finds)
-    # 라벨은 01..03 재채번 정합 → 재채번 위반은 없어야 한다
-    assert not any("재채번이 아닙니다" in f.message for f in toc_finds)
-    # 개발설계서: 불릿 3개 ↔ 내용 1개(구성) → 동일하게 1건
+    assert any("목차 항목 3개 vs 내용 슬라이드 1개" in f.message for f in toc_finds)
+    # 라벨은 01..03 순서 정합 → 순서 위반은 없어야 한다
+    assert not any("순서에 맞지 않습니다" in f.message for f in toc_finds)
+    # 개발설계서: 항목 3개 ↔ 내용 1개(구성) → 동일하게 1건
     assert sum(1 for f in toc_finds if "'개발설계서'" in f.where) == 1
 
 
@@ -38,7 +38,7 @@ def test_doc_tags_bad_renumber_is_yellow():
     plan = parse_plan_text(MULTIDOC_PLAN)
     plan.slides[1].message = "02 현황, 05 구성, 99 요청"  # 라벨 02/05/99
     out = check_doc_tags(plan)
-    assert any("재채번이 아닙니다" in f.message for f in out)
+    assert any("순서에 맞지 않습니다" in f.message for f in out)
 
 
 def test_facts_missing_numeric_is_red():

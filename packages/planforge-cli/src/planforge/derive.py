@@ -175,7 +175,7 @@ class Deriver:
             except ValueError as e:  # 스키마 위반 — 빌더 검증 오류를 그대로 되돌려 재변환
                 last_kind, last_detail = "schema", f"  - {e}"
                 return ("retry",
-                        f"스키마 검증 실패 — 아래 오류를 해소해 {tool_name} 도구를 다시 호출하라:\n{e}")
+                        f"스키마 검증 실패 — 아래 오류를 해결해 {tool_name} 도구를 다시 호출해 주세요:\n{e}")
             # 수치 위반은 여기서 막지 않는다 — 측정해 검수 단계에 이관 (결정 17)
             return ("ok", payload)
 
@@ -207,7 +207,7 @@ class Deriver:
         msg: str
         misses = final["attempts"] - validated  # 도구 없이 텍스트로만 끝난 응답 수
         if last_kind == "schema":
-            msg = (f"스키마 검증 실패가 {self.max_attempts}회 재시도 후에도 해소되지 않았습니다 "
+            msg = (f"스키마 검증 실패가 {self.max_attempts}회 재시도 후에도 해결되지 않았습니다 "
                    f"— LLM 결과가 {tool_name} 스키마 요구 구조를 만족하지 못했습니다:\n"
                    + last_detail)
         else:
@@ -220,7 +220,7 @@ class Deriver:
                    f"마지막 응답(앞 500자): {preview or '(텍스트 응답 없음)'}")
         if validated and misses:
             msg += (f"\n\n(참고: 마지막 {misses}회 응답은 {tool_name} 도구 호출 없이 "
-                    "텍스트로만 반응했다 — 재시도가 무응답으로 끝났다)")
+                    "텍스트로만 반응했습니다 — 재시도가 무응답으로 끝났습니다)")
         return DeriveSchemaError(msg) if last_kind == "schema" else DeriveError(msg)
 
     def _snap_literals(self, slides, payload: dict) -> None:

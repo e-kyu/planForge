@@ -186,12 +186,12 @@ def _parse_slide_line(slide: Slide, line: str, cur_target) -> tuple[str, object]
             if slide.type == "chart" and slide.chart is not None:
                 slide.chart.source = val
         else:
-            raise PlanError(f"슬라이드 {slide.no}: 해석할 수 없는 불릿입니다: {stripped[:40]}")
+            raise PlanError(f"슬라이드 {slide.no}: 해석할 수 없는 목록 항목입니다: {stripped[:40]}")
         return None
 
     # 하위 불릿 (유형별 표기의 데이터 행)
     if cur_target is None:
-        raise PlanError(f"슬라이드 {slide.no}: 부모 불릿 없는 하위 항목입니다: {stripped[:40]}")
+        raise PlanError(f"슬라이드 {slide.no}: 상위 항목 없이 하위 항목이 있습니다: {stripped[:40]}")
     kind, container = cur_target
     if kind == "col":
         parts = [p.strip() for p in stripped.split("|", 1)]
@@ -264,14 +264,14 @@ def _validate_plan(plan: Plan) -> None:
     if unknown:
         raise PlanError(
             f"슬라이드 문서 태그 '{', '.join(unknown)}'가 메타 '산출 문서'({', '.join(plan.docs)})에 없습니다 — "
-            "## 메타에 '- 산출 문서: 제안서, 개발설계서'처럼 확정 산출 문서를 쉼표로 나열해야 한다"
+            "## 메타에 '- 산출 문서: 제안서, 개발설계서'처럼 확정 산출 문서를 쉼표로 나열하세요"
         )
     if len(plan.docs) > 1:
         missing = [d for d in plan.docs if d not in tagged]
         if missing:
             raise PlanError(
                 f"메타 '산출 문서'의 '{', '.join(missing)}' 문서가 [문서: ...] 태그 슬라이드가 없습니다 — "
-                "여러 문서일 때 표지·목차·마무리는 문서별 태그([문서: 문서명])로 별도 슬라이드를 써야 한다"
+                "여러 문서일 때 표지·목차·마무리는 문서별 태그([문서: 문서명])로 별도 슬라이드를 쓰세요"
             )
     if len(plan.key_messages) != KEY_MESSAGE_COUNT:
         raise PlanError(f"핵심 메시지는 정확히 3개여야 합니다 (현재 {len(plan.key_messages)}개)")
